@@ -26,7 +26,6 @@ chart's `env` map on Kubernetes.
 | `AWS_SESSION_TOKEN` | `—` | Internal setting. |
 | `AWS_WEB_IDENTITY_TOKEN_FILE` | `—` | Internal setting. |
 | `CORS_ORIGINS` | `http://localhost:5173,http://localhost:3000` | Allowed dashboard origins. |
-| `DISCORD_BOT_TOKEN` | `—` | Discord bot token for chat channels. |
 | `GOOGLE_APPLICATION_CREDENTIALS` | `—` | Google Cloud credentials, for the `gcp:` KMS. |
 | `HOST` | `127.0.0.1` | API server bind address. The API image sets `0.0.0.0`. |
 | `JWT_SECRET` | `—` | Signs sessions. |
@@ -38,18 +37,9 @@ chart's `env` map on Kubernetes.
 | `PATH` | `—` | Internal setting. |
 | `PORT` | `self.port` | API server port. |
 | `RELOAD` | `1` | Dev autoreload. The API image sets `0`. |
-| `SLACK_BOT_TOKEN` | `—` | Slack bot token for chat channels. |
-| `SLACK_SIGNING_SECRET` | `—` | Verifies Slack webhook signatures. |
 | `VAULT_ADDR` | `—` | HashiCorp Vault address, for the `vault:` KMS. |
 | `VAULT_NAMESPACE` | `—` | HashiCorp Vault namespace, for the `vault:` KMS. |
 | `VAULT_TOKEN` | `—` | HashiCorp Vault token, for the `vault:` KMS. |
-| `WHATSAPP_GRAPH_URL` | `https://graph.facebook.com/v21.0` | Internal setting. |
-| `WHATSAPP_VERIFY_TOKEN` | `—` | WhatsApp webhook verification token. |
-| `ZOO_AGENT_MAX_SECONDS` | `str(30 * 60` | Cap on each agent task's wall-clock seconds. |
-| `ZOO_AGENT_MAX_STEPS` | `100` | Cap on each agent task's actions. Workspaces can set lower limits. |
-| `ZOO_AGENT_MAX_TOKENS` | `2000000` | Cap on each agent task's model tokens. |
-| `ZOO_AGENT_MODEL` | `anthropic/claude-sonnet-5-5` | The agent's model for workspaces that haven't picked one (CUA model string). |
-| `ZOO_AGENT_PARALLEL` | `4` | Agent tasks one worker process runs at once. |
 | `ZOO_API_URL` | `—` | API URL the dashboard calls, read at container start. Also baked into installer commands and join tokens. |
 | `ZOO_BACKUP_INTERVAL_HOURS` | `24` | Internal setting. |
 | `ZOO_BACKUP_KEEP` | `7` | Internal setting. |
@@ -59,7 +49,6 @@ chart's `env` map on Kubernetes.
 | `ZOO_DOMAIN` | `—` | Always-allowed domain for Caddy. |
 | `ZOO_EMBED_ORIGINS` | `—` | Origins (space-separated) that may put a viewer link's page in an iframe; none when unset. |
 | `ZOO_EVENT_RETENTION_DAYS` | `7` | How long events (`GET /events`, webhooks) and their deliveries are kept. |
-| `ZOO_EXPORT_RETENTION_DAYS` | `7` | How long trajectory exports are kept. |
 | `ZOO_GATEWAY` | `—` | The gateway's internal URL, when this process should reach guests and nodes through it. |
 | `ZOO_GUEST_DARWIN_BINARY` | `computed` | Path of the darwin zoo-guest build to install into macOS VMs. |
 | `ZOO_GUEST_REMOTE_URL` | `—` | The same for sandboxes on remote servers. Required for Windows sandboxes. |
@@ -106,7 +95,6 @@ chart's `env` map on Kubernetes.
 | `ZOO_SANDBOX_IMAGE` | `zoo-sandbox:latest` | Image for `desktop` and `browser` sandboxes. |
 | `ZOO_SECRETS_KEY` | `—` | Encrypts stored secrets, agent keys, app profiles and VNC passwords. Back it up. |
 | `ZOO_SECRETS_KEY_PREVIOUS` | `—` | Old keys, comma-separated, kept only until `make rotate-secrets` has run. |
-| `ZOO_URL` | `http://localhost:8000` | The API URL the Python SDK and the zoo CLI use; http://localhost:8000 by default. |
 | `ZOO_WEBHOOK_ALLOW_PRIVATE` | `—` | `1` lets webhooks reach private addresses. |
 | `ZOO_WEBHOOK_BACKOFF_SECONDS` | `60,300,1800,7200,21600` | Seconds between a failed webhook delivery's retries, comma-separated; it fails after the last. |
 | `ZOO_WINDOWS_BASE` | `zoo-windows-base` | Hyper-V VM that Windows sandboxes are cloned from. |
@@ -114,13 +102,5 @@ chart's `env` map on Kubernetes.
 | `ZOO_WINDOWS_MAX_VMS` | `4` | Windows sandboxes running at once on each server. |
 | `ZOO_WINDOWS_MEMORY_MB` | `8192` | Memory of each Windows sandbox. |
 
-## Also on the compose stack
-
-`ZOO_AGENT_MODEL` and `ANTHROPIC_API_KEY` feed the built-in agent; `SLACK_BOT_TOKEN`,
-`SLACK_SIGNING_SECRET`, `DISCORD_BOT_TOKEN`, `WHATSAPP_TOKEN`,
-`WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN` and `WHATSAPP_APP_SECRET` enable
-the chat channels. See the [chat channels guide](/docs/guides/chat-channels/) and
-[observability](/docs/guides/domain-https-backups/#observability).
-
-Undocumented in this table: `KUBERNETES_SERVICE_HOST`, `KUBERNETES_SERVICE_PORT`, `WHATSAPP_GRAPH_URL`, `ZOO_BACKUP_INTERVAL_HOURS`, `ZOO_BACKUP_KEEP`, `ZOO_GUEST_WINDOWS_BINARY`, `ZOO_MAX_SANDBOX_CPUS`, `ZOO_MAX_SANDBOX_DISK_GB`, `ZOO_MAX_SANDBOX_MEMORY_MB`, `ZOO_NODE_BIND`, `ZOO_NODE_MAX`, `ZOO_SANDBOX_DISK_GB`.
+Undocumented in this table: `KUBERNETES_SERVICE_HOST`, `KUBERNETES_SERVICE_PORT`, `ZOO_BACKUP_INTERVAL_HOURS`, `ZOO_BACKUP_KEEP`, `ZOO_GUEST_WINDOWS_BINARY`, `ZOO_MAX_SANDBOX_CPUS`, `ZOO_MAX_SANDBOX_DISK_GB`, `ZOO_MAX_SANDBOX_MEMORY_MB`, `ZOO_NODE_BIND`, `ZOO_NODE_MAX`, `ZOO_SANDBOX_DISK_GB`.
 

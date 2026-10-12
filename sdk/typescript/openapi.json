@@ -59,478 +59,6 @@
     "title": "ActivityResponse",
     "type": "object"
    },
-   "AgentMessageResponse": {
-    "properties": {
-     "content": {
-      "title": "Content",
-      "type": "string"
-     },
-     "created_at": {
-      "title": "Created At",
-      "type": "string"
-     },
-     "has_screenshot": {
-      "title": "Has Screenshot",
-      "type": "boolean"
-     },
-     "id": {
-      "title": "Id",
-      "type": "string"
-     },
-     "kind": {
-      "title": "Kind",
-      "type": "string"
-     },
-     "run_id": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Run Id"
-     },
-     "source": {
-      "title": "Source",
-      "type": "string"
-     }
-    },
-    "required": [
-     "id",
-     "kind",
-     "content",
-     "source",
-     "run_id",
-     "has_screenshot",
-     "created_at"
-    ],
-    "title": "AgentMessageResponse",
-    "type": "object"
-   },
-   "AgentRequest": {
-    "properties": {
-     "api_base": {
-      "anyOf": [
-       {
-        "maxLength": 500,
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Api Base"
-     },
-     "message": {
-      "maxLength": 20000,
-      "minLength": 1,
-      "title": "Message",
-      "type": "string"
-     },
-     "model": {
-      "anyOf": [
-       {
-        "maxLength": 200,
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Model"
-     },
-     "provider": {
-      "anyOf": [
-       {
-        "enum": [
-         "anthropic",
-         "openai",
-         "gemini",
-         "openrouter",
-         "ollama",
-         "xai"
-        ],
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Provider"
-     },
-     "stream": {
-      "default": true,
-      "title": "Stream",
-      "type": "boolean"
-     }
-    },
-    "required": [
-     "message"
-    ],
-    "title": "AgentRequest",
-    "type": "object"
-   },
-   "AgentRunResponse": {
-    "properties": {
-     "attempts": {
-      "title": "Attempts",
-      "type": "integer"
-     },
-     "cost": {
-      "title": "Cost",
-      "type": "number"
-     },
-     "created_at": {
-      "title": "Created At",
-      "type": "string"
-     },
-     "elapsed_seconds": {
-      "title": "Elapsed Seconds",
-      "type": "number"
-     },
-     "error": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Error"
-     },
-     "finished_at": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Finished At"
-     },
-     "id": {
-      "title": "Id",
-      "type": "string"
-     },
-     "max_seconds": {
-      "title": "Max Seconds",
-      "type": "integer"
-     },
-     "max_steps": {
-      "title": "Max Steps",
-      "type": "integer"
-     },
-     "max_tokens": {
-      "title": "Max Tokens",
-      "type": "integer"
-     },
-     "model": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Model"
-     },
-     "paused_at": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Paused At"
-     },
-     "paused_by": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Paused By"
-     },
-     "provider": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Provider"
-     },
-     "source": {
-      "title": "Source",
-      "type": "string"
-     },
-     "started_at": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Started At"
-     },
-     "state": {
-      "title": "State",
-      "type": "string"
-     },
-     "steps": {
-      "title": "Steps",
-      "type": "integer"
-     },
-     "tokens": {
-      "title": "Tokens",
-      "type": "integer"
-     }
-    },
-    "required": [
-     "id",
-     "state",
-     "source",
-     "attempts",
-     "steps",
-     "tokens",
-     "cost",
-     "max_steps",
-     "max_seconds",
-     "max_tokens",
-     "elapsed_seconds",
-     "error",
-     "created_at",
-     "started_at",
-     "finished_at"
-    ],
-    "title": "AgentRunResponse",
-    "type": "object"
-   },
-   "AgentSettingsRequest": {
-    "properties": {
-     "api_base": {
-      "anyOf": [
-       {
-        "maxLength": 500,
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Api Base"
-     },
-     "api_key": {
-      "anyOf": [
-       {
-        "maxLength": 500,
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Api Key"
-     },
-     "api_key_secret_id": {
-      "anyOf": [
-       {
-        "maxLength": 100,
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Api Key Secret Id"
-     },
-     "max_seconds": {
-      "anyOf": [
-       {
-        "minimum": 10.0,
-        "type": "integer"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Max Seconds"
-     },
-     "max_steps": {
-      "anyOf": [
-       {
-        "minimum": 1.0,
-        "type": "integer"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Max Steps"
-     },
-     "max_tokens": {
-      "anyOf": [
-       {
-        "minimum": 1000.0,
-        "type": "integer"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Max Tokens"
-     },
-     "model": {
-      "maxLength": 200,
-      "minLength": 1,
-      "title": "Model",
-      "type": "string"
-     },
-     "provider": {
-      "enum": [
-       "anthropic",
-       "openai",
-       "gemini",
-       "openrouter",
-       "ollama",
-       "xai"
-      ],
-      "title": "Provider",
-      "type": "string"
-     }
-    },
-    "required": [
-     "provider",
-     "model"
-    ],
-    "title": "AgentSettingsRequest",
-    "type": "object"
-   },
-   "AgentSettingsResponse": {
-    "properties": {
-     "api_base": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Api Base"
-     },
-     "api_key_secret": {
-      "anyOf": [
-       {
-        "$ref": "#/components/schemas/SecretRef"
-       },
-       {
-        "type": "null"
-       }
-      ]
-     },
-     "caps": {
-      "$ref": "#/components/schemas/LimitsResponse"
-     },
-     "default_model": {
-      "title": "Default Model",
-      "type": "string"
-     },
-     "has_api_key": {
-      "title": "Has Api Key",
-      "type": "boolean"
-     },
-     "limits": {
-      "$ref": "#/components/schemas/LimitsResponse"
-     },
-     "model": {
-      "title": "Model",
-      "type": "string"
-     },
-     "provider": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Provider"
-     },
-     "providers": {
-      "items": {
-       "$ref": "#/components/schemas/ProviderResponse"
-      },
-      "title": "Providers",
-      "type": "array"
-     }
-    },
-    "required": [
-     "provider",
-     "model",
-     "has_api_key",
-     "api_key_secret",
-     "api_base",
-     "default_model",
-     "limits",
-     "caps",
-     "providers"
-    ],
-    "title": "AgentSettingsResponse",
-    "type": "object"
-   },
-   "AgentStateResponse": {
-    "properties": {
-     "messages": {
-      "items": {
-       "$ref": "#/components/schemas/AgentMessageResponse"
-      },
-      "title": "Messages",
-      "type": "array"
-     },
-     "model": {
-      "title": "Model",
-      "type": "string"
-     },
-     "run": {
-      "anyOf": [
-       {
-        "$ref": "#/components/schemas/AgentRunResponse"
-       },
-       {
-        "type": "null"
-       }
-      ]
-     },
-     "running": {
-      "title": "Running",
-      "type": "boolean"
-     }
-    },
-    "required": [
-     "running",
-     "model",
-     "run",
-     "messages"
-    ],
-    "title": "AgentStateResponse",
-    "type": "object"
-   },
    "ApiKeyRequest": {
     "properties": {
      "expires_at": {
@@ -985,311 +513,6 @@
      "state"
     ],
     "title": "BaseStatus",
-    "type": "object"
-   },
-   "BenchmarkDetailResponse": {
-    "properties": {
-     "created_at": {
-      "title": "Created At",
-      "type": "string"
-     },
-     "error": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Error"
-     },
-     "finished_at": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Finished At"
-     },
-     "id": {
-      "title": "Id",
-      "type": "string"
-     },
-     "models": {
-      "items": {
-       "type": "string"
-      },
-      "title": "Models",
-      "type": "array"
-     },
-     "name": {
-      "title": "Name",
-      "type": "string"
-     },
-     "parallel": {
-      "title": "Parallel",
-      "type": "integer"
-     },
-     "results": {
-      "items": {
-       "$ref": "#/components/schemas/ResultResponse"
-      },
-      "title": "Results",
-      "type": "array"
-     },
-     "started_at": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Started At"
-     },
-     "state": {
-      "title": "State",
-      "type": "string"
-     },
-     "summary": {
-      "items": {
-       "$ref": "#/components/schemas/ModelSummary"
-      },
-      "title": "Summary",
-      "type": "array"
-     },
-     "tasks": {
-      "title": "Tasks",
-      "type": "integer"
-     }
-    },
-    "required": [
-     "id",
-     "name",
-     "state",
-     "parallel",
-     "tasks",
-     "models",
-     "error",
-     "created_at",
-     "started_at",
-     "finished_at",
-     "summary",
-     "results"
-    ],
-    "title": "BenchmarkDetailResponse",
-    "type": "object"
-   },
-   "BenchmarkRequest": {
-    "properties": {
-     "models": {
-      "items": {
-       "$ref": "#/components/schemas/ModelChoice"
-      },
-      "maxItems": 20,
-      "minItems": 1,
-      "title": "Models",
-      "type": "array"
-     },
-     "parallel": {
-      "default": 2,
-      "maximum": 50.0,
-      "minimum": 1.0,
-      "title": "Parallel",
-      "type": "integer"
-     },
-     "suite": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "additionalProperties": true,
-        "type": "object"
-       }
-      ],
-      "title": "Suite"
-     }
-    },
-    "required": [
-     "suite",
-     "models"
-    ],
-    "title": "BenchmarkRequest",
-    "type": "object"
-   },
-   "BenchmarkResponse": {
-    "properties": {
-     "created_at": {
-      "title": "Created At",
-      "type": "string"
-     },
-     "error": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Error"
-     },
-     "finished_at": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Finished At"
-     },
-     "id": {
-      "title": "Id",
-      "type": "string"
-     },
-     "models": {
-      "items": {
-       "type": "string"
-      },
-      "title": "Models",
-      "type": "array"
-     },
-     "name": {
-      "title": "Name",
-      "type": "string"
-     },
-     "parallel": {
-      "title": "Parallel",
-      "type": "integer"
-     },
-     "started_at": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Started At"
-     },
-     "state": {
-      "title": "State",
-      "type": "string"
-     },
-     "tasks": {
-      "title": "Tasks",
-      "type": "integer"
-     }
-    },
-    "required": [
-     "id",
-     "name",
-     "state",
-     "parallel",
-     "tasks",
-     "models",
-     "error",
-     "created_at",
-     "started_at",
-     "finished_at"
-    ],
-    "title": "BenchmarkResponse",
-    "type": "object"
-   },
-   "ChannelRequest": {
-    "properties": {
-     "allowed_users": {
-      "items": {
-       "type": "string"
-      },
-      "maxItems": 100,
-      "title": "Allowed Users",
-      "type": "array"
-     },
-     "external_id": {
-      "maxLength": 100,
-      "minLength": 1,
-      "title": "External Id",
-      "type": "string"
-     },
-     "platform": {
-      "enum": [
-       "slack",
-       "discord",
-       "whatsapp"
-      ],
-      "title": "Platform",
-      "type": "string"
-     }
-    },
-    "required": [
-     "platform",
-     "external_id"
-    ],
-    "title": "ChannelRequest",
-    "type": "object"
-   },
-   "ChannelResponse": {
-    "properties": {
-     "allowed_users": {
-      "items": {
-       "type": "string"
-      },
-      "title": "Allowed Users",
-      "type": "array"
-     },
-     "created_at": {
-      "title": "Created At",
-      "type": "string"
-     },
-     "external_id": {
-      "title": "External Id",
-      "type": "string"
-     },
-     "id": {
-      "title": "Id",
-      "type": "string"
-     },
-     "platform": {
-      "title": "Platform",
-      "type": "string"
-     }
-    },
-    "required": [
-     "id",
-     "platform",
-     "external_id",
-     "allowed_users",
-     "created_at"
-    ],
-    "title": "ChannelResponse",
-    "type": "object"
-   },
-   "ChannelUpdate": {
-    "properties": {
-     "allowed_users": {
-      "items": {
-       "type": "string"
-      },
-      "maxItems": 100,
-      "minItems": 1,
-      "title": "Allowed Users",
-      "type": "array"
-     }
-    },
-    "required": [
-     "allowed_users"
-    ],
-    "title": "ChannelUpdate",
     "type": "object"
    },
    "CreateSandboxRequest": {
@@ -1853,24 +1076,9 @@
    },
    "EmbedStateResponse": {
     "properties": {
-     "agent": {
-      "title": "Agent",
-      "type": "string"
-     },
      "mode": {
       "title": "Mode",
       "type": "string"
-     },
-     "paused_by": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Paused By"
      },
      "sandbox_status": {
       "title": "Sandbox Status",
@@ -1879,9 +1087,7 @@
     },
     "required": [
      "mode",
-     "sandbox_status",
-     "agent",
-     "paused_by"
+     "sandbox_status"
     ],
     "title": "EmbedStateResponse",
     "type": "object"
@@ -2018,134 +1224,6 @@
     "title": "ExecResponse",
     "type": "object"
    },
-   "ExportRequest": {
-    "properties": {
-     "from": {
-      "anyOf": [
-       {
-        "format": "date-time",
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "From"
-     },
-     "labels": {
-      "anyOf": [
-       {
-        "additionalProperties": {
-         "type": "string"
-        },
-        "type": "object"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Labels"
-     },
-     "run_id": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Run Id"
-     },
-     "sandbox_id": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Sandbox Id"
-     },
-     "to": {
-      "anyOf": [
-       {
-        "format": "date-time",
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "To"
-     }
-    },
-    "title": "ExportRequest",
-    "type": "object"
-   },
-   "ExportResponse": {
-    "properties": {
-     "created_at": {
-      "title": "Created At",
-      "type": "string"
-     },
-     "error": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Error"
-     },
-     "finished_at": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Finished At"
-     },
-     "id": {
-      "title": "Id",
-      "type": "string"
-     },
-     "runs": {
-      "title": "Runs",
-      "type": "integer"
-     },
-     "size_bytes": {
-      "title": "Size Bytes",
-      "type": "integer"
-     },
-     "state": {
-      "title": "State",
-      "type": "string"
-     },
-     "steps": {
-      "title": "Steps",
-      "type": "integer"
-     }
-    },
-    "required": [
-     "id",
-     "state",
-     "runs",
-     "steps",
-     "size_bytes",
-     "error",
-     "created_at",
-     "finished_at"
-    ],
-    "title": "ExportResponse",
-    "type": "object"
-   },
    "HTTPValidationError": {
     "properties": {
      "detail": {
@@ -2233,36 +1311,6 @@
      "requirements"
     ],
     "title": "InstallCommand",
-    "type": "object"
-   },
-   "IntegrationResponse": {
-    "properties": {
-     "configured": {
-      "title": "Configured",
-      "type": "boolean"
-     },
-     "platform": {
-      "title": "Platform",
-      "type": "string"
-     },
-     "webhook_path": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Webhook Path"
-     }
-    },
-    "required": [
-     "platform",
-     "configured",
-     "webhook_path"
-    ],
-    "title": "IntegrationResponse",
     "type": "object"
    },
    "InvitationRequest": {
@@ -2784,29 +1832,6 @@
     "title": "LifecycleRequest",
     "type": "object"
    },
-   "LimitsResponse": {
-    "properties": {
-     "max_seconds": {
-      "title": "Max Seconds",
-      "type": "integer"
-     },
-     "max_steps": {
-      "title": "Max Steps",
-      "type": "integer"
-     },
-     "max_tokens": {
-      "title": "Max Tokens",
-      "type": "integer"
-     }
-    },
-    "required": [
-     "max_steps",
-     "max_seconds",
-     "max_tokens"
-    ],
-    "title": "LimitsResponse",
-    "type": "object"
-   },
    "MemberResponse": {
     "properties": {
      "email": {
@@ -2857,82 +1882,6 @@
      "joined_at"
     ],
     "title": "MemberResponse",
-    "type": "object"
-   },
-   "ModelChoice": {
-    "properties": {
-     "model": {
-      "anyOf": [
-       {
-        "maxLength": 200,
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Model"
-     },
-     "provider": {
-      "enum": [
-       "anthropic",
-       "openai",
-       "gemini",
-       "openrouter",
-       "ollama",
-       "xai"
-      ],
-      "title": "Provider",
-      "type": "string"
-     }
-    },
-    "required": [
-     "provider"
-    ],
-    "title": "ModelChoice",
-    "type": "object"
-   },
-   "ModelSummary": {
-    "properties": {
-     "mean_cost": {
-      "title": "Mean Cost",
-      "type": "number"
-     },
-     "mean_seconds": {
-      "title": "Mean Seconds",
-      "type": "number"
-     },
-     "mean_steps": {
-      "title": "Mean Steps",
-      "type": "number"
-     },
-     "model": {
-      "title": "Model",
-      "type": "string"
-     },
-     "pass_rate": {
-      "title": "Pass Rate",
-      "type": "number"
-     },
-     "passed": {
-      "title": "Passed",
-      "type": "integer"
-     },
-     "tasks": {
-      "title": "Tasks",
-      "type": "integer"
-     }
-    },
-    "required": [
-     "model",
-     "tasks",
-     "passed",
-     "pass_rate",
-     "mean_steps",
-     "mean_cost",
-     "mean_seconds"
-    ],
-    "title": "ModelSummary",
     "type": "object"
    },
    "MonitoringResponse": {
@@ -3737,113 +2686,6 @@
     "title": "ProfileVersionResponse",
     "type": "object"
    },
-   "ProviderResponse": {
-    "properties": {
-     "default_base": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Default Base"
-     },
-     "default_model": {
-      "title": "Default Model",
-      "type": "string"
-     },
-     "id": {
-      "title": "Id",
-      "type": "string"
-     },
-     "label": {
-      "title": "Label",
-      "type": "string"
-     },
-     "needs_key": {
-      "title": "Needs Key",
-      "type": "boolean"
-     },
-     "server_key": {
-      "title": "Server Key",
-      "type": "boolean"
-     }
-    },
-    "required": [
-     "id",
-     "label",
-     "default_model",
-     "default_base",
-     "needs_key",
-     "server_key"
-    ],
-    "title": "ProviderResponse",
-    "type": "object"
-   },
-   "ProviderStatusResponse": {
-    "properties": {
-     "default_base": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Default Base"
-     },
-     "default_model": {
-      "title": "Default Model",
-      "type": "string"
-     },
-     "has_key": {
-      "title": "Has Key",
-      "type": "boolean"
-     },
-     "id": {
-      "title": "Id",
-      "type": "string"
-     },
-     "key_secret": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Key Secret"
-     },
-     "label": {
-      "title": "Label",
-      "type": "string"
-     },
-     "needs_key": {
-      "title": "Needs Key",
-      "type": "boolean"
-     },
-     "server_key": {
-      "title": "Server Key",
-      "type": "boolean"
-     }
-    },
-    "required": [
-     "id",
-     "label",
-     "default_model",
-     "default_base",
-     "needs_key",
-     "server_key",
-     "has_key",
-     "key_secret"
-    ],
-    "title": "ProviderStatusResponse",
-    "type": "object"
-   },
    "QuotaRequest": {
     "properties": {
      "max_cpus": {
@@ -4012,92 +2854,6 @@
      "message"
     ],
     "title": "ReminderResponse",
-    "type": "object"
-   },
-   "ResultResponse": {
-    "properties": {
-     "cost": {
-      "title": "Cost",
-      "type": "number"
-     },
-     "error": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Error"
-     },
-     "model": {
-      "title": "Model",
-      "type": "string"
-     },
-     "passed": {
-      "anyOf": [
-       {
-        "type": "boolean"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Passed"
-     },
-     "run_id": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Run Id"
-     },
-     "score": {
-      "anyOf": [
-       {
-        "type": "number"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Score"
-     },
-     "seconds": {
-      "title": "Seconds",
-      "type": "number"
-     },
-     "steps": {
-      "title": "Steps",
-      "type": "integer"
-     },
-     "task_id": {
-      "title": "Task Id",
-      "type": "string"
-     },
-     "tokens": {
-      "title": "Tokens",
-      "type": "integer"
-     }
-    },
-    "required": [
-     "task_id",
-     "model",
-     "passed",
-     "score",
-     "steps",
-     "tokens",
-     "cost",
-     "seconds",
-     "run_id",
-     "error"
-    ],
-    "title": "ResultResponse",
     "type": "object"
    },
    "RoleRequest": {
@@ -4405,24 +3161,6 @@
      "pids"
     ],
     "title": "SandboxUsage",
-    "type": "object"
-   },
-   "SecretRef": {
-    "properties": {
-     "id": {
-      "title": "Id",
-      "type": "string"
-     },
-     "name": {
-      "title": "Name",
-      "type": "string"
-     }
-    },
-    "required": [
-     "id",
-     "name"
-    ],
-    "title": "SecretRef",
     "type": "object"
    },
    "SecretRequest": {
@@ -4815,19 +3553,6 @@
     "title": "ToolExecutionResponse",
     "type": "object"
    },
-   "TrajectorySettingsRequest": {
-    "properties": {
-     "capture_a11y": {
-      "title": "Capture A11Y",
-      "type": "boolean"
-     }
-    },
-    "required": [
-     "capture_a11y"
-    ],
-    "title": "TrajectorySettingsRequest",
-    "type": "object"
-   },
    "UpdateSandboxRequest": {
     "properties": {
      "labels": {
@@ -4953,6 +3678,17 @@
        }
       ],
       "title": "Name"
+     },
+     "onboarded_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Onboarded At"
      }
     },
     "required": [
@@ -5163,10 +3899,6 @@
      "updated_at": {
       "title": "Updated At",
       "type": "string"
-     },
-     "used_by_agent": {
-      "title": "Used By Agent",
-      "type": "boolean"
      }
     },
     "required": [
@@ -5181,7 +3913,6 @@
      "rotated_at",
      "rotation_due_at",
      "status",
-     "used_by_agent",
      "sandboxes"
     ],
     "title": "VaultSecretResponse",
@@ -5461,11 +4192,6 @@
    },
    "WorkspaceResponse": {
     "properties": {
-     "capture_a11y": {
-      "default": true,
-      "title": "Capture A11Y",
-      "type": "boolean"
-     },
      "created_at": {
       "title": "Created At",
       "type": "string"
@@ -5586,30 +4312,11 @@
   }
  },
  "info": {
-  "title": "Zoo API",
-  "version": "1"
+  "title": "FastAPI",
+  "version": "0.1.0"
  },
  "openapi": "3.1.0",
  "paths": {
-  "/": {
-   "get": {
-    "operationId": "home__get",
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {}
-       }
-      },
-      "description": "Successful Response"
-     }
-    },
-    "summary": "Home",
-    "tags": [
-     "routes"
-    ]
-   }
-  },
   "/embed/{token}": {
    "get": {
     "operationId": "embed_embed__token__get",
@@ -5647,38 +4354,6 @@
      }
     },
     "summary": "Embed"
-   }
-  },
-  "/embed/{token}/release": {
-   "post": {
-    "operationId": "embed_release_embed__token__release_post",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "token",
-      "required": true,
-      "schema": {
-       "title": "Token",
-       "type": "string"
-      }
-     }
-    ],
-    "responses": {
-     "204": {
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "summary": "Embed Release"
    }
   },
   "/embed/{token}/state": {
@@ -5720,41 +4395,9 @@
     "summary": "Embed State"
    }
   },
-  "/embed/{token}/takeover": {
-   "post": {
-    "operationId": "embed_takeover_embed__token__takeover_post",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "token",
-      "required": true,
-      "schema": {
-       "title": "Token",
-       "type": "string"
-      }
-     }
-    ],
-    "responses": {
-     "204": {
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "summary": "Embed Takeover"
-   }
-  },
   "/v1/admin/backups": {
    "get": {
-    "operationId": "list_backups_admin_backups_get",
+    "operationId": "list_backups_v1_admin_backups_get",
     "parameters": [
      {
       "in": "header",
@@ -5781,7 +4424,7 @@
          "items": {
           "$ref": "#/components/schemas/BackupResponse"
          },
-         "title": "Response List Backups Admin Backups Get",
+         "title": "Response List Backups V1 Admin Backups Get",
          "type": "array"
         }
        }
@@ -5808,7 +4451,7 @@
    },
    "post": {
     "description": "Takes a backup now (server/backups.py): the database dump is done when this returns; the sandbox\nsnapshots are queued.",
-    "operationId": "create_backup_admin_backups_post",
+    "operationId": "create_backup_v1_admin_backups_post",
     "parameters": [
      {
       "in": "header",
@@ -5859,7 +4502,7 @@
   },
   "/v1/admin/domains": {
    "get": {
-    "operationId": "list_domains_admin_domains_get",
+    "operationId": "list_domains_v1_admin_domains_get",
     "parameters": [
      {
       "in": "header",
@@ -5886,7 +4529,7 @@
          "items": {
           "$ref": "#/components/schemas/DomainResponse"
          },
-         "title": "Response List Domains Admin Domains Get",
+         "title": "Response List Domains V1 Admin Domains Get",
          "type": "array"
         }
        }
@@ -5912,7 +4555,7 @@
     "summary": "List Domains"
    },
    "post": {
-    "operationId": "add_domain_admin_domains_post",
+    "operationId": "add_domain_v1_admin_domains_post",
     "parameters": [
      {
       "in": "header",
@@ -5973,7 +4616,7 @@
   },
   "/v1/admin/domains/{domain_id}": {
    "delete": {
-    "operationId": "delete_domain_admin_domains__domain_id__delete",
+    "operationId": "delete_domain_v1_admin_domains__domain_id__delete",
     "parameters": [
      {
       "in": "path",
@@ -6027,7 +4670,7 @@
   "/v1/admin/domains/{domain_id}/verify": {
    "post": {
     "description": "Looks the domain up again, for after its DNS record was changed.",
-    "operationId": "verify_domain_admin_domains__domain_id__verify_post",
+    "operationId": "verify_domain_v1_admin_domains__domain_id__verify_post",
     "parameters": [
      {
       "in": "path",
@@ -6087,7 +4730,7 @@
   },
   "/v1/admin/sandboxes": {
    "get": {
-    "operationId": "list_sandboxes_admin_sandboxes_get",
+    "operationId": "list_sandboxes_v1_admin_sandboxes_get",
     "parameters": [
      {
       "in": "header",
@@ -6114,7 +4757,7 @@
          "items": {
           "$ref": "#/components/schemas/SandboxResponse"
          },
-         "title": "Response List Sandboxes Admin Sandboxes Get",
+         "title": "Response List Sandboxes V1 Admin Sandboxes Get",
          "type": "array"
         }
        }
@@ -6142,7 +4785,7 @@
   },
   "/v1/admin/users": {
    "get": {
-    "operationId": "list_users_admin_users_get",
+    "operationId": "list_users_v1_admin_users_get",
     "parameters": [
      {
       "in": "header",
@@ -6169,7 +4812,7 @@
          "items": {
           "$ref": "#/components/schemas/UserResponse"
          },
-         "title": "Response List Users Admin Users Get",
+         "title": "Response List Users V1 Admin Users Get",
          "type": "array"
         }
        }
@@ -6195,511 +4838,9 @@
     "summary": "List Users"
    }
   },
-  "/v1/agent/exports": {
-   "get": {
-    "operationId": "list_exports_agent_exports_get",
-    "parameters": [
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "items": {
-          "$ref": "#/components/schemas/ExportResponse"
-         },
-         "title": "Response List Exports Agent Exports Get",
-         "type": "array"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "List Exports"
-   },
-   "post": {
-    "operationId": "create_export_agent_exports_post",
-    "parameters": [
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "requestBody": {
-     "content": {
-      "application/json": {
-       "schema": {
-        "$ref": "#/components/schemas/ExportRequest"
-       }
-      }
-     },
-     "required": true
-    },
-    "responses": {
-     "202": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ExportResponse"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Create Export"
-   }
-  },
-  "/v1/agent/exports/{export_id}": {
-   "get": {
-    "operationId": "get_export_agent_exports__export_id__get",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "export_id",
-      "required": true,
-      "schema": {
-       "title": "Export Id",
-       "type": "string"
-      }
-     },
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ExportResponse"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Get Export"
-   }
-  },
-  "/v1/agent/exports/{export_id}/download": {
-   "get": {
-    "operationId": "download_agent_exports__export_id__download_get",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "export_id",
-      "required": true,
-      "schema": {
-       "title": "Export Id",
-       "type": "string"
-      }
-     },
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {}
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Download"
-   }
-  },
-  "/v1/agent/integrations": {
-   "get": {
-    "operationId": "integrations_agent_integrations_get",
-    "parameters": [
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "items": {
-          "$ref": "#/components/schemas/IntegrationResponse"
-         },
-         "title": "Response Integrations Agent Integrations Get",
-         "type": "array"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Integrations"
-   }
-  },
-  "/v1/agent/providers": {
-   "get": {
-    "description": "What a run can be started with, and whether this workspace has a key for each.",
-    "operationId": "providers_agent_providers_get",
-    "parameters": [
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "items": {
-          "$ref": "#/components/schemas/ProviderStatusResponse"
-         },
-         "title": "Response Providers Agent Providers Get",
-         "type": "array"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Providers"
-   }
-  },
-  "/v1/agent/settings": {
-   "delete": {
-    "operationId": "reset_settings_agent_settings_delete",
-    "parameters": [
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/AgentSettingsResponse"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Reset Settings"
-   },
-   "get": {
-    "operationId": "get_settings_agent_settings_get",
-    "parameters": [
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/AgentSettingsResponse"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Get Settings"
-   },
-   "put": {
-    "operationId": "put_settings_agent_settings_put",
-    "parameters": [
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "requestBody": {
-     "content": {
-      "application/json": {
-       "schema": {
-        "$ref": "#/components/schemas/AgentSettingsRequest"
-       }
-      }
-     },
-     "required": true
-    },
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/AgentSettingsResponse"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Put Settings"
-   }
-  },
   "/v1/api-keys": {
    "get": {
-    "operationId": "list_keys_api_keys_get",
+    "operationId": "list_keys_v1_api_keys_get",
     "parameters": [
      {
       "in": "header",
@@ -6726,7 +4867,7 @@
          "items": {
           "$ref": "#/components/schemas/ApiKeyResponse"
          },
-         "title": "Response List Keys Api Keys Get",
+         "title": "Response List Keys V1 Api Keys Get",
          "type": "array"
         }
        }
@@ -6752,7 +4893,7 @@
     "summary": "List Keys"
    },
    "post": {
-    "operationId": "create_key_api_keys_post",
+    "operationId": "create_key_v1_api_keys_post",
     "parameters": [
      {
       "in": "header",
@@ -6813,7 +4954,7 @@
   },
   "/v1/api-keys/{key_id}": {
    "delete": {
-    "operationId": "revoke_key_api_keys__key_id__delete",
+    "operationId": "revoke_key_v1_api_keys__key_id__delete",
     "parameters": [
      {
       "in": "path",
@@ -6849,7 +4990,7 @@
          "items": {
           "$ref": "#/components/schemas/ApiKeyResponse"
          },
-         "title": "Response Revoke Key Api Keys  Key Id  Delete",
+         "title": "Response Revoke Key V1 Api Keys  Key Id  Delete",
          "type": "array"
         }
        }
@@ -6877,7 +5018,7 @@
   },
   "/v1/audit-logs": {
    "get": {
-    "operationId": "list_audit_logs_audit_logs_get",
+    "operationId": "list_audit_logs_v1_audit_logs_get",
     "parameters": [
      {
       "in": "query",
@@ -7056,7 +5197,7 @@
   },
   "/v1/audit-logs/export": {
    "get": {
-    "operationId": "export_audit_logs_audit_logs_export_get",
+    "operationId": "export_audit_logs_v1_audit_logs_export_get",
     "parameters": [
      {
       "in": "query",
@@ -7203,7 +5344,7 @@
   },
   "/v1/auth/login": {
    "post": {
-    "operationId": "login_auth_login_post",
+    "operationId": "login_v1_auth_login_post",
     "requestBody": {
      "content": {
       "application/json": {
@@ -7241,7 +5382,7 @@
   },
   "/v1/auth/me": {
    "get": {
-    "operationId": "me_auth_me_get",
+    "operationId": "me_v1_auth_me_get",
     "parameters": [
      {
       "in": "header",
@@ -7290,231 +5431,11 @@
     "summary": "Me"
    }
   },
-  "/v1/auth/signup": {
-   "post": {
-    "operationId": "register_auth_signup_post",
-    "requestBody": {
-     "content": {
-      "application/json": {
-       "schema": {
-        "$ref": "#/components/schemas/AuthRequst"
-       }
-      }
-     },
-     "required": true
-    },
-    "responses": {
-     "201": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/server__auth_api__TokenResponse"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "summary": "Register"
-   }
-  },
-  "/v1/benchmarks": {
-   "get": {
-    "operationId": "list_benchmarks_benchmarks_get",
+  "/v1/auth/me/onboarded": {
+   "put": {
+    "description": "Marks the first-run steps done (or skipped), so the dashboard stops showing them.",
+    "operationId": "onboarded_v1_auth_me_onboarded_put",
     "parameters": [
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "items": {
-          "$ref": "#/components/schemas/BenchmarkResponse"
-         },
-         "title": "Response List Benchmarks Benchmarks Get",
-         "type": "array"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "List Benchmarks"
-   },
-   "post": {
-    "operationId": "create_benchmark_benchmarks_post",
-    "parameters": [
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "requestBody": {
-     "content": {
-      "application/json": {
-       "schema": {
-        "$ref": "#/components/schemas/BenchmarkRequest"
-       }
-      }
-     },
-     "required": true
-    },
-    "responses": {
-     "202": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/BenchmarkResponse"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Create Benchmark"
-   }
-  },
-  "/v1/benchmarks/{benchmark_id}": {
-   "get": {
-    "operationId": "get_benchmark_benchmarks__benchmark_id__get",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "benchmark_id",
-      "required": true,
-      "schema": {
-       "title": "Benchmark Id",
-       "type": "string"
-      }
-     },
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/BenchmarkDetailResponse"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Get Benchmark"
-   }
-  },
-  "/v1/benchmarks/{benchmark_id}/cancel": {
-   "post": {
-    "operationId": "cancel_benchmark_benchmarks__benchmark_id__cancel_post",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "benchmark_id",
-      "required": true,
-      "schema": {
-       "title": "Benchmark Id",
-       "type": "string"
-      }
-     },
      {
       "in": "header",
       "name": "x-zoo-workspace",
@@ -7552,44 +5473,29 @@
       "HTTPBearer": []
      }
     ],
-    "summary": "Cancel Benchmark"
+    "summary": "Onboarded"
    }
   },
-  "/v1/benchmarks/{benchmark_id}/export": {
-   "get": {
-    "operationId": "export_benchmark_benchmarks__benchmark_id__export_get",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "benchmark_id",
-      "required": true,
-      "schema": {
-       "title": "Benchmark Id",
-       "type": "string"
+  "/v1/auth/signup": {
+   "post": {
+    "operationId": "register_v1_auth_signup_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AuthRequst"
+       }
       }
      },
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
+     "required": true
+    },
     "responses": {
-     "200": {
+     "201": {
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/server__auth_api__TokenResponse"
+        }
        }
       },
       "description": "Successful Response"
@@ -7605,18 +5511,13 @@
       "description": "Validation Error"
      }
     },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Export Benchmark"
+    "summary": "Register"
    }
   },
   "/v1/domains/check": {
    "get": {
     "description": "Caddy's on-demand TLS `ask`: a certificate is only issued for a hostname this answers 200 for, so\nnobody can make the server request certificates for names it doesn't serve.",
-    "operationId": "check_domain_domains_check_get",
+    "operationId": "check_domain_v1_domains_check_get",
     "parameters": [
      {
       "in": "query",
@@ -7654,7 +5555,7 @@
   },
   "/v1/events": {
    "get": {
-    "operationId": "list_events_events_get",
+    "operationId": "list_events_v1_events_get",
     "parameters": [
      {
       "description": "the seq of the last event seen",
@@ -7750,7 +5651,7 @@
   },
   "/v1/events/stream": {
    "get": {
-    "operationId": "stream_events_stream_get",
+    "operationId": "stream_v1_events_stream_get",
     "parameters": [
      {
       "description": "start after this seq; default: from now",
@@ -7866,7 +5767,7 @@
   },
   "/v1/invitations/{token}/accept": {
    "post": {
-    "operationId": "accept_invitations__token__accept_post",
+    "operationId": "accept_v1_invitations__token__accept_post",
     "parameters": [
      {
       "in": "path",
@@ -7927,7 +5828,7 @@
   "/v1/kubernetes": {
    "get": {
     "description": "Whether this machine's Linux sandboxes run on Kubernetes, and what the cluster lacks for them.",
-    "operationId": "kubernetes_kubernetes_get",
+    "operationId": "kubernetes_v1_kubernetes_get",
     "parameters": [
      {
       "in": "header",
@@ -7979,7 +5880,7 @@
   "/v1/kubernetes/check": {
    "post": {
     "description": "The requirements check with a probe pod under the RuntimeClass on every sandbox node (admins).",
-    "operationId": "kubernetes_check_kubernetes_check_post",
+    "operationId": "kubernetes_check_v1_kubernetes_check_post",
     "parameters": [
      {
       "in": "header",
@@ -8030,7 +5931,7 @@
   },
   "/v1/monitoring": {
    "get": {
-    "operationId": "monitoring_monitoring_get",
+    "operationId": "monitoring_v1_monitoring_get",
     "parameters": [
      {
       "in": "header",
@@ -8082,7 +5983,7 @@
   "/v1/nodes/download/{os_name}/{arch}": {
    "get": {
     "description": "This API's zoo-node build, for installers. The binary is the same for everyone, so it's public.",
-    "operationId": "download_nodes_download__os_name___arch__get",
+    "operationId": "download_v1_nodes_download__os_name___arch__get",
     "parameters": [
      {
       "in": "path",
@@ -8138,7 +6039,7 @@
   "/v1/nodes/join": {
    "post": {
     "description": "Called by `zoo-node join`, with no other credentials than the one-time token.",
-    "operationId": "join_nodes_join_post",
+    "operationId": "join_v1_nodes_join_post",
     "requestBody": {
      "content": {
       "application/json": {
@@ -8176,7 +6077,7 @@
   },
   "/v1/nodes/tokens": {
    "post": {
-    "operationId": "create_token_nodes_tokens_post",
+    "operationId": "create_token_v1_nodes_tokens_post",
     "parameters": [
      {
       "in": "query",
@@ -8253,7 +6154,7 @@
   "/v1/platforms": {
    "get": {
     "description": "Every sandbox OS, and whether this install can run it. The control plane's own Docker runs Linux.",
-    "operationId": "list_platforms_platforms_get",
+    "operationId": "list_platforms_v1_platforms_get",
     "parameters": [
      {
       "in": "header",
@@ -8280,7 +6181,7 @@
          "items": {
           "$ref": "#/components/schemas/PlatformResponse"
          },
-         "title": "Response List Platforms Platforms Get",
+         "title": "Response List Platforms V1 Platforms Get",
          "type": "array"
         }
        }
@@ -8308,7 +6209,7 @@
   },
   "/v1/pool": {
    "get": {
-    "operationId": "list_pool_pool_get",
+    "operationId": "list_pool_v1_pool_get",
     "parameters": [
      {
       "in": "header",
@@ -8335,7 +6236,7 @@
          "items": {
           "$ref": "#/components/schemas/PoolEntry"
          },
-         "title": "Response List Pool Pool Get",
+         "title": "Response List Pool V1 Pool Get",
          "type": "array"
         }
        }
@@ -8361,7 +6262,7 @@
     "summary": "List Pool"
    },
    "put": {
-    "operationId": "set_pool_pool_put",
+    "operationId": "set_pool_v1_pool_put",
     "parameters": [
      {
       "in": "header",
@@ -8422,7 +6323,7 @@
   },
   "/v1/profile-apps": {
    "get": {
-    "operationId": "profile_apps_profile_apps_get",
+    "operationId": "profile_apps_v1_profile_apps_get",
     "parameters": [
      {
       "in": "query",
@@ -8459,7 +6360,7 @@
          "additionalProperties": {
           "type": "string"
          },
-         "title": "Response Profile Apps Profile Apps Get",
+         "title": "Response Profile Apps V1 Profile Apps Get",
          "type": "object"
         }
        }
@@ -8487,7 +6388,7 @@
   },
   "/v1/profiles": {
    "get": {
-    "operationId": "list_profiles_profiles_get",
+    "operationId": "list_profiles_v1_profiles_get",
     "parameters": [
      {
       "in": "header",
@@ -8514,7 +6415,7 @@
          "items": {
           "$ref": "#/components/schemas/ProfileResponse"
          },
-         "title": "Response List Profiles Profiles Get",
+         "title": "Response List Profiles V1 Profiles Get",
          "type": "array"
         }
        }
@@ -8542,7 +6443,7 @@
   },
   "/v1/profiles/{profile_id}": {
    "delete": {
-    "operationId": "delete_profile_profiles__profile_id__delete",
+    "operationId": "delete_profile_v1_profiles__profile_id__delete",
     "parameters": [
      {
       "in": "path",
@@ -8593,7 +6494,7 @@
     "summary": "Delete Profile"
    },
    "patch": {
-    "operationId": "rename_profile_profiles__profile_id__patch",
+    "operationId": "rename_profile_v1_profiles__profile_id__patch",
     "parameters": [
      {
       "in": "path",
@@ -8663,7 +6564,7 @@
   },
   "/v1/profiles/{profile_id}/versions": {
    "get": {
-    "operationId": "list_profile_versions_profiles__profile_id__versions_get",
+    "operationId": "list_profile_versions_v1_profiles__profile_id__versions_get",
     "parameters": [
      {
       "in": "path",
@@ -8699,7 +6600,7 @@
          "items": {
           "$ref": "#/components/schemas/ProfileVersionResponse"
          },
-         "title": "Response List Profile Versions Profiles  Profile Id  Versions Get",
+         "title": "Response List Profile Versions V1 Profiles  Profile Id  Versions Get",
          "type": "array"
         }
        }
@@ -8727,7 +6628,7 @@
   },
   "/v1/profiles/{profile_id}/versions/{version}": {
    "delete": {
-    "operationId": "delete_profile_version_profiles__profile_id__versions__version__delete",
+    "operationId": "delete_profile_version_v1_profiles__profile_id__versions__version__delete",
     "parameters": [
      {
       "in": "path",
@@ -8796,7 +6697,7 @@
   },
   "/v1/sandboxes": {
    "get": {
-    "operationId": "list_sandboxes_sandboxes_get",
+    "operationId": "list_sandboxes_v1_sandboxes_get",
     "parameters": [
      {
       "description": "key=value; repeat to match all of them",
@@ -8890,7 +6791,7 @@
     "summary": "List Sandboxes"
    },
    "post": {
-    "operationId": "create_sandbox_sandboxes_post",
+    "operationId": "create_sandbox_v1_sandboxes_post",
     "parameters": [
      {
       "in": "header",
@@ -8951,7 +6852,7 @@
   },
   "/v1/sandboxes/{sandbox_id}": {
    "delete": {
-    "operationId": "delete_sandbox_sandboxes__sandbox_id__delete",
+    "operationId": "delete_sandbox_v1_sandboxes__sandbox_id__delete",
     "parameters": [
      {
       "in": "path",
@@ -9009,7 +6910,7 @@
     "summary": "Delete Sandbox"
    },
    "get": {
-    "operationId": "get_sandbox_sandboxes__sandbox_id__get",
+    "operationId": "get_sandbox_v1_sandboxes__sandbox_id__get",
     "parameters": [
      {
       "in": "path",
@@ -9067,7 +6968,7 @@
     "summary": "Get Sandbox"
    },
    "patch": {
-    "operationId": "update_sandbox_sandboxes__sandbox_id__patch",
+    "operationId": "update_sandbox_v1_sandboxes__sandbox_id__patch",
     "parameters": [
      {
       "in": "path",
@@ -9135,757 +7036,9 @@
     "summary": "Update Sandbox"
    }
   },
-  "/v1/sandboxes/{sandbox_id}/agent": {
-   "delete": {
-    "operationId": "reset_sandboxes__sandbox_id__agent_delete",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "sandbox_id",
-      "required": true,
-      "schema": {
-       "title": "Sandbox Id",
-       "type": "string"
-      }
-     },
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "responses": {
-     "204": {
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Reset"
-   },
-   "get": {
-    "operationId": "state_sandboxes__sandbox_id__agent_get",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "sandbox_id",
-      "required": true,
-      "schema": {
-       "title": "Sandbox Id",
-       "type": "string"
-      }
-     },
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/AgentStateResponse"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "State"
-   },
-   "post": {
-    "operationId": "chat_sandboxes__sandbox_id__agent_post",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "sandbox_id",
-      "required": true,
-      "schema": {
-       "title": "Sandbox Id",
-       "type": "string"
-      }
-     },
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "requestBody": {
-     "content": {
-      "application/json": {
-       "schema": {
-        "$ref": "#/components/schemas/AgentRequest"
-       }
-      }
-     },
-     "required": true
-    },
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {}
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Chat"
-   }
-  },
-  "/v1/sandboxes/{sandbox_id}/agent/channels": {
-   "get": {
-    "operationId": "list_channels_sandboxes__sandbox_id__agent_channels_get",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "sandbox_id",
-      "required": true,
-      "schema": {
-       "title": "Sandbox Id",
-       "type": "string"
-      }
-     },
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "items": {
-          "$ref": "#/components/schemas/ChannelResponse"
-         },
-         "title": "Response List Channels Sandboxes  Sandbox Id  Agent Channels Get",
-         "type": "array"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "List Channels"
-   },
-   "post": {
-    "operationId": "add_channel_sandboxes__sandbox_id__agent_channels_post",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "sandbox_id",
-      "required": true,
-      "schema": {
-       "title": "Sandbox Id",
-       "type": "string"
-      }
-     },
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "requestBody": {
-     "content": {
-      "application/json": {
-       "schema": {
-        "$ref": "#/components/schemas/ChannelRequest"
-       }
-      }
-     },
-     "required": true
-    },
-    "responses": {
-     "201": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ChannelResponse"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Add Channel"
-   }
-  },
-  "/v1/sandboxes/{sandbox_id}/agent/channels/{channel_id}": {
-   "delete": {
-    "operationId": "remove_channel_sandboxes__sandbox_id__agent_channels__channel_id__delete",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "sandbox_id",
-      "required": true,
-      "schema": {
-       "title": "Sandbox Id",
-       "type": "string"
-      }
-     },
-     {
-      "in": "path",
-      "name": "channel_id",
-      "required": true,
-      "schema": {
-       "title": "Channel Id",
-       "type": "string"
-      }
-     },
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "responses": {
-     "204": {
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Remove Channel"
-   },
-   "patch": {
-    "operationId": "update_channel_sandboxes__sandbox_id__agent_channels__channel_id__patch",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "sandbox_id",
-      "required": true,
-      "schema": {
-       "title": "Sandbox Id",
-       "type": "string"
-      }
-     },
-     {
-      "in": "path",
-      "name": "channel_id",
-      "required": true,
-      "schema": {
-       "title": "Channel Id",
-       "type": "string"
-      }
-     },
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "requestBody": {
-     "content": {
-      "application/json": {
-       "schema": {
-        "$ref": "#/components/schemas/ChannelUpdate"
-       }
-      }
-     },
-     "required": true
-    },
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ChannelResponse"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Update Channel"
-   }
-  },
-  "/v1/sandboxes/{sandbox_id}/agent/messages/{message_id}/screenshot": {
-   "get": {
-    "operationId": "screenshot_sandboxes__sandbox_id__agent_messages__message_id__screenshot_get",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "sandbox_id",
-      "required": true,
-      "schema": {
-       "title": "Sandbox Id",
-       "type": "string"
-      }
-     },
-     {
-      "in": "path",
-      "name": "message_id",
-      "required": true,
-      "schema": {
-       "title": "Message Id",
-       "type": "string"
-      }
-     },
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {}
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Screenshot"
-   }
-  },
-  "/v1/sandboxes/{sandbox_id}/agent/release": {
-   "post": {
-    "description": "Hands the screen back to the agent, which carries on from the screen as the person left it.",
-    "operationId": "release_sandboxes__sandbox_id__agent_release_post",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "sandbox_id",
-      "required": true,
-      "schema": {
-       "title": "Sandbox Id",
-       "type": "string"
-      }
-     },
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/AgentRunResponse"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Release"
-   }
-  },
-  "/v1/sandboxes/{sandbox_id}/agent/stop": {
-   "post": {
-    "operationId": "stop_sandboxes__sandbox_id__agent_stop_post",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "sandbox_id",
-      "required": true,
-      "schema": {
-       "title": "Sandbox Id",
-       "type": "string"
-      }
-     },
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "responses": {
-     "204": {
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Stop"
-   }
-  },
-  "/v1/sandboxes/{sandbox_id}/agent/stream": {
-   "get": {
-    "operationId": "attach_sandboxes__sandbox_id__agent_stream_get",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "sandbox_id",
-      "required": true,
-      "schema": {
-       "title": "Sandbox Id",
-       "type": "string"
-      }
-     },
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {}
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Attach"
-   }
-  },
-  "/v1/sandboxes/{sandbox_id}/agent/takeover": {
-   "post": {
-    "description": "Pauses the running agent before its next action, so a person can use the screen.",
-    "operationId": "takeover_sandboxes__sandbox_id__agent_takeover_post",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "sandbox_id",
-      "required": true,
-      "schema": {
-       "title": "Sandbox Id",
-       "type": "string"
-      }
-     },
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/AgentRunResponse"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Takeover"
-   }
-  },
   "/v1/sandboxes/{sandbox_id}/apps": {
    "get": {
-    "operationId": "list_apps_sandboxes__sandbox_id__apps_get",
+    "operationId": "list_apps_v1_sandboxes__sandbox_id__apps_get",
     "parameters": [
      {
       "in": "path",
@@ -9921,7 +7074,7 @@
          "items": {
           "$ref": "#/components/schemas/AppResponse"
          },
-         "title": "Response List Apps Sandboxes  Sandbox Id  Apps Get",
+         "title": "Response List Apps V1 Sandboxes  Sandbox Id  Apps Get",
          "type": "array"
         }
        }
@@ -9949,7 +7102,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/apps/{binary}": {
    "put": {
-    "operationId": "set_app_sandboxes__sandbox_id__apps__binary__put",
+    "operationId": "set_app_v1_sandboxes__sandbox_id__apps__binary__put",
     "parameters": [
      {
       "in": "path",
@@ -10004,7 +7157,7 @@
          "items": {
           "$ref": "#/components/schemas/AppResponse"
          },
-         "title": "Response Set App Sandboxes  Sandbox Id  Apps  Binary  Put",
+         "title": "Response Set App V1 Sandboxes  Sandbox Id  Apps  Binary  Put",
          "type": "array"
         }
        }
@@ -10032,7 +7185,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/backup": {
    "get": {
-    "operationId": "backup_sandboxes__sandbox_id__backup_get",
+    "operationId": "backup_v1_sandboxes__sandbox_id__backup_get",
     "parameters": [
      {
       "in": "path",
@@ -10090,7 +7243,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/exec": {
    "post": {
-    "operationId": "execute_sandboxes__sandbox_id__exec_post",
+    "operationId": "execute_v1_sandboxes__sandbox_id__exec_post",
     "parameters": [
      {
       "in": "path",
@@ -10161,7 +7314,7 @@
   "/v1/sandboxes/{sandbox_id}/exec/stream": {
    "post": {
     "description": "Runs a command and streams its output as server-sent events: `stdout` and `stderr` ({\"data\": text})\nas it arrives, then `exit` ({\"exit_code\", \"timed_out\"}). Linux sandboxes only.",
-    "operationId": "execute_streamed_sandboxes__sandbox_id__exec_stream_post",
+    "operationId": "execute_streamed_v1_sandboxes__sandbox_id__exec_stream_post",
     "parameters": [
      {
       "in": "path",
@@ -10229,7 +7382,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/executions": {
    "get": {
-    "operationId": "list_executions_sandboxes__sandbox_id__executions_get",
+    "operationId": "list_executions_v1_sandboxes__sandbox_id__executions_get",
     "parameters": [
      {
       "in": "path",
@@ -10320,7 +7473,7 @@
   "/v1/sandboxes/{sandbox_id}/files/content": {
    "get": {
     "description": "A file's bytes (Linux sandboxes).",
-    "operationId": "download_file_sandboxes__sandbox_id__files_content_get",
+    "operationId": "download_file_v1_sandboxes__sandbox_id__files_content_get",
     "parameters": [
      {
       "in": "path",
@@ -10389,7 +7542,7 @@
    },
    "put": {
     "description": "Writes the request body to a file, making its folder (Linux sandboxes).",
-    "operationId": "upload_file_sandboxes__sandbox_id__files_content_put",
+    "operationId": "upload_file_v1_sandboxes__sandbox_id__files_content_put",
     "parameters": [
      {
       "in": "path",
@@ -10435,7 +7588,7 @@
        "application/json": {
         "schema": {
          "additionalProperties": true,
-         "title": "Response Upload File Sandboxes  Sandbox Id  Files Content Put",
+         "title": "Response Upload File V1 Sandboxes  Sandbox Id  Files Content Put",
          "type": "object"
         }
        }
@@ -10463,7 +7616,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/guest": {
    "get": {
-    "operationId": "guest_status_sandboxes__sandbox_id__guest_get",
+    "operationId": "guest_status_v1_sandboxes__sandbox_id__guest_get",
     "parameters": [
      {
       "in": "path",
@@ -10497,7 +7650,7 @@
        "application/json": {
         "schema": {
          "additionalProperties": true,
-         "title": "Response Guest Status Sandboxes  Sandbox Id  Guest Get",
+         "title": "Response Guest Status V1 Sandboxes  Sandbox Id  Guest Get",
          "type": "object"
         }
        }
@@ -10525,7 +7678,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/lifecycle": {
    "put": {
-    "operationId": "set_lifecycle_sandboxes__sandbox_id__lifecycle_put",
+    "operationId": "set_lifecycle_v1_sandboxes__sandbox_id__lifecycle_put",
     "parameters": [
      {
       "in": "path",
@@ -10595,7 +7748,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/move": {
    "post": {
-    "operationId": "move_sandbox_sandboxes__sandbox_id__move_post",
+    "operationId": "move_sandbox_v1_sandboxes__sandbox_id__move_post",
     "parameters": [
      {
       "in": "path",
@@ -10665,7 +7818,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/network": {
    "get": {
-    "operationId": "get_network_sandboxes__sandbox_id__network_get",
+    "operationId": "get_network_v1_sandboxes__sandbox_id__network_get",
     "parameters": [
      {
       "in": "path",
@@ -10723,7 +7876,7 @@
     "summary": "Get Network"
    },
    "put": {
-    "operationId": "set_network_sandboxes__sandbox_id__network_put",
+    "operationId": "set_network_v1_sandboxes__sandbox_id__network_put",
     "parameters": [
      {
       "in": "path",
@@ -10793,7 +7946,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/network/rules": {
    "post": {
-    "operationId": "add_rule_sandboxes__sandbox_id__network_rules_post",
+    "operationId": "add_rule_v1_sandboxes__sandbox_id__network_rules_post",
     "parameters": [
      {
       "in": "path",
@@ -10863,7 +8016,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/network/rules/{rule_id}": {
    "delete": {
-    "operationId": "delete_rule_sandboxes__sandbox_id__network_rules__rule_id__delete",
+    "operationId": "delete_rule_v1_sandboxes__sandbox_id__network_rules__rule_id__delete",
     "parameters": [
      {
       "in": "path",
@@ -10932,7 +8085,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/permissions": {
    "get": {
-    "operationId": "list_permissions_sandboxes__sandbox_id__permissions_get",
+    "operationId": "list_permissions_v1_sandboxes__sandbox_id__permissions_get",
     "parameters": [
      {
       "in": "path",
@@ -10968,7 +8121,7 @@
          "items": {
           "$ref": "#/components/schemas/PermissionResponse"
          },
-         "title": "Response List Permissions Sandboxes  Sandbox Id  Permissions Get",
+         "title": "Response List Permissions V1 Sandboxes  Sandbox Id  Permissions Get",
          "type": "array"
         }
        }
@@ -10994,7 +8147,7 @@
     "summary": "List Permissions"
    },
    "put": {
-    "operationId": "set_permission_sandboxes__sandbox_id__permissions_put",
+    "operationId": "set_permission_v1_sandboxes__sandbox_id__permissions_put",
     "parameters": [
      {
       "in": "path",
@@ -11040,7 +8193,7 @@
          "items": {
           "$ref": "#/components/schemas/PermissionResponse"
          },
-         "title": "Response Set Permission Sandboxes  Sandbox Id  Permissions Put",
+         "title": "Response Set Permission V1 Sandboxes  Sandbox Id  Permissions Put",
          "type": "array"
         }
        }
@@ -11068,7 +8221,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/profiles": {
    "post": {
-    "operationId": "capture_profile_sandboxes__sandbox_id__profiles_post",
+    "operationId": "capture_profile_v1_sandboxes__sandbox_id__profiles_post",
     "parameters": [
      {
       "in": "path",
@@ -11138,7 +8291,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/profiles/{profile_id}": {
    "post": {
-    "operationId": "apply_profile_sandboxes__sandbox_id__profiles__profile_id__post",
+    "operationId": "apply_profile_v1_sandboxes__sandbox_id__profiles__profile_id__post",
     "parameters": [
      {
       "in": "path",
@@ -11223,7 +8376,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/restore": {
    "post": {
-    "operationId": "restore_sandboxes__sandbox_id__restore_post",
+    "operationId": "restore_v1_sandboxes__sandbox_id__restore_post",
     "parameters": [
      {
       "in": "path",
@@ -11283,7 +8436,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/screenshot": {
    "post": {
-    "operationId": "screenshot_sandboxes__sandbox_id__screenshot_post",
+    "operationId": "screenshot_v1_sandboxes__sandbox_id__screenshot_post",
     "parameters": [
      {
       "in": "path",
@@ -11376,7 +8529,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/secrets": {
    "get": {
-    "operationId": "list_secrets_sandboxes__sandbox_id__secrets_get",
+    "operationId": "list_secrets_v1_sandboxes__sandbox_id__secrets_get",
     "parameters": [
      {
       "in": "path",
@@ -11412,7 +8565,7 @@
          "items": {
           "$ref": "#/components/schemas/SecretResponse"
          },
-         "title": "Response List Secrets Sandboxes  Sandbox Id  Secrets Get",
+         "title": "Response List Secrets V1 Sandboxes  Sandbox Id  Secrets Get",
          "type": "array"
         }
        }
@@ -11438,7 +8591,7 @@
     "summary": "List Secrets"
    },
    "put": {
-    "operationId": "set_secret_sandboxes__sandbox_id__secrets_put",
+    "operationId": "set_secret_v1_sandboxes__sandbox_id__secrets_put",
     "parameters": [
      {
       "in": "path",
@@ -11484,7 +8637,7 @@
          "items": {
           "$ref": "#/components/schemas/SecretResponse"
          },
-         "title": "Response Set Secret Sandboxes  Sandbox Id  Secrets Put",
+         "title": "Response Set Secret V1 Sandboxes  Sandbox Id  Secrets Put",
          "type": "array"
         }
        }
@@ -11512,7 +8665,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/secrets/{secret_id}": {
    "delete": {
-    "operationId": "delete_secret_sandboxes__sandbox_id__secrets__secret_id__delete",
+    "operationId": "delete_secret_v1_sandboxes__sandbox_id__secrets__secret_id__delete",
     "parameters": [
      {
       "in": "path",
@@ -11557,7 +8710,7 @@
          "items": {
           "$ref": "#/components/schemas/SecretResponse"
          },
-         "title": "Response Delete Secret Sandboxes  Sandbox Id  Secrets  Secret Id  Delete",
+         "title": "Response Delete Secret V1 Sandboxes  Sandbox Id  Secrets  Secret Id  Delete",
          "type": "array"
         }
        }
@@ -11585,7 +8738,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/snapshots": {
    "get": {
-    "operationId": "list_snapshots_sandboxes__sandbox_id__snapshots_get",
+    "operationId": "list_snapshots_v1_sandboxes__sandbox_id__snapshots_get",
     "parameters": [
      {
       "in": "path",
@@ -11621,7 +8774,7 @@
          "items": {
           "$ref": "#/components/schemas/SnapshotResponse"
          },
-         "title": "Response List Snapshots Sandboxes  Sandbox Id  Snapshots Get",
+         "title": "Response List Snapshots V1 Sandboxes  Sandbox Id  Snapshots Get",
          "type": "array"
         }
        }
@@ -11648,7 +8801,7 @@
    },
    "post": {
     "description": "Snapshots the home disk on the sandbox's host. Linux sandboxes can be running; macOS and Windows VMs\nmust be stopped, since their whole disk is copied.",
-    "operationId": "create_snapshot_sandboxes__sandbox_id__snapshots_post",
+    "operationId": "create_snapshot_v1_sandboxes__sandbox_id__snapshots_post",
     "parameters": [
      {
       "in": "path",
@@ -11725,7 +8878,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/snapshots/{snapshot_id}": {
    "delete": {
-    "operationId": "delete_snapshot_sandboxes__sandbox_id__snapshots__snapshot_id__delete",
+    "operationId": "delete_snapshot_v1_sandboxes__sandbox_id__snapshots__snapshot_id__delete",
     "parameters": [
      {
       "in": "path",
@@ -11787,7 +8940,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/snapshots/{snapshot_id}/restore": {
    "post": {
-    "operationId": "restore_from_snapshot_sandboxes__sandbox_id__snapshots__snapshot_id__restore_post",
+    "operationId": "restore_from_snapshot_v1_sandboxes__sandbox_id__snapshots__snapshot_id__restore_post",
     "parameters": [
      {
       "in": "path",
@@ -11856,7 +9009,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/start": {
    "post": {
-    "operationId": "start_sandbox_sandboxes__sandbox_id__start_post",
+    "operationId": "start_sandbox_v1_sandboxes__sandbox_id__start_post",
     "parameters": [
      {
       "in": "path",
@@ -11916,7 +9069,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/stop": {
    "post": {
-    "operationId": "stop_sandbox_sandboxes__sandbox_id__stop_post",
+    "operationId": "stop_sandbox_v1_sandboxes__sandbox_id__stop_post",
     "parameters": [
      {
       "in": "path",
@@ -11976,7 +9129,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/terminal-ticket": {
    "post": {
-    "operationId": "terminal_ticket_sandboxes__sandbox_id__terminal_ticket_post",
+    "operationId": "terminal_ticket_v1_sandboxes__sandbox_id__terminal_ticket_post",
     "parameters": [
      {
       "in": "path",
@@ -12036,7 +9189,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/tools/{name}": {
    "post": {
-    "operationId": "call_tool_sandboxes__sandbox_id__tools__name__post",
+    "operationId": "call_tool_v1_sandboxes__sandbox_id__tools__name__post",
     "parameters": [
      {
       "in": "path",
@@ -12096,7 +9249,7 @@
       "content": {
        "application/json": {
         "schema": {
-         "title": "Response Call Tool Sandboxes  Sandbox Id  Tools  Name  Post"
+         "title": "Response Call Tool V1 Sandboxes  Sandbox Id  Tools  Name  Post"
         }
        }
       },
@@ -12124,7 +9277,7 @@
   "/v1/sandboxes/{sandbox_id}/upgrade": {
    "post": {
     "description": "Restarts the sandbox on the current default image. Its home volume is kept.",
-    "operationId": "upgrade_sandbox_sandboxes__sandbox_id__upgrade_post",
+    "operationId": "upgrade_sandbox_v1_sandboxes__sandbox_id__upgrade_post",
     "parameters": [
      {
       "in": "path",
@@ -12184,7 +9337,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/vault-secrets": {
    "get": {
-    "operationId": "attached_secrets_sandboxes__sandbox_id__vault_secrets_get",
+    "operationId": "attached_secrets_v1_sandboxes__sandbox_id__vault_secrets_get",
     "parameters": [
      {
       "in": "path",
@@ -12220,7 +9373,7 @@
          "items": {
           "$ref": "#/components/schemas/AttachedSecretResponse"
          },
-         "title": "Response Attached Secrets Sandboxes  Sandbox Id  Vault Secrets Get",
+         "title": "Response Attached Secrets V1 Sandboxes  Sandbox Id  Vault Secrets Get",
          "type": "array"
         }
        }
@@ -12248,7 +9401,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/vault-secrets/{secret_id}": {
    "delete": {
-    "operationId": "detach_secret_sandboxes__sandbox_id__vault_secrets__secret_id__delete",
+    "operationId": "detach_secret_v1_sandboxes__sandbox_id__vault_secrets__secret_id__delete",
     "parameters": [
      {
       "in": "path",
@@ -12293,7 +9446,7 @@
          "items": {
           "$ref": "#/components/schemas/AttachedSecretResponse"
          },
-         "title": "Response Detach Secret Sandboxes  Sandbox Id  Vault Secrets  Secret Id  Delete",
+         "title": "Response Detach Secret V1 Sandboxes  Sandbox Id  Vault Secrets  Secret Id  Delete",
          "type": "array"
         }
        }
@@ -12319,7 +9472,7 @@
     "summary": "Detach Secret"
    },
    "put": {
-    "operationId": "attach_secret_sandboxes__sandbox_id__vault_secrets__secret_id__put",
+    "operationId": "attach_secret_v1_sandboxes__sandbox_id__vault_secrets__secret_id__put",
     "parameters": [
      {
       "in": "path",
@@ -12364,7 +9517,7 @@
          "items": {
           "$ref": "#/components/schemas/AttachedSecretResponse"
          },
-         "title": "Response Attach Secret Sandboxes  Sandbox Id  Vault Secrets  Secret Id  Put",
+         "title": "Response Attach Secret V1 Sandboxes  Sandbox Id  Vault Secrets  Secret Id  Put",
          "type": "array"
         }
        }
@@ -12392,7 +9545,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/viewer-links": {
    "get": {
-    "operationId": "list_links_sandboxes__sandbox_id__viewer_links_get",
+    "operationId": "list_links_v1_sandboxes__sandbox_id__viewer_links_get",
     "parameters": [
      {
       "in": "path",
@@ -12428,7 +9581,7 @@
          "items": {
           "$ref": "#/components/schemas/ViewerLinkResponse"
          },
-         "title": "Response List Links Sandboxes  Sandbox Id  Viewer Links Get",
+         "title": "Response List Links V1 Sandboxes  Sandbox Id  Viewer Links Get",
          "type": "array"
         }
        }
@@ -12454,7 +9607,7 @@
     "summary": "List Links"
    },
    "post": {
-    "operationId": "create_link_sandboxes__sandbox_id__viewer_links_post",
+    "operationId": "create_link_v1_sandboxes__sandbox_id__viewer_links_post",
     "parameters": [
      {
       "in": "path",
@@ -12524,7 +9677,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/viewer-links/{link_id}": {
    "delete": {
-    "operationId": "revoke_link_sandboxes__sandbox_id__viewer_links__link_id__delete",
+    "operationId": "revoke_link_v1_sandboxes__sandbox_id__viewer_links__link_id__delete",
     "parameters": [
      {
       "in": "path",
@@ -12586,7 +9739,7 @@
   },
   "/v1/sandboxes/{sandbox_id}/vnc-ticket": {
    "post": {
-    "operationId": "vnc_ticket_sandboxes__sandbox_id__vnc_ticket_post",
+    "operationId": "vnc_ticket_v1_sandboxes__sandbox_id__vnc_ticket_post",
     "parameters": [
      {
       "in": "path",
@@ -12646,7 +9799,7 @@
   },
   "/v1/servers": {
    "get": {
-    "operationId": "list_servers_servers_get",
+    "operationId": "list_servers_v1_servers_get",
     "parameters": [
      {
       "in": "header",
@@ -12673,7 +9826,7 @@
          "items": {
           "$ref": "#/components/schemas/ServerResponse"
          },
-         "title": "Response List Servers Servers Get",
+         "title": "Response List Servers V1 Servers Get",
          "type": "array"
         }
        }
@@ -12699,7 +9852,7 @@
     "summary": "List Servers"
    },
    "post": {
-    "operationId": "add_server_servers_post",
+    "operationId": "add_server_v1_servers_post",
     "parameters": [
      {
       "in": "header",
@@ -12760,7 +9913,7 @@
   },
   "/v1/servers/install-command": {
    "get": {
-    "operationId": "server_install_command_servers_install_command_get",
+    "operationId": "server_install_command_v1_servers_install_command_get",
     "parameters": [
      {
       "in": "query",
@@ -12825,7 +9978,7 @@
   },
   "/v1/servers/{server_id}": {
    "delete": {
-    "operationId": "delete_server_servers__server_id__delete",
+    "operationId": "delete_server_v1_servers__server_id__delete",
     "parameters": [
      {
       "in": "path",
@@ -12878,7 +10031,7 @@
   },
   "/v1/servers/{server_id}/base": {
    "get": {
-    "operationId": "base_status_servers__server_id__base_get",
+    "operationId": "base_status_v1_servers__server_id__base_get",
     "parameters": [
      {
       "in": "path",
@@ -12938,7 +10091,7 @@
   },
   "/v1/servers/{server_id}/base/install": {
    "post": {
-    "operationId": "base_install_servers__server_id__base_install_post",
+    "operationId": "base_install_v1_servers__server_id__base_install_post",
     "parameters": [
      {
       "in": "path",
@@ -13015,7 +10168,7 @@
   },
   "/v1/servers/{server_id}/base/setup": {
    "post": {
-    "operationId": "base_setup_servers__server_id__base_setup_post",
+    "operationId": "base_setup_v1_servers__server_id__base_setup_post",
     "parameters": [
      {
       "in": "path",
@@ -13068,7 +10221,7 @@
   },
   "/v1/servers/{server_id}/base/start": {
    "post": {
-    "operationId": "base_start_servers__server_id__base_start_post",
+    "operationId": "base_start_v1_servers__server_id__base_start_post",
     "parameters": [
      {
       "in": "path",
@@ -13128,7 +10281,7 @@
   },
   "/v1/servers/{server_id}/base/stop": {
    "post": {
-    "operationId": "base_stop_servers__server_id__base_stop_post",
+    "operationId": "base_stop_v1_servers__server_id__base_stop_post",
     "parameters": [
      {
       "in": "path",
@@ -13188,7 +10341,7 @@
   },
   "/v1/servers/{server_id}/base/vnc-ticket": {
    "post": {
-    "operationId": "base_vnc_ticket_servers__server_id__base_vnc_ticket_post",
+    "operationId": "base_vnc_ticket_v1_servers__server_id__base_vnc_ticket_post",
     "parameters": [
      {
       "in": "path",
@@ -13248,7 +10401,7 @@
   },
   "/v1/servers/{server_id}/migrate": {
    "post": {
-    "operationId": "migrate_server_servers__server_id__migrate_post",
+    "operationId": "migrate_server_v1_servers__server_id__migrate_post",
     "parameters": [
      {
       "in": "path",
@@ -13301,7 +10454,7 @@
   },
   "/v1/servers/{server_id}/status": {
    "get": {
-    "operationId": "server_status_servers__server_id__status_get",
+    "operationId": "server_status_v1_servers__server_id__status_get",
     "parameters": [
      {
       "in": "path",
@@ -13361,7 +10514,7 @@
   },
   "/v1/tools": {
    "get": {
-    "operationId": "list_tools_tools_get",
+    "operationId": "list_tools_v1_tools_get",
     "parameters": [
      {
       "in": "query",
@@ -13405,7 +10558,7 @@
           "additionalProperties": true,
           "type": "object"
          },
-         "title": "Response List Tools Tools Get",
+         "title": "Response List Tools V1 Tools Get",
          "type": "array"
         }
        }
@@ -13433,7 +10586,7 @@
   },
   "/v1/usage": {
    "get": {
-    "operationId": "usage_usage_get",
+    "operationId": "usage_v1_usage_get",
     "parameters": [
      {
       "in": "query",
@@ -13531,7 +10684,7 @@
   },
   "/v1/usage/export": {
    "get": {
-    "operationId": "export_usage_export_get",
+    "operationId": "export_v1_usage_export_get",
     "parameters": [
      {
       "in": "query",
@@ -13627,7 +10780,7 @@
   },
   "/v1/vault/activity": {
    "get": {
-    "operationId": "activity_vault_activity_get",
+    "operationId": "activity_v1_vault_activity_get",
     "parameters": [
      {
       "in": "header",
@@ -13654,7 +10807,7 @@
          "items": {
           "$ref": "#/components/schemas/ActivityResponse"
          },
-         "title": "Response Activity Vault Activity Get",
+         "title": "Response Activity V1 Vault Activity Get",
          "type": "array"
         }
        }
@@ -13682,7 +10835,7 @@
   },
   "/v1/vault/reminders": {
    "get": {
-    "operationId": "reminders_vault_reminders_get",
+    "operationId": "reminders_v1_vault_reminders_get",
     "parameters": [
      {
       "in": "header",
@@ -13709,7 +10862,7 @@
          "items": {
           "$ref": "#/components/schemas/ReminderResponse"
          },
-         "title": "Response Reminders Vault Reminders Get",
+         "title": "Response Reminders V1 Vault Reminders Get",
          "type": "array"
         }
        }
@@ -13737,7 +10890,7 @@
   },
   "/v1/vault/secrets": {
    "get": {
-    "operationId": "list_secrets_vault_secrets_get",
+    "operationId": "list_secrets_v1_vault_secrets_get",
     "parameters": [
      {
       "in": "header",
@@ -13764,7 +10917,7 @@
          "items": {
           "$ref": "#/components/schemas/VaultSecretResponse"
          },
-         "title": "Response List Secrets Vault Secrets Get",
+         "title": "Response List Secrets V1 Vault Secrets Get",
          "type": "array"
         }
        }
@@ -13790,7 +10943,7 @@
     "summary": "List Secrets"
    },
    "post": {
-    "operationId": "create_secret_vault_secrets_post",
+    "operationId": "create_secret_v1_vault_secrets_post",
     "parameters": [
      {
       "in": "header",
@@ -13827,7 +10980,7 @@
          "items": {
           "$ref": "#/components/schemas/VaultSecretResponse"
          },
-         "title": "Response Create Secret Vault Secrets Post",
+         "title": "Response Create Secret V1 Vault Secrets Post",
          "type": "array"
         }
        }
@@ -13855,7 +11008,7 @@
   },
   "/v1/vault/secrets/{secret_id}": {
    "delete": {
-    "operationId": "delete_secret_vault_secrets__secret_id__delete",
+    "operationId": "delete_secret_v1_vault_secrets__secret_id__delete",
     "parameters": [
      {
       "in": "path",
@@ -13891,7 +11044,7 @@
          "items": {
           "$ref": "#/components/schemas/VaultSecretResponse"
          },
-         "title": "Response Delete Secret Vault Secrets  Secret Id  Delete",
+         "title": "Response Delete Secret V1 Vault Secrets  Secret Id  Delete",
          "type": "array"
         }
        }
@@ -13917,7 +11070,7 @@
     "summary": "Delete Secret"
    },
    "patch": {
-    "operationId": "update_secret_vault_secrets__secret_id__patch",
+    "operationId": "update_secret_v1_vault_secrets__secret_id__patch",
     "parameters": [
      {
       "in": "path",
@@ -13963,7 +11116,7 @@
          "items": {
           "$ref": "#/components/schemas/VaultSecretResponse"
          },
-         "title": "Response Update Secret Vault Secrets  Secret Id  Patch",
+         "title": "Response Update Secret V1 Vault Secrets  Secret Id  Patch",
          "type": "array"
         }
        }
@@ -13991,7 +11144,7 @@
   },
   "/v1/webhooks": {
    "get": {
-    "operationId": "list_webhooks_webhooks_get",
+    "operationId": "list_webhooks_v1_webhooks_get",
     "parameters": [
      {
       "in": "header",
@@ -14018,7 +11171,7 @@
          "items": {
           "$ref": "#/components/schemas/WebhookResponse"
          },
-         "title": "Response List Webhooks Webhooks Get",
+         "title": "Response List Webhooks V1 Webhooks Get",
          "type": "array"
         }
        }
@@ -14044,7 +11197,7 @@
     "summary": "List Webhooks"
    },
    "post": {
-    "operationId": "create_webhook_webhooks_post",
+    "operationId": "create_webhook_v1_webhooks_post",
     "parameters": [
      {
       "in": "header",
@@ -14105,7 +11258,7 @@
   },
   "/v1/webhooks/{webhook_id}": {
    "delete": {
-    "operationId": "delete_webhook_webhooks__webhook_id__delete",
+    "operationId": "delete_webhook_v1_webhooks__webhook_id__delete",
     "parameters": [
      {
       "in": "path",
@@ -14156,7 +11309,7 @@
     "summary": "Delete Webhook"
    },
    "put": {
-    "operationId": "update_webhook_webhooks__webhook_id__put",
+    "operationId": "update_webhook_v1_webhooks__webhook_id__put",
     "parameters": [
      {
       "in": "path",
@@ -14226,7 +11379,7 @@
   },
   "/v1/webhooks/{webhook_id}/deliveries": {
    "get": {
-    "operationId": "deliveries_webhooks__webhook_id__deliveries_get",
+    "operationId": "deliveries_v1_webhooks__webhook_id__deliveries_get",
     "parameters": [
      {
       "in": "path",
@@ -14317,7 +11470,7 @@
   "/v1/webhooks/{webhook_id}/test": {
    "post": {
     "description": "Sends a webhook.test event to this webhook only; its delivery shows in /deliveries.",
-    "operationId": "test_webhook_webhooks__webhook_id__test_post",
+    "operationId": "test_webhook_v1_webhooks__webhook_id__test_post",
     "parameters": [
      {
       "in": "path",
@@ -14351,7 +11504,7 @@
        "application/json": {
         "schema": {
          "additionalProperties": true,
-         "title": "Response Test Webhook Webhooks  Webhook Id  Test Post",
+         "title": "Response Test Webhook V1 Webhooks  Webhook Id  Test Post",
          "type": "object"
         }
        }
@@ -14379,7 +11532,7 @@
   },
   "/v1/workspaces": {
    "get": {
-    "operationId": "list_workspaces_workspaces_get",
+    "operationId": "list_workspaces_v1_workspaces_get",
     "parameters": [
      {
       "in": "header",
@@ -14406,7 +11559,7 @@
          "items": {
           "$ref": "#/components/schemas/WorkspaceResponse"
          },
-         "title": "Response List Workspaces Workspaces Get",
+         "title": "Response List Workspaces V1 Workspaces Get",
          "type": "array"
         }
        }
@@ -14432,7 +11585,7 @@
     "summary": "List Workspaces"
    },
    "post": {
-    "operationId": "create_workspace_workspaces_post",
+    "operationId": "create_workspace_v1_workspaces_post",
     "parameters": [
      {
       "in": "header",
@@ -14493,7 +11646,7 @@
   },
   "/v1/workspaces/{workspace_id}": {
    "delete": {
-    "operationId": "delete_workspace_workspaces__workspace_id__delete",
+    "operationId": "delete_workspace_v1_workspaces__workspace_id__delete",
     "parameters": [
      {
       "in": "path",
@@ -14544,7 +11697,7 @@
     "summary": "Delete Workspace"
    },
    "patch": {
-    "operationId": "rename_workspace_workspaces__workspace_id__patch",
+    "operationId": "rename_workspace_v1_workspaces__workspace_id__patch",
     "parameters": [
      {
       "in": "path",
@@ -14614,7 +11767,7 @@
   },
   "/v1/workspaces/{workspace_id}/invitations": {
    "get": {
-    "operationId": "list_invitations_workspaces__workspace_id__invitations_get",
+    "operationId": "list_invitations_v1_workspaces__workspace_id__invitations_get",
     "parameters": [
      {
       "in": "path",
@@ -14650,7 +11803,7 @@
          "items": {
           "$ref": "#/components/schemas/InvitationResponse"
          },
-         "title": "Response List Invitations Workspaces  Workspace Id  Invitations Get",
+         "title": "Response List Invitations V1 Workspaces  Workspace Id  Invitations Get",
          "type": "array"
         }
        }
@@ -14676,7 +11829,7 @@
     "summary": "List Invitations"
    },
    "post": {
-    "operationId": "invite_workspaces__workspace_id__invitations_post",
+    "operationId": "invite_v1_workspaces__workspace_id__invitations_post",
     "parameters": [
      {
       "in": "path",
@@ -14746,7 +11899,7 @@
   },
   "/v1/workspaces/{workspace_id}/invitations/{invitation_id}": {
    "delete": {
-    "operationId": "revoke_invitation_workspaces__workspace_id__invitations__invitation_id__delete",
+    "operationId": "revoke_invitation_v1_workspaces__workspace_id__invitations__invitation_id__delete",
     "parameters": [
      {
       "in": "path",
@@ -14808,7 +11961,7 @@
   },
   "/v1/workspaces/{workspace_id}/label-quotas": {
    "delete": {
-    "operationId": "remove_label_quota_workspaces__workspace_id__label_quotas_delete",
+    "operationId": "remove_label_quota_v1_workspaces__workspace_id__label_quotas_delete",
     "parameters": [
      {
       "in": "path",
@@ -14877,7 +12030,7 @@
     "summary": "Remove Label Quota"
    },
    "get": {
-    "operationId": "list_label_quotas_workspaces__workspace_id__label_quotas_get",
+    "operationId": "list_label_quotas_v1_workspaces__workspace_id__label_quotas_get",
     "parameters": [
      {
       "in": "path",
@@ -14913,7 +12066,7 @@
          "items": {
           "$ref": "#/components/schemas/LabelQuotaResponse"
          },
-         "title": "Response List Label Quotas Workspaces  Workspace Id  Label Quotas Get",
+         "title": "Response List Label Quotas V1 Workspaces  Workspace Id  Label Quotas Get",
          "type": "array"
         }
        }
@@ -14939,7 +12092,7 @@
     "summary": "List Label Quotas"
    },
    "put": {
-    "operationId": "set_label_quota_workspaces__workspace_id__label_quotas_put",
+    "operationId": "set_label_quota_v1_workspaces__workspace_id__label_quotas_put",
     "parameters": [
      {
       "in": "path",
@@ -15009,7 +12162,7 @@
   },
   "/v1/workspaces/{workspace_id}/lifecycle": {
    "put": {
-    "operationId": "set_lifecycle_defaults_workspaces__workspace_id__lifecycle_put",
+    "operationId": "set_lifecycle_defaults_v1_workspaces__workspace_id__lifecycle_put",
     "parameters": [
      {
       "in": "path",
@@ -15079,7 +12232,7 @@
   },
   "/v1/workspaces/{workspace_id}/members": {
    "get": {
-    "operationId": "list_members_workspaces__workspace_id__members_get",
+    "operationId": "list_members_v1_workspaces__workspace_id__members_get",
     "parameters": [
      {
       "in": "path",
@@ -15115,7 +12268,7 @@
          "items": {
           "$ref": "#/components/schemas/MemberResponse"
          },
-         "title": "Response List Members Workspaces  Workspace Id  Members Get",
+         "title": "Response List Members V1 Workspaces  Workspace Id  Members Get",
          "type": "array"
         }
        }
@@ -15143,7 +12296,7 @@
   },
   "/v1/workspaces/{workspace_id}/members/{user_id}": {
    "delete": {
-    "operationId": "remove_member_workspaces__workspace_id__members__user_id__delete",
+    "operationId": "remove_member_v1_workspaces__workspace_id__members__user_id__delete",
     "parameters": [
      {
       "in": "path",
@@ -15203,7 +12356,7 @@
     "summary": "Remove Member"
    },
    "patch": {
-    "operationId": "change_role_workspaces__workspace_id__members__user_id__patch",
+    "operationId": "change_role_v1_workspaces__workspace_id__members__user_id__patch",
     "parameters": [
      {
       "in": "path",
@@ -15258,7 +12411,7 @@
          "items": {
           "$ref": "#/components/schemas/MemberResponse"
          },
-         "title": "Response Change Role Workspaces  Workspace Id  Members  User Id  Patch",
+         "title": "Response Change Role V1 Workspaces  Workspace Id  Members  User Id  Patch",
          "type": "array"
         }
        }
@@ -15286,7 +12439,7 @@
   },
   "/v1/workspaces/{workspace_id}/quota": {
    "get": {
-    "operationId": "get_quota_workspaces__workspace_id__quota_get",
+    "operationId": "get_quota_v1_workspaces__workspace_id__quota_get",
     "parameters": [
      {
       "in": "path",
@@ -15344,7 +12497,7 @@
     "summary": "Get Quota"
    },
    "put": {
-    "operationId": "set_quota_workspaces__workspace_id__quota_put",
+    "operationId": "set_quota_v1_workspaces__workspace_id__quota_put",
     "parameters": [
      {
       "in": "path",
@@ -15411,81 +12564,6 @@
     ],
     "summary": "Set Quota"
    }
-  },
-  "/v1/workspaces/{workspace_id}/trajectories": {
-   "put": {
-    "operationId": "set_trajectory_settings_workspaces__workspace_id__trajectories_put",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "workspace_id",
-      "required": true,
-      "schema": {
-       "title": "Workspace Id",
-       "type": "string"
-      }
-     },
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "requestBody": {
-     "content": {
-      "application/json": {
-       "schema": {
-        "$ref": "#/components/schemas/TrajectorySettingsRequest"
-       }
-      }
-     },
-     "required": true
-    },
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/WorkspaceResponse"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Set Trajectory Settings"
-   }
   }
- },
- "servers": [
-  {
-   "url": "/"
-  }
- ]
+ }
 }

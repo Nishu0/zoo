@@ -28,59 +28,6 @@ and 429 always; 5xx and timeouts for reads and for creates, which carry an autom
 are `ZooError` subclasses with the API's [error code](/docs/reference/errors/). The TypeScript SDK
 (`npm install @zoo/sdk`) has the same methods in camelCase; see `sdk/typescript/README.md`.
 
-## `zoo_sdk.agent.Agent`
-
-| Method | |
-| --- | --- |
-| [`tools()`](#agenttools) |  |
-| [`screenshot()`](#agentscreenshot) |  |
-| [`xdotool()`](#agentxdotool) |  |
-| [`computer()`](#agentcomputer) |  |
-| [`bash()`](#agentbash) |  |
-| [`run()`](#agentrun) |  |
-
-### `Agent.tools` {#agenttools}
-
-```python
-tools(self) -> list[dict]
-```
-
-
-### `Agent.screenshot` {#agentscreenshot}
-
-```python
-screenshot(self) -> dict
-```
-
-
-### `Agent.xdotool` {#agentxdotool}
-
-```python
-xdotool(self, args: str)
-```
-
-
-### `Agent.computer` {#agentcomputer}
-
-```python
-computer(self, action: str, coordinate=None, text=None, **kw) -> list[dict]
-```
-
-
-### `Agent.bash` {#agentbash}
-
-```python
-bash(self, command: str | None=None, restart: bool=False, **_) -> list[dict]
-```
-
-
-### `Agent.run` {#agentrun}
-
-```python
-run(self, task: str) -> str
-```
-
-
 ## `zoo_sdk.aio.AsyncZoo`
 
 ### `AsyncZoo.__init__`
@@ -198,10 +145,8 @@ Zoo(self, api_key: str | None=None, base_url: str | None=None, *, timeout: float
 | [`add_server()`](#zooadd_server) |  |
 | [`profiles()`](#zooprofiles) |  |
 | [`tools()`](#zootools) |  |
-| [`events()`](#zooevents) | Follows the workspace's events (sandbox.state, run.started, run.step, run.finished, takeover.started, takeover.ended) as they happen, from after `after` (a seq) or from now. Pass the last event's seq back to resume after a disconnect. |
+| [`events()`](#zooevents) | Follows the workspace's events (sandbox.state) as they happen, from after `after` (a seq) or from now. Pass the last event's seq back to resume after a disconnect. |
 | [`usage()`](#zoousage) | Metered usage between two ISO times, by sandbox, day or a label (group_by="label:end_user"). |
-| [`export_trajectories()`](#zooexport_trajectories) | Exports finished agent runs (run_id=, or sandbox_id=, labels=, from_=, to=) as a .tar.gz of JSONL and frames, and saves it to `path` once the server has built it. |
-| [`benchmark()`](#zoobenchmark) | Runs a task suite (YAML/JSON text, or parsed) against models ([{"provider", "model"}]) in parallel sandboxes; returns the benchmark with its per-model summary and per-task results. |
 
 ### `Zoo.close` {#zooclose}
 
@@ -308,9 +253,8 @@ tools(self) -> list[dict]
 
 ### `Zoo.events` {#zooevents}
 
-Follows the workspace's events (sandbox.state, run.started, run.step, run.finished, takeover.started,
-takeover.ended) as they happen, from after `after` (a seq) or from now. Pass the last event's seq back to
-resume after a disconnect.
+Follows the workspace's events (sandbox.state) as they happen, from after `after` (a seq) or from now.
+Pass the last event's seq back to resume after a disconnect.
 
 ```python
 events(self, after: int | None=None, sandbox_id: str | None=None, type: str | None=None) -> Iterator[dict]
@@ -323,26 +267,6 @@ Metered usage between two ISO times, by sandbox, day or a label (group_by="label
 
 ```python
 usage(self, since: str, until: str, group_by: str='sandbox', metric: str | None=None) -> list[dict]
-```
-
-
-### `Zoo.export_trajectories` {#zooexport_trajectories}
-
-Exports finished agent runs (run_id=, or sandbox_id=, labels=, from_=, to=) as a .tar.gz of JSONL and
-frames, and saves it to `path` once the server has built it.
-
-```python
-export_trajectories(self, path: str, wait: bool=True, timeout: float=3600, **filters: Any) -> dict
-```
-
-
-### `Zoo.benchmark` {#zoobenchmark}
-
-Runs a task suite (YAML/JSON text, or parsed) against models ([{"provider", "model"}]) in parallel
-sandboxes; returns the benchmark with its per-model summary and per-task results.
-
-```python
-benchmark(self, suite: str | dict, models: list[dict], parallel: int=2, wait: bool=True) -> dict
 ```
 
 
@@ -368,20 +292,14 @@ Sandbox(self, client: Zoo, data: SandboxData, owned: bool=False)
 | [`labels()`](#sandboxlabels) |  |
 | [`refresh()`](#sandboxrefresh) |  |
 | [`wait()`](#sandboxwait) | Waits until the sandbox runs; raises if it fails or takes longer than `timeout` seconds. |
-| [`tool()`](#sandboxtool) |  |
+| [`tool()`](#sandboxtool) | Calls a tool by name with its arguments; `request_timeout` (seconds) is for the HTTP call. |
 | [`exec()`](#sandboxexec) |  |
 | [`exec()`](#sandboxexec) |  |
 | [`exec()`](#sandboxexec) | Runs a shell command (at most `timeout` seconds). Returns its exit code and output, or with stream=True yields its output as it arrives, ending with an `exit` chunk. |
 | [`claude()`](#sandboxclaude) |  |
 | [`screenshot()`](#sandboxscreenshot) |  |
-| [`ask()`](#sandboxask) | Runs the server-side CUA agent on this sandbox and yields its events as they stream in: {"type": "user" \| "reasoning" \| "action" \| "text" \| "status" \| "error", "text": ...}, then {"type": "usage", "steps", "tokens", "cost", "elapsed", "max_steps", ...} after each model call and {"type": "done", "state": "succeeded" \| "failed" \| "cancelled"} at the end. An action event's "id" fetches the screenshot it was decided on with step_screenshot(). |
-| [`stop_agent()`](#sandboxstop_agent) |  |
-| [`takeover()`](#sandboxtakeover) | Pauses the running agent before its next action, so a person can use the screen. |
-| [`release()`](#sandboxrelease) | Hands the screen back; the agent carries on from it as it is now. |
-| [`viewer_link()`](#sandboxviewer_link) | A link to this sandbox's screen for someone without a Zoo account: "view" only watches, "control" can type and click (and take over from the agent). Its "url" opens in a browser or an iframe; expires_in is in minutes. |
+| [`viewer_link()`](#sandboxviewer_link) | A link to this sandbox's screen for someone without a Zoo account: "view" only watches, "control" can type and click. Its "url" opens in a browser or an iframe; expires_in is in minutes. |
 | [`set_labels()`](#sandboxset_labels) | Replaces the sandbox's labels. |
-| [`agent_state()`](#sandboxagent_state) | The conversation, and the latest run with its usage and limits. |
-| [`step_screenshot()`](#sandboxstep_screenshot) | The screen the agent saw before an action (an action message's or event's id). |
 | [`executions()`](#sandboxexecutions) | The latest tool calls on this sandbox, newest first. |
 | [`hotkey()`](#sandboxhotkey) |  |
 | [`start()`](#sandboxstart) |  |
@@ -470,8 +388,10 @@ wait(self, timeout: float=120) -> 'Sandbox'
 
 ### `Sandbox.tool` {#sandboxtool}
 
+Calls a tool by name with its arguments; `request_timeout` (seconds) is for the HTTP call.
+
 ```python
-tool(self, name: str, timeout: float | None=None, **args: Any) -> Any
+tool(self, name: str, request_timeout: float | None=None, **args: Any) -> Any
 ```
 
 
@@ -513,48 +433,10 @@ screenshot(self) -> bytes
 ```
 
 
-### `Sandbox.ask` {#sandboxask}
-
-Runs the server-side CUA agent on this sandbox and yields its events as they stream in:
-{"type": "user" | "reasoning" | "action" | "text" | "status" | "error", "text": ...}, then
-{"type": "usage", "steps", "tokens", "cost", "elapsed", "max_steps", ...} after each model call and
-{"type": "done", "state": "succeeded" | "failed" | "cancelled"} at the end. An action event's "id" fetches the
-screenshot it was decided on with step_screenshot().
-
-```python
-ask(self, message: str, model: str | None=None, provider: str | None=None) -> Iterator[dict]
-```
-
-
-### `Sandbox.stop_agent` {#sandboxstop_agent}
-
-```python
-stop_agent(self)
-```
-
-
-### `Sandbox.takeover` {#sandboxtakeover}
-
-Pauses the running agent before its next action, so a person can use the screen.
-
-```python
-takeover(self) -> dict
-```
-
-
-### `Sandbox.release` {#sandboxrelease}
-
-Hands the screen back; the agent carries on from it as it is now.
-
-```python
-release(self) -> dict
-```
-
-
 ### `Sandbox.viewer_link` {#sandboxviewer_link}
 
 A link to this sandbox's screen for someone without a Zoo account: "view" only watches, "control" can
-type and click (and take over from the agent). Its "url" opens in a browser or an iframe; expires_in is in
+type and click. Its "url" opens in a browser or an iframe; expires_in is in
 minutes.
 
 ```python
@@ -568,24 +450,6 @@ Replaces the sandbox's labels.
 
 ```python
 set_labels(self, labels: dict[str, str]) -> 'Sandbox'
-```
-
-
-### `Sandbox.agent_state` {#sandboxagent_state}
-
-The conversation, and the latest run with its usage and limits.
-
-```python
-agent_state(self) -> dict
-```
-
-
-### `Sandbox.step_screenshot` {#sandboxstep_screenshot}
-
-The screen the agent saw before an action (an action message's or event's id).
-
-```python
-step_screenshot(self, message_id: str) -> bytes
 ```
 
 

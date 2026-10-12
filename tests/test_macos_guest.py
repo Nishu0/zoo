@@ -1,4 +1,7 @@
+import pytest
+
 from server import guest, macos
+from server.errors import ZooError
 
 
 class Agent:
@@ -13,7 +16,7 @@ class Agent:
         return 0, b"out", b""
 
 
-def test_guest_runs_through_the_agent_but_root_and_osascript_stay_on_ssh(monkeypatch):
+def test_guest_runs_through_the_agent_but_root_and_setup_stay_on_ssh(monkeypatch):
     agent, ssh = Agent(), []
     monkeypatch.setattr(macos.hub, "for_runtime", lambda rid: agent)
     monkeypatch.setattr(macos, "guest_client", lambda rid: None)
@@ -23,12 +26,16 @@ def test_guest_runs_through_the_agent_but_root_and_osascript_stay_on_ssh(monkeyp
     assert macos.guest(rid, "cat > f", stdin=b"data") == (0, b"out", b"")
     assert agent.calls == [(["/bin/sh", "-c", f"cd {macos.HOME} && cat > f"], b"data")]
     macos.guest(rid, "pfctl -e", root=True)
-    macos.guest(rid, "osascript -e x", ssh=True)
+    macos.guest(rid, "shasum f", ssh=True)
     assert len(agent.calls) == 1 and len(ssh) == 2 and ssh[0].startswith("sudo -n")
     # a base VM that lets the API log in as root needs no sudo from the guest user
     monkeypatch.setattr(macos, "root_client", lambda rid: "root")
     macos.guest(rid, "pfctl -e", root=True)
     assert ssh[-1] == f"cd {macos.HOME} && pfctl -e"
+    # tools never go over SSH: without the guest they fail
+    monkeypatch.setattr(macos.hub, "for_runtime", lambda rid: None)
+    with pytest.raises(ZooError, match="guest agent is not connected"):
+        macos.guest(rid, "true")
 
 
 def test_admin_rights_follow_the_sandbox(monkeypatch):

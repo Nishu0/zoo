@@ -1,7 +1,7 @@
 """Records the traffic of the macOS and Windows backends once, from a real host, and replays it in CI.
 
 Every command a backend sends goes through a few functions (host `run`, guest `guest`, on macOS the guest's
-window service `native_window`, and on Windows zoo-guest's `guest_raw` and `window`). Recording wraps them and saves each call with its result; replaying
+window service `window`, and on Windows zoo-guest's `guest_raw` and `window`). Recording wraps them and saves each call with its result; replaying
 swaps them for a stub that checks the backend sends exactly the recorded commands, in order, and hands back
 the recorded results. A changed command, an extra call or a different result fails the test.
 VNC-driven tools (screenshot, mouse, keyboard) talk RFB rather than SSH and are not covered here.
@@ -21,7 +21,7 @@ from server import macos, macos_tools, vnc_tools, windows, windows_tools
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SEAMS: dict[str, dict[str, list[Any]]] = {
-    "macos": {"run": [macos], "guest": [macos, macos_tools], "native_window": [macos_tools]},
+    "macos": {"run": [macos], "guest": [macos, macos_tools], "window": [macos_tools]},
     "windows": {
         "run": [windows],
         "guest": [windows, windows_tools],

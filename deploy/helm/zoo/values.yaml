@@ -44,7 +44,7 @@ api:
   affinity: {}
   podAnnotations: {}
 
-# The job worker: sandbox lifecycle jobs, agent runs, the warm pool and the Discord bot (ZOO_ROLE=worker).
+# The job worker: sandbox lifecycle jobs and the warm pool (ZOO_ROLE=worker).
 worker:
   replicas: 1
   resources:
@@ -129,7 +129,7 @@ externalSecrets:
     name: ""
     kind: ClusterSecretStore
   # environment variable: remote reference. Include JWT_SECRET and ZOO_SECRETS_KEY (unless secrets.kms is set),
-  # and anything else Zoo should read from the store (DATABASE_URL, AWS keys, SLACK_BOT_TOKEN, ...).
+  # and anything else Zoo should read from the store (DATABASE_URL, AWS keys, ...).
   data:
     JWT_SECRET: {key: zoo/jwt-secret}
     ZOO_SECRETS_KEY: {key: zoo/secrets-key}
@@ -157,10 +157,9 @@ viewer:
   embedOrigins: ""
   maxLinkHours: 24
 
-# events (GET /events, webhooks) and trajectory exports are kept this long
+# events (GET /events, webhooks) are kept this long
 retention:
   eventDays: 7
-  exportDays: 7
 
 webhooks:
   # let webhooks reach private addresses (a receiver inside the cluster)

@@ -2,7 +2,7 @@ import pytest
 from cryptography.fernet import InvalidToken
 
 from db.connection import db_manager
-from server import kms, security
+from server import security
 from server.security import REDACTED, decrypt, encrypt, redact
 from tests.conftest import present
 
@@ -58,27 +58,10 @@ def test_secrets_key_rotation(client, alice, sandbox, monkeypatch):
     with db_manager.session() as db:
         counts = security.rotate(db)
     # the values stay as they are; only the data keys around them are wrapped again
-    assert counts["data_keys"] >= 1 and counts["vault_secrets"] == counts["sandbox_secrets"] == 0
+    assert counts["data_keys"] >= 1
 
     monkeypatch.delenv("ZOO_SECRETS_KEY_PREVIOUS")
     security._data_keys.clear()
     with db_manager.session() as db:
         assert decrypt(next(iter(db.list_all_vault_secrets())).ciphertext) == "vault-value"
         assert decrypt(next(iter(db.list_all_sandbox_secrets())).secret_ref) == "local-value"
-
-
-def test_rotation_moves_values_from_before_envelopes(client, alice):
-    client.post("/vault/secrets", json={"name": "OLD", "value": "old-value"}, headers=alice)
-    with db_manager.session() as db:
-        row = next(iter(db.list_all_vault_secrets()))
-        db.rewrap_vault_secret(ciphertext=kms.local_fernet().encrypt(b"old-value").decode(), id=row.id)
-    with db_manager.session() as db:
-        assert security.rotate(db)["vault_secrets"] == 1
-        token = next(iter(db.list_all_vault_secrets())).ciphertext
-    assert token.startswith("zk1:") and decrypt(token) == "old-value"
-
-
-def test_jwt_secret_still_decrypts_when_secrets_key_is_added(monkeypatch):
-    token = kms.local_fernet().encrypt(b"legacy").decode()
-    monkeypatch.setenv("ZOO_SECRETS_KEY", "brand-new-key")
-    assert decrypt(token) == "legacy"

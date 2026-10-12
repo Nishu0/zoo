@@ -130,7 +130,7 @@ function SecuritySummary() {
   const points = [
     "Encrypted at rest with ZOO_SECRETS_KEY. Values are write-only and never sent back to the browser.",
     "A sandbox only gets the secrets you attach to it, as environment variables. Changes reach running sandboxes right away: new commands and terminals see them, programs already running keep what they started with.",
-    "Secret values are masked as [redacted] in tool output, activity logs, and anything an agent reads.",
+    "Secret values are masked as [redacted] in tool output and activity logs.",
     "Every change, attach, and profile load is recorded in Activity.",
   ]
   return (
@@ -270,7 +270,7 @@ function SecretRow({ secret }: { secret: VaultSecret }) {
   const [every, setEvery] = useState(
     secret.rotate_every_days ? String(secret.rotate_every_days) : ""
   )
-  const unused = secret.sandboxes.length === 0 && !secret.used_by_agent
+  const unused = secret.sandboxes.length === 0
 
   return (
     <div className="flex flex-col gap-2 px-3 py-2 text-sm">
@@ -279,11 +279,6 @@ function SecretRow({ secret }: { secret: VaultSecret }) {
           <span className="flex flex-wrap items-center gap-2">
             <span className="font-mono">{secret.name}</span>
             <StatusBadge status={secret.status} />
-            {secret.used_by_agent && (
-              <span className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                Agent key
-              </span>
-            )}
           </span>
           <span className="truncate text-xs text-muted-foreground">
             {secret.description ? `${secret.description} · ` : ""}

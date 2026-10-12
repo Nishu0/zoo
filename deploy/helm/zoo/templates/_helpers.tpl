@@ -154,8 +154,6 @@ app.kubernetes.io/component: {{ index . 1 }}
   value: {{ .Values.viewer.maxLinkHours | quote }}
 - name: ZOO_EVENT_RETENTION_DAYS
   value: {{ .Values.retention.eventDays | quote }}
-- name: ZOO_EXPORT_RETENTION_DAYS
-  value: {{ .Values.retention.exportDays | quote }}
 - name: ZOO_WEBHOOK_ALLOW_PRIVATE
   value: {{ ternary "1" "" .Values.webhooks.allowPrivate | quote }}
 {{- range $name, $value := .Values.env }}

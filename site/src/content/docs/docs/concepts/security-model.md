@@ -67,8 +67,6 @@ per-sandbox pids limit (the kubelet's `podPidsLimit` applies per node).
 - On remote servers the noVNC port is published on the address you configure; x11vnc
   behind it asks for the sandbox's password, which only the API has.
 - Secrets are visible to `execute_command` and terminals, not to GUI apps.
-- Older sandbox images, whose guest predates `unset.json`, can't drop a removed secret
-  that was in their environment from boot until they restart.
 
 See [known limitations](https://github.com/chann44/zoo/blob/main/docs/limitations.md) for
 the current short list, and the [comparison page](/compare) for how this stacks against

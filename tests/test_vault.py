@@ -7,11 +7,6 @@ from server import vault_api
 from tests.conftest import present, runtime_of, sql
 
 
-def secrets_env(env: dict[str, str]) -> dict[str, str]:
-    """The container env without the x11vnc password every desktop sandbox gets."""
-    return {k: v for k, v in env.items() if k != "ZOO_VNC_PASSWORD"}
-
-
 def create(client, headers, name="GITHUB_TOKEN", value="ghp_abcdef123456", **extra):
     res = client.post("/vault/secrets", json={"name": name, "value": value, **extra}, headers=headers)
     assert res.status_code == 201, res.text
@@ -34,7 +29,8 @@ def test_vault_crud_never_returns_values(client, alice):
 def test_vault_secret_is_injected_when_attached(client, alice, make_sandbox, fake):
     secret = create(client, alice)
     sandbox = make_sandbox(secret_ids=[secret["id"]])
-    assert secrets_env(fake.containers[runtime_of(sandbox["id"])].env) == {"GITHUB_TOKEN": "ghp_abcdef123456"}
+    assert pushed(fake, sandbox["id"]) == {"GITHUB_TOKEN": "ghp_abcdef123456"}
+    assert "GITHUB_TOKEN" not in fake.containers[runtime_of(sandbox["id"])].env
     assert client.get(f"/sandboxes/{sandbox['id']}/vault-secrets", headers=alice).json() == [
         {"id": secret["id"], "name": "GITHUB_TOKEN"}
     ]
@@ -43,7 +39,7 @@ def test_vault_secret_is_injected_when_attached(client, alice, make_sandbox, fak
     assert usage["id"] == sandbox["id"] and usage["name"] == sandbox["name"] and usage["status"] == "running"
     assert usage["last_used_at"] is not None
     assert listed["last_used_at"] is not None
-    assert listed["status"] == "ok" and listed["used_by_agent"] is False
+    assert listed["status"] == "ok"
 
 
 def test_attach_and_detach(client, alice, sandbox, fake):
@@ -64,7 +60,7 @@ def test_sandbox_secret_wins_over_vault_secret(client, alice, make_sandbox, fake
     client.put(f"/sandboxes/{sid}/secrets", json={"name": "TOKEN", "value": "from-sandbox"}, headers=alice)
     client.post(f"/sandboxes/{sid}/stop", headers=alice)
     client.post(f"/sandboxes/{sid}/start", headers=alice)
-    assert secrets_env(fake.containers[runtime_of(sid)].env) == {"TOKEN": "from-sandbox"}
+    assert pushed(fake, sid) == {"TOKEN": "from-sandbox"}
 
 
 def test_activity_log(client, alice, sandbox):
@@ -88,11 +84,10 @@ def test_vault_is_private(client, alice, bob, sandbox, make_sandbox):
     assert client.get("/vault/activity", headers=bob).json() == []
 
 
-def pushed(fake, sandbox_id: str) -> tuple[dict, list]:
-    """The secrets last pushed into a running Linux sandbox: env.json and unset.json under /run/zoo."""
+def pushed(fake, sandbox_id: str) -> dict:
+    """The secrets last pushed into a running Linux sandbox: env.json under /run/zoo."""
     with tarfile.open(fileobj=io.BytesIO(fake.containers[runtime_of(sandbox_id)].dirs["/run/zoo"])) as tar:
-        files = {m.name: json.loads(present(tar.extractfile(m)).read()) for m in tar.getmembers()}
-    return files["env.json"], files["unset.json"]
+        return json.loads(present(tar.extractfile("env.json")).read())
 
 
 def test_changes_reach_a_running_sandbox_without_a_restart(client, alice, make_sandbox, fake):
@@ -102,21 +97,20 @@ def test_changes_reach_a_running_sandbox_without_a_restart(client, alice, make_s
     runtime = runtime_of(sid)
 
     client.patch(f"/vault/secrets/{secret['id']}", json={"value": "ghp_rotated"}, headers=alice)
-    assert pushed(fake, sid) == ({"GITHUB_TOKEN": "ghp_rotated"}, [])
+    assert pushed(fake, sid) == {"GITHUB_TOKEN": "ghp_rotated"}
 
     other = create(client, alice, name="NPM_TOKEN", value="npm_123456")
     client.put(f"/sandboxes/{sid}/vault-secrets/{other['id']}", headers=alice)
-    assert pushed(fake, sid) == ({"GITHUB_TOKEN": "ghp_rotated", "NPM_TOKEN": "npm_123456"}, [])
+    assert pushed(fake, sid) == {"GITHUB_TOKEN": "ghp_rotated", "NPM_TOKEN": "npm_123456"}
 
-    # GITHUB_TOKEN is in the container's own environment from boot, so removing it masks it there too
     client.delete(f"/sandboxes/{sid}/vault-secrets/{secret['id']}", headers=alice)
-    assert pushed(fake, sid) == ({"NPM_TOKEN": "npm_123456"}, ["GITHUB_TOKEN"])
+    assert pushed(fake, sid) == {"NPM_TOKEN": "npm_123456"}
 
     client.put(f"/sandboxes/{sid}/secrets", json={"name": "OWN", "value": "own-value-1"}, headers=alice)
-    assert pushed(fake, sid)[0] == {"NPM_TOKEN": "npm_123456", "OWN": "own-value-1"}
+    assert pushed(fake, sid) == {"NPM_TOKEN": "npm_123456", "OWN": "own-value-1"}
 
     client.delete(f"/vault/secrets/{other['id']}", headers=alice)
-    assert pushed(fake, sid) == ({"OWN": "own-value-1"}, ["GITHUB_TOKEN"])
+    assert pushed(fake, sid) == {"OWN": "own-value-1"}
     # the sandbox kept running throughout
     assert runtime_of(sid) == runtime and fake.containers[runtime].running
 
@@ -135,7 +129,7 @@ def test_stopped_sandboxes_get_changes_on_their_next_boot(client, alice, make_sa
     client.post(f"/sandboxes/{sid}/stop", headers=alice)
     client.patch(f"/vault/secrets/{secret['id']}", json={"value": "ghp_while_stopped"}, headers=alice)
     client.post(f"/sandboxes/{sid}/start", headers=alice)
-    assert secrets_env(fake.containers[runtime_of(sid)].env) == {"GITHUB_TOKEN": "ghp_while_stopped"}
+    assert pushed(fake, sid) == {"GITHUB_TOKEN": "ghp_while_stopped"}
 
 
 def test_a_failed_push_does_not_fail_the_change(client, alice, make_sandbox, fake, monkeypatch):
@@ -192,13 +186,3 @@ def test_reminders_are_logged_once_per_change(client, alice, caplog, monkeypatch
     vault_api.remind()
     logged = [r for r in caplog.records if "OLD has expired" in r.getMessage()]
     assert len(logged) == 1
-
-
-def test_secret_used_as_the_agent_key(client, alice):
-    client.put(
-        "/agent/settings",
-        json={"provider": "anthropic", "model": "claude-sonnet-5-5", "api_key": "sk-ant-1"},
-        headers=alice,
-    )
-    [listed] = client.get("/vault/secrets", headers=alice).json()
-    assert listed["name"] == "AGENT_ANTHROPIC_API_KEY" and listed["used_by_agent"] is True

@@ -17,7 +17,7 @@ import uuid
 from collections.abc import Iterator
 from datetime import datetime
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -93,10 +93,11 @@ def entry(row: ListAuditLogsRow) -> AuditLogResponse:
 
 
 class AuditApi:
-    def __init__(self, app: FastAPI, auth: AuthApi):
+    def __init__(self, app: APIRouter, auth: AuthApi, site: FastAPI):
         self.app = app
         self.auth = auth
-        self.app.middleware("http")(self.record)
+        # the audit middleware wraps the whole app; the routes are part of the /v1 API
+        site.middleware("http")(self.record)
         self._register_routes()
 
     async def record(self, request: Request, call_next):

@@ -4,23 +4,6 @@
  */
 
 export interface paths {
-    "/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Home */
-        get: operations["home__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/embed/{token}": {
         parameters: {
             query?: never;
@@ -32,23 +15,6 @@ export interface paths {
         get: operations["embed_embed__token__get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/embed/{token}/release": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Embed Release */
-        post: operations["embed_release_embed__token__release_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -72,23 +38,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/embed/{token}/takeover": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Embed Takeover */
-        post: operations["embed_takeover_embed__token__takeover_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/admin/backups": {
         parameters: {
             query?: never;
@@ -97,14 +46,14 @@ export interface paths {
             cookie?: never;
         };
         /** List Backups */
-        get: operations["list_backups_admin_backups_get"];
+        get: operations["list_backups_v1_admin_backups_get"];
         put?: never;
         /**
          * Create Backup
          * @description Takes a backup now (server/backups.py): the database dump is done when this returns; the sandbox
          *     snapshots are queued.
          */
-        post: operations["create_backup_admin_backups_post"];
+        post: operations["create_backup_v1_admin_backups_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -119,10 +68,10 @@ export interface paths {
             cookie?: never;
         };
         /** List Domains */
-        get: operations["list_domains_admin_domains_get"];
+        get: operations["list_domains_v1_admin_domains_get"];
         put?: never;
         /** Add Domain */
-        post: operations["add_domain_admin_domains_post"];
+        post: operations["add_domain_v1_admin_domains_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -140,7 +89,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** Delete Domain */
-        delete: operations["delete_domain_admin_domains__domain_id__delete"];
+        delete: operations["delete_domain_v1_admin_domains__domain_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -159,7 +108,7 @@ export interface paths {
          * Verify Domain
          * @description Looks the domain up again, for after its DNS record was changed.
          */
-        post: operations["verify_domain_admin_domains__domain_id__verify_post"];
+        post: operations["verify_domain_v1_admin_domains__domain_id__verify_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -174,7 +123,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Sandboxes */
-        get: operations["list_sandboxes_admin_sandboxes_get"];
+        get: operations["list_sandboxes_v1_admin_sandboxes_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -191,118 +140,10 @@ export interface paths {
             cookie?: never;
         };
         /** List Users */
-        get: operations["list_users_admin_users_get"];
+        get: operations["list_users_v1_admin_users_get"];
         put?: never;
         post?: never;
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent/exports": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Exports */
-        get: operations["list_exports_agent_exports_get"];
-        put?: never;
-        /** Create Export */
-        post: operations["create_export_agent_exports_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent/exports/{export_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Export */
-        get: operations["get_export_agent_exports__export_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent/exports/{export_id}/download": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Download */
-        get: operations["download_agent_exports__export_id__download_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent/integrations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Integrations */
-        get: operations["integrations_agent_integrations_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent/providers": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Providers
-         * @description What a run can be started with, and whether this workspace has a key for each.
-         */
-        get: operations["providers_agent_providers_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent/settings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Settings */
-        get: operations["get_settings_agent_settings_get"];
-        /** Put Settings */
-        put: operations["put_settings_agent_settings_put"];
-        post?: never;
-        /** Reset Settings */
-        delete: operations["reset_settings_agent_settings_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -316,10 +157,10 @@ export interface paths {
             cookie?: never;
         };
         /** List Keys */
-        get: operations["list_keys_api_keys_get"];
+        get: operations["list_keys_v1_api_keys_get"];
         put?: never;
         /** Create Key */
-        post: operations["create_key_api_keys_post"];
+        post: operations["create_key_v1_api_keys_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -337,7 +178,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** Revoke Key */
-        delete: operations["revoke_key_api_keys__key_id__delete"];
+        delete: operations["revoke_key_v1_api_keys__key_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -351,7 +192,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Audit Logs */
-        get: operations["list_audit_logs_audit_logs_get"];
+        get: operations["list_audit_logs_v1_audit_logs_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -368,7 +209,7 @@ export interface paths {
             cookie?: never;
         };
         /** Export Audit Logs */
-        get: operations["export_audit_logs_audit_logs_export_get"];
+        get: operations["export_audit_logs_v1_audit_logs_export_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -387,7 +228,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Login */
-        post: operations["login_auth_login_post"];
+        post: operations["login_v1_auth_login_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -402,8 +243,28 @@ export interface paths {
             cookie?: never;
         };
         /** Me */
-        get: operations["me_auth_me_get"];
+        get: operations["me_v1_auth_me_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/me/onboarded": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Onboarded
+         * @description Marks the first-run steps done (or skipped), so the dashboard stops showing them.
+         */
+        put: operations["onboarded_v1_auth_me_onboarded_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -421,76 +282,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Register */
-        post: operations["register_auth_signup_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/benchmarks": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Benchmarks */
-        get: operations["list_benchmarks_benchmarks_get"];
-        put?: never;
-        /** Create Benchmark */
-        post: operations["create_benchmark_benchmarks_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/benchmarks/{benchmark_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Benchmark */
-        get: operations["get_benchmark_benchmarks__benchmark_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/benchmarks/{benchmark_id}/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Cancel Benchmark */
-        post: operations["cancel_benchmark_benchmarks__benchmark_id__cancel_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/benchmarks/{benchmark_id}/export": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Export Benchmark */
-        get: operations["export_benchmark_benchmarks__benchmark_id__export_get"];
-        put?: never;
-        post?: never;
+        post: operations["register_v1_auth_signup_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -509,7 +301,7 @@ export interface paths {
          * @description Caddy's on-demand TLS `ask`: a certificate is only issued for a hostname this answers 200 for, so
          *     nobody can make the server request certificates for names it doesn't serve.
          */
-        get: operations["check_domain_domains_check_get"];
+        get: operations["check_domain_v1_domains_check_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -526,7 +318,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Events */
-        get: operations["list_events_events_get"];
+        get: operations["list_events_v1_events_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -543,7 +335,7 @@ export interface paths {
             cookie?: never;
         };
         /** Stream */
-        get: operations["stream_events_stream_get"];
+        get: operations["stream_v1_events_stream_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -562,7 +354,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Accept */
-        post: operations["accept_invitations__token__accept_post"];
+        post: operations["accept_v1_invitations__token__accept_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -580,7 +372,7 @@ export interface paths {
          * Kubernetes
          * @description Whether this machine's Linux sandboxes run on Kubernetes, and what the cluster lacks for them.
          */
-        get: operations["kubernetes_kubernetes_get"];
+        get: operations["kubernetes_v1_kubernetes_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -602,7 +394,7 @@ export interface paths {
          * Kubernetes Check
          * @description The requirements check with a probe pod under the RuntimeClass on every sandbox node (admins).
          */
-        post: operations["kubernetes_check_kubernetes_check_post"];
+        post: operations["kubernetes_check_v1_kubernetes_check_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -617,7 +409,7 @@ export interface paths {
             cookie?: never;
         };
         /** Monitoring */
-        get: operations["monitoring_monitoring_get"];
+        get: operations["monitoring_v1_monitoring_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -637,7 +429,7 @@ export interface paths {
          * Download
          * @description This API's zoo-node build, for installers. The binary is the same for everyone, so it's public.
          */
-        get: operations["download_nodes_download__os_name___arch__get"];
+        get: operations["download_v1_nodes_download__os_name___arch__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -659,7 +451,7 @@ export interface paths {
          * Join
          * @description Called by `zoo-node join`, with no other credentials than the one-time token.
          */
-        post: operations["join_nodes_join_post"];
+        post: operations["join_v1_nodes_join_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -676,7 +468,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Create Token */
-        post: operations["create_token_nodes_tokens_post"];
+        post: operations["create_token_v1_nodes_tokens_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -694,7 +486,7 @@ export interface paths {
          * List Platforms
          * @description Every sandbox OS, and whether this install can run it. The control plane's own Docker runs Linux.
          */
-        get: operations["list_platforms_platforms_get"];
+        get: operations["list_platforms_v1_platforms_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -711,9 +503,9 @@ export interface paths {
             cookie?: never;
         };
         /** List Pool */
-        get: operations["list_pool_pool_get"];
+        get: operations["list_pool_v1_pool_get"];
         /** Set Pool */
-        put: operations["set_pool_pool_put"];
+        put: operations["set_pool_v1_pool_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -729,7 +521,7 @@ export interface paths {
             cookie?: never;
         };
         /** Profile Apps */
-        get: operations["profile_apps_profile_apps_get"];
+        get: operations["profile_apps_v1_profile_apps_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -746,7 +538,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Profiles */
-        get: operations["list_profiles_profiles_get"];
+        get: operations["list_profiles_v1_profiles_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -766,11 +558,11 @@ export interface paths {
         put?: never;
         post?: never;
         /** Delete Profile */
-        delete: operations["delete_profile_profiles__profile_id__delete"];
+        delete: operations["delete_profile_v1_profiles__profile_id__delete"];
         options?: never;
         head?: never;
         /** Rename Profile */
-        patch: operations["rename_profile_profiles__profile_id__patch"];
+        patch: operations["rename_profile_v1_profiles__profile_id__patch"];
         trace?: never;
     };
     "/v1/profiles/{profile_id}/versions": {
@@ -781,7 +573,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Profile Versions */
-        get: operations["list_profile_versions_profiles__profile_id__versions_get"];
+        get: operations["list_profile_versions_v1_profiles__profile_id__versions_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -801,7 +593,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** Delete Profile Version */
-        delete: operations["delete_profile_version_profiles__profile_id__versions__version__delete"];
+        delete: operations["delete_profile_version_v1_profiles__profile_id__versions__version__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -815,10 +607,10 @@ export interface paths {
             cookie?: never;
         };
         /** List Sandboxes */
-        get: operations["list_sandboxes_sandboxes_get"];
+        get: operations["list_sandboxes_v1_sandboxes_get"];
         put?: never;
         /** Create Sandbox */
-        post: operations["create_sandbox_sandboxes_post"];
+        post: operations["create_sandbox_v1_sandboxes_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -833,161 +625,15 @@ export interface paths {
             cookie?: never;
         };
         /** Get Sandbox */
-        get: operations["get_sandbox_sandboxes__sandbox_id__get"];
+        get: operations["get_sandbox_v1_sandboxes__sandbox_id__get"];
         put?: never;
         post?: never;
         /** Delete Sandbox */
-        delete: operations["delete_sandbox_sandboxes__sandbox_id__delete"];
+        delete: operations["delete_sandbox_v1_sandboxes__sandbox_id__delete"];
         options?: never;
         head?: never;
         /** Update Sandbox */
-        patch: operations["update_sandbox_sandboxes__sandbox_id__patch"];
-        trace?: never;
-    };
-    "/v1/sandboxes/{sandbox_id}/agent": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** State */
-        get: operations["state_sandboxes__sandbox_id__agent_get"];
-        put?: never;
-        /** Chat */
-        post: operations["chat_sandboxes__sandbox_id__agent_post"];
-        /** Reset */
-        delete: operations["reset_sandboxes__sandbox_id__agent_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/sandboxes/{sandbox_id}/agent/channels": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Channels */
-        get: operations["list_channels_sandboxes__sandbox_id__agent_channels_get"];
-        put?: never;
-        /** Add Channel */
-        post: operations["add_channel_sandboxes__sandbox_id__agent_channels_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/sandboxes/{sandbox_id}/agent/channels/{channel_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Remove Channel */
-        delete: operations["remove_channel_sandboxes__sandbox_id__agent_channels__channel_id__delete"];
-        options?: never;
-        head?: never;
-        /** Update Channel */
-        patch: operations["update_channel_sandboxes__sandbox_id__agent_channels__channel_id__patch"];
-        trace?: never;
-    };
-    "/v1/sandboxes/{sandbox_id}/agent/messages/{message_id}/screenshot": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Screenshot */
-        get: operations["screenshot_sandboxes__sandbox_id__agent_messages__message_id__screenshot_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/sandboxes/{sandbox_id}/agent/release": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Release
-         * @description Hands the screen back to the agent, which carries on from the screen as the person left it.
-         */
-        post: operations["release_sandboxes__sandbox_id__agent_release_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/sandboxes/{sandbox_id}/agent/stop": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Stop */
-        post: operations["stop_sandboxes__sandbox_id__agent_stop_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/sandboxes/{sandbox_id}/agent/stream": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Attach */
-        get: operations["attach_sandboxes__sandbox_id__agent_stream_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/sandboxes/{sandbox_id}/agent/takeover": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Takeover
-         * @description Pauses the running agent before its next action, so a person can use the screen.
-         */
-        post: operations["takeover_sandboxes__sandbox_id__agent_takeover_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
+        patch: operations["update_sandbox_v1_sandboxes__sandbox_id__patch"];
         trace?: never;
     };
     "/v1/sandboxes/{sandbox_id}/apps": {
@@ -998,7 +644,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Apps */
-        get: operations["list_apps_sandboxes__sandbox_id__apps_get"];
+        get: operations["list_apps_v1_sandboxes__sandbox_id__apps_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1016,7 +662,7 @@ export interface paths {
         };
         get?: never;
         /** Set App */
-        put: operations["set_app_sandboxes__sandbox_id__apps__binary__put"];
+        put: operations["set_app_v1_sandboxes__sandbox_id__apps__binary__put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1032,7 +678,7 @@ export interface paths {
             cookie?: never;
         };
         /** Backup */
-        get: operations["backup_sandboxes__sandbox_id__backup_get"];
+        get: operations["backup_v1_sandboxes__sandbox_id__backup_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1051,7 +697,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Execute */
-        post: operations["execute_sandboxes__sandbox_id__exec_post"];
+        post: operations["execute_v1_sandboxes__sandbox_id__exec_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1072,7 +718,7 @@ export interface paths {
          * @description Runs a command and streams its output as server-sent events: `stdout` and `stderr` ({"data": text})
          *     as it arrives, then `exit` ({"exit_code", "timed_out"}). Linux sandboxes only.
          */
-        post: operations["execute_streamed_sandboxes__sandbox_id__exec_stream_post"];
+        post: operations["execute_streamed_v1_sandboxes__sandbox_id__exec_stream_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1087,7 +733,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Executions */
-        get: operations["list_executions_sandboxes__sandbox_id__executions_get"];
+        get: operations["list_executions_v1_sandboxes__sandbox_id__executions_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1107,12 +753,12 @@ export interface paths {
          * Download File
          * @description A file's bytes (Linux sandboxes).
          */
-        get: operations["download_file_sandboxes__sandbox_id__files_content_get"];
+        get: operations["download_file_v1_sandboxes__sandbox_id__files_content_get"];
         /**
          * Upload File
          * @description Writes the request body to a file, making its folder (Linux sandboxes).
          */
-        put: operations["upload_file_sandboxes__sandbox_id__files_content_put"];
+        put: operations["upload_file_v1_sandboxes__sandbox_id__files_content_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1128,7 +774,7 @@ export interface paths {
             cookie?: never;
         };
         /** Guest Status */
-        get: operations["guest_status_sandboxes__sandbox_id__guest_get"];
+        get: operations["guest_status_v1_sandboxes__sandbox_id__guest_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1146,7 +792,7 @@ export interface paths {
         };
         get?: never;
         /** Set Lifecycle */
-        put: operations["set_lifecycle_sandboxes__sandbox_id__lifecycle_put"];
+        put: operations["set_lifecycle_v1_sandboxes__sandbox_id__lifecycle_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1164,7 +810,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Move Sandbox */
-        post: operations["move_sandbox_sandboxes__sandbox_id__move_post"];
+        post: operations["move_sandbox_v1_sandboxes__sandbox_id__move_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1179,9 +825,9 @@ export interface paths {
             cookie?: never;
         };
         /** Get Network */
-        get: operations["get_network_sandboxes__sandbox_id__network_get"];
+        get: operations["get_network_v1_sandboxes__sandbox_id__network_get"];
         /** Set Network */
-        put: operations["set_network_sandboxes__sandbox_id__network_put"];
+        put: operations["set_network_v1_sandboxes__sandbox_id__network_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1199,7 +845,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Add Rule */
-        post: operations["add_rule_sandboxes__sandbox_id__network_rules_post"];
+        post: operations["add_rule_v1_sandboxes__sandbox_id__network_rules_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1217,7 +863,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** Delete Rule */
-        delete: operations["delete_rule_sandboxes__sandbox_id__network_rules__rule_id__delete"];
+        delete: operations["delete_rule_v1_sandboxes__sandbox_id__network_rules__rule_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1231,9 +877,9 @@ export interface paths {
             cookie?: never;
         };
         /** List Permissions */
-        get: operations["list_permissions_sandboxes__sandbox_id__permissions_get"];
+        get: operations["list_permissions_v1_sandboxes__sandbox_id__permissions_get"];
         /** Set Permission */
-        put: operations["set_permission_sandboxes__sandbox_id__permissions_put"];
+        put: operations["set_permission_v1_sandboxes__sandbox_id__permissions_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1251,7 +897,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Capture Profile */
-        post: operations["capture_profile_sandboxes__sandbox_id__profiles_post"];
+        post: operations["capture_profile_v1_sandboxes__sandbox_id__profiles_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1268,7 +914,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Apply Profile */
-        post: operations["apply_profile_sandboxes__sandbox_id__profiles__profile_id__post"];
+        post: operations["apply_profile_v1_sandboxes__sandbox_id__profiles__profile_id__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1285,7 +931,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Restore */
-        post: operations["restore_sandboxes__sandbox_id__restore_post"];
+        post: operations["restore_v1_sandboxes__sandbox_id__restore_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1302,7 +948,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Screenshot */
-        post: operations["screenshot_sandboxes__sandbox_id__screenshot_post"];
+        post: operations["screenshot_v1_sandboxes__sandbox_id__screenshot_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1317,9 +963,9 @@ export interface paths {
             cookie?: never;
         };
         /** List Secrets */
-        get: operations["list_secrets_sandboxes__sandbox_id__secrets_get"];
+        get: operations["list_secrets_v1_sandboxes__sandbox_id__secrets_get"];
         /** Set Secret */
-        put: operations["set_secret_sandboxes__sandbox_id__secrets_put"];
+        put: operations["set_secret_v1_sandboxes__sandbox_id__secrets_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1338,7 +984,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** Delete Secret */
-        delete: operations["delete_secret_sandboxes__sandbox_id__secrets__secret_id__delete"];
+        delete: operations["delete_secret_v1_sandboxes__sandbox_id__secrets__secret_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1352,14 +998,14 @@ export interface paths {
             cookie?: never;
         };
         /** List Snapshots */
-        get: operations["list_snapshots_sandboxes__sandbox_id__snapshots_get"];
+        get: operations["list_snapshots_v1_sandboxes__sandbox_id__snapshots_get"];
         put?: never;
         /**
          * Create Snapshot
          * @description Snapshots the home disk on the sandbox's host. Linux sandboxes can be running; macOS and Windows VMs
          *     must be stopped, since their whole disk is copied.
          */
-        post: operations["create_snapshot_sandboxes__sandbox_id__snapshots_post"];
+        post: operations["create_snapshot_v1_sandboxes__sandbox_id__snapshots_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1377,7 +1023,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** Delete Snapshot */
-        delete: operations["delete_snapshot_sandboxes__sandbox_id__snapshots__snapshot_id__delete"];
+        delete: operations["delete_snapshot_v1_sandboxes__sandbox_id__snapshots__snapshot_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1393,7 +1039,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Restore From Snapshot */
-        post: operations["restore_from_snapshot_sandboxes__sandbox_id__snapshots__snapshot_id__restore_post"];
+        post: operations["restore_from_snapshot_v1_sandboxes__sandbox_id__snapshots__snapshot_id__restore_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1410,7 +1056,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Start Sandbox */
-        post: operations["start_sandbox_sandboxes__sandbox_id__start_post"];
+        post: operations["start_sandbox_v1_sandboxes__sandbox_id__start_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1427,7 +1073,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Stop Sandbox */
-        post: operations["stop_sandbox_sandboxes__sandbox_id__stop_post"];
+        post: operations["stop_sandbox_v1_sandboxes__sandbox_id__stop_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1444,7 +1090,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Terminal Ticket */
-        post: operations["terminal_ticket_sandboxes__sandbox_id__terminal_ticket_post"];
+        post: operations["terminal_ticket_v1_sandboxes__sandbox_id__terminal_ticket_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1461,7 +1107,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Call Tool */
-        post: operations["call_tool_sandboxes__sandbox_id__tools__name__post"];
+        post: operations["call_tool_v1_sandboxes__sandbox_id__tools__name__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1481,7 +1127,7 @@ export interface paths {
          * Upgrade Sandbox
          * @description Restarts the sandbox on the current default image. Its home volume is kept.
          */
-        post: operations["upgrade_sandbox_sandboxes__sandbox_id__upgrade_post"];
+        post: operations["upgrade_sandbox_v1_sandboxes__sandbox_id__upgrade_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1496,7 +1142,7 @@ export interface paths {
             cookie?: never;
         };
         /** Attached Secrets */
-        get: operations["attached_secrets_sandboxes__sandbox_id__vault_secrets_get"];
+        get: operations["attached_secrets_v1_sandboxes__sandbox_id__vault_secrets_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1514,10 +1160,10 @@ export interface paths {
         };
         get?: never;
         /** Attach Secret */
-        put: operations["attach_secret_sandboxes__sandbox_id__vault_secrets__secret_id__put"];
+        put: operations["attach_secret_v1_sandboxes__sandbox_id__vault_secrets__secret_id__put"];
         post?: never;
         /** Detach Secret */
-        delete: operations["detach_secret_sandboxes__sandbox_id__vault_secrets__secret_id__delete"];
+        delete: operations["detach_secret_v1_sandboxes__sandbox_id__vault_secrets__secret_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1531,10 +1177,10 @@ export interface paths {
             cookie?: never;
         };
         /** List Links */
-        get: operations["list_links_sandboxes__sandbox_id__viewer_links_get"];
+        get: operations["list_links_v1_sandboxes__sandbox_id__viewer_links_get"];
         put?: never;
         /** Create Link */
-        post: operations["create_link_sandboxes__sandbox_id__viewer_links_post"];
+        post: operations["create_link_v1_sandboxes__sandbox_id__viewer_links_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1552,7 +1198,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** Revoke Link */
-        delete: operations["revoke_link_sandboxes__sandbox_id__viewer_links__link_id__delete"];
+        delete: operations["revoke_link_v1_sandboxes__sandbox_id__viewer_links__link_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1568,7 +1214,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Vnc Ticket */
-        post: operations["vnc_ticket_sandboxes__sandbox_id__vnc_ticket_post"];
+        post: operations["vnc_ticket_v1_sandboxes__sandbox_id__vnc_ticket_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1583,10 +1229,10 @@ export interface paths {
             cookie?: never;
         };
         /** List Servers */
-        get: operations["list_servers_servers_get"];
+        get: operations["list_servers_v1_servers_get"];
         put?: never;
         /** Add Server */
-        post: operations["add_server_servers_post"];
+        post: operations["add_server_v1_servers_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1601,7 +1247,7 @@ export interface paths {
             cookie?: never;
         };
         /** Server Install Command */
-        get: operations["server_install_command_servers_install_command_get"];
+        get: operations["server_install_command_v1_servers_install_command_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1621,7 +1267,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** Delete Server */
-        delete: operations["delete_server_servers__server_id__delete"];
+        delete: operations["delete_server_v1_servers__server_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1635,7 +1281,7 @@ export interface paths {
             cookie?: never;
         };
         /** Base Status */
-        get: operations["base_status_servers__server_id__base_get"];
+        get: operations["base_status_v1_servers__server_id__base_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1654,7 +1300,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Base Install */
-        post: operations["base_install_servers__server_id__base_install_post"];
+        post: operations["base_install_v1_servers__server_id__base_install_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1671,7 +1317,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Base Setup */
-        post: operations["base_setup_servers__server_id__base_setup_post"];
+        post: operations["base_setup_v1_servers__server_id__base_setup_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1688,7 +1334,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Base Start */
-        post: operations["base_start_servers__server_id__base_start_post"];
+        post: operations["base_start_v1_servers__server_id__base_start_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1705,7 +1351,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Base Stop */
-        post: operations["base_stop_servers__server_id__base_stop_post"];
+        post: operations["base_stop_v1_servers__server_id__base_stop_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1722,7 +1368,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Base Vnc Ticket */
-        post: operations["base_vnc_ticket_servers__server_id__base_vnc_ticket_post"];
+        post: operations["base_vnc_ticket_v1_servers__server_id__base_vnc_ticket_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1739,7 +1385,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Migrate Server */
-        post: operations["migrate_server_servers__server_id__migrate_post"];
+        post: operations["migrate_server_v1_servers__server_id__migrate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1754,7 +1400,7 @@ export interface paths {
             cookie?: never;
         };
         /** Server Status */
-        get: operations["server_status_servers__server_id__status_get"];
+        get: operations["server_status_v1_servers__server_id__status_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1771,7 +1417,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Tools */
-        get: operations["list_tools_tools_get"];
+        get: operations["list_tools_v1_tools_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1788,7 +1434,7 @@ export interface paths {
             cookie?: never;
         };
         /** Usage */
-        get: operations["usage_usage_get"];
+        get: operations["usage_v1_usage_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1805,7 +1451,7 @@ export interface paths {
             cookie?: never;
         };
         /** Export */
-        get: operations["export_usage_export_get"];
+        get: operations["export_v1_usage_export_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1822,7 +1468,7 @@ export interface paths {
             cookie?: never;
         };
         /** Activity */
-        get: operations["activity_vault_activity_get"];
+        get: operations["activity_v1_vault_activity_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1839,7 +1485,7 @@ export interface paths {
             cookie?: never;
         };
         /** Reminders */
-        get: operations["reminders_vault_reminders_get"];
+        get: operations["reminders_v1_vault_reminders_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1856,10 +1502,10 @@ export interface paths {
             cookie?: never;
         };
         /** List Secrets */
-        get: operations["list_secrets_vault_secrets_get"];
+        get: operations["list_secrets_v1_vault_secrets_get"];
         put?: never;
         /** Create Secret */
-        post: operations["create_secret_vault_secrets_post"];
+        post: operations["create_secret_v1_vault_secrets_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1877,11 +1523,11 @@ export interface paths {
         put?: never;
         post?: never;
         /** Delete Secret */
-        delete: operations["delete_secret_vault_secrets__secret_id__delete"];
+        delete: operations["delete_secret_v1_vault_secrets__secret_id__delete"];
         options?: never;
         head?: never;
         /** Update Secret */
-        patch: operations["update_secret_vault_secrets__secret_id__patch"];
+        patch: operations["update_secret_v1_vault_secrets__secret_id__patch"];
         trace?: never;
     };
     "/v1/webhooks": {
@@ -1892,10 +1538,10 @@ export interface paths {
             cookie?: never;
         };
         /** List Webhooks */
-        get: operations["list_webhooks_webhooks_get"];
+        get: operations["list_webhooks_v1_webhooks_get"];
         put?: never;
         /** Create Webhook */
-        post: operations["create_webhook_webhooks_post"];
+        post: operations["create_webhook_v1_webhooks_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1911,10 +1557,10 @@ export interface paths {
         };
         get?: never;
         /** Update Webhook */
-        put: operations["update_webhook_webhooks__webhook_id__put"];
+        put: operations["update_webhook_v1_webhooks__webhook_id__put"];
         post?: never;
         /** Delete Webhook */
-        delete: operations["delete_webhook_webhooks__webhook_id__delete"];
+        delete: operations["delete_webhook_v1_webhooks__webhook_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1928,7 +1574,7 @@ export interface paths {
             cookie?: never;
         };
         /** Deliveries */
-        get: operations["deliveries_webhooks__webhook_id__deliveries_get"];
+        get: operations["deliveries_v1_webhooks__webhook_id__deliveries_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1950,7 +1596,7 @@ export interface paths {
          * Test Webhook
          * @description Sends a webhook.test event to this webhook only; its delivery shows in /deliveries.
          */
-        post: operations["test_webhook_webhooks__webhook_id__test_post"];
+        post: operations["test_webhook_v1_webhooks__webhook_id__test_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1965,10 +1611,10 @@ export interface paths {
             cookie?: never;
         };
         /** List Workspaces */
-        get: operations["list_workspaces_workspaces_get"];
+        get: operations["list_workspaces_v1_workspaces_get"];
         put?: never;
         /** Create Workspace */
-        post: operations["create_workspace_workspaces_post"];
+        post: operations["create_workspace_v1_workspaces_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1986,11 +1632,11 @@ export interface paths {
         put?: never;
         post?: never;
         /** Delete Workspace */
-        delete: operations["delete_workspace_workspaces__workspace_id__delete"];
+        delete: operations["delete_workspace_v1_workspaces__workspace_id__delete"];
         options?: never;
         head?: never;
         /** Rename Workspace */
-        patch: operations["rename_workspace_workspaces__workspace_id__patch"];
+        patch: operations["rename_workspace_v1_workspaces__workspace_id__patch"];
         trace?: never;
     };
     "/v1/workspaces/{workspace_id}/invitations": {
@@ -2001,10 +1647,10 @@ export interface paths {
             cookie?: never;
         };
         /** List Invitations */
-        get: operations["list_invitations_workspaces__workspace_id__invitations_get"];
+        get: operations["list_invitations_v1_workspaces__workspace_id__invitations_get"];
         put?: never;
         /** Invite */
-        post: operations["invite_workspaces__workspace_id__invitations_post"];
+        post: operations["invite_v1_workspaces__workspace_id__invitations_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2022,7 +1668,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** Revoke Invitation */
-        delete: operations["revoke_invitation_workspaces__workspace_id__invitations__invitation_id__delete"];
+        delete: operations["revoke_invitation_v1_workspaces__workspace_id__invitations__invitation_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2036,12 +1682,12 @@ export interface paths {
             cookie?: never;
         };
         /** List Label Quotas */
-        get: operations["list_label_quotas_workspaces__workspace_id__label_quotas_get"];
+        get: operations["list_label_quotas_v1_workspaces__workspace_id__label_quotas_get"];
         /** Set Label Quota */
-        put: operations["set_label_quota_workspaces__workspace_id__label_quotas_put"];
+        put: operations["set_label_quota_v1_workspaces__workspace_id__label_quotas_put"];
         post?: never;
         /** Remove Label Quota */
-        delete: operations["remove_label_quota_workspaces__workspace_id__label_quotas_delete"];
+        delete: operations["remove_label_quota_v1_workspaces__workspace_id__label_quotas_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2056,7 +1702,7 @@ export interface paths {
         };
         get?: never;
         /** Set Lifecycle Defaults */
-        put: operations["set_lifecycle_defaults_workspaces__workspace_id__lifecycle_put"];
+        put: operations["set_lifecycle_defaults_v1_workspaces__workspace_id__lifecycle_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2072,7 +1718,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Members */
-        get: operations["list_members_workspaces__workspace_id__members_get"];
+        get: operations["list_members_v1_workspaces__workspace_id__members_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2092,11 +1738,11 @@ export interface paths {
         put?: never;
         post?: never;
         /** Remove Member */
-        delete: operations["remove_member_workspaces__workspace_id__members__user_id__delete"];
+        delete: operations["remove_member_v1_workspaces__workspace_id__members__user_id__delete"];
         options?: never;
         head?: never;
         /** Change Role */
-        patch: operations["change_role_workspaces__workspace_id__members__user_id__patch"];
+        patch: operations["change_role_v1_workspaces__workspace_id__members__user_id__patch"];
         trace?: never;
     };
     "/v1/workspaces/{workspace_id}/quota": {
@@ -2107,26 +1753,9 @@ export interface paths {
             cookie?: never;
         };
         /** Get Quota */
-        get: operations["get_quota_workspaces__workspace_id__quota_get"];
+        get: operations["get_quota_v1_workspaces__workspace_id__quota_get"];
         /** Set Quota */
-        put: operations["set_quota_workspaces__workspace_id__quota_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/workspaces/{workspace_id}/trajectories": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Set Trajectory Settings */
-        put: operations["set_trajectory_settings_workspaces__workspace_id__trajectories_put"];
+        put: operations["set_quota_v1_workspaces__workspace_id__quota_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2156,130 +1785,6 @@ export interface components {
             resource_type: string;
             /** Sandbox Id */
             sandbox_id: string | null;
-        };
-        /** AgentMessageResponse */
-        AgentMessageResponse: {
-            /** Content */
-            content: string;
-            /** Created At */
-            created_at: string;
-            /** Has Screenshot */
-            has_screenshot: boolean;
-            /** Id */
-            id: string;
-            /** Kind */
-            kind: string;
-            /** Run Id */
-            run_id: string | null;
-            /** Source */
-            source: string;
-        };
-        /** AgentRequest */
-        AgentRequest: {
-            /** Api Base */
-            api_base?: string | null;
-            /** Message */
-            message: string;
-            /** Model */
-            model?: string | null;
-            /** Provider */
-            provider?: ("anthropic" | "openai" | "gemini" | "openrouter" | "ollama" | "xai") | null;
-            /**
-             * Stream
-             * @default true
-             */
-            stream: boolean;
-        };
-        /** AgentRunResponse */
-        AgentRunResponse: {
-            /** Attempts */
-            attempts: number;
-            /** Cost */
-            cost: number;
-            /** Created At */
-            created_at: string;
-            /** Elapsed Seconds */
-            elapsed_seconds: number;
-            /** Error */
-            error: string | null;
-            /** Finished At */
-            finished_at: string | null;
-            /** Id */
-            id: string;
-            /** Max Seconds */
-            max_seconds: number;
-            /** Max Steps */
-            max_steps: number;
-            /** Max Tokens */
-            max_tokens: number;
-            /** Model */
-            model?: string | null;
-            /** Paused At */
-            paused_at?: string | null;
-            /** Paused By */
-            paused_by?: string | null;
-            /** Provider */
-            provider?: string | null;
-            /** Source */
-            source: string;
-            /** Started At */
-            started_at: string | null;
-            /** State */
-            state: string;
-            /** Steps */
-            steps: number;
-            /** Tokens */
-            tokens: number;
-        };
-        /** AgentSettingsRequest */
-        AgentSettingsRequest: {
-            /** Api Base */
-            api_base?: string | null;
-            /** Api Key */
-            api_key?: string | null;
-            /** Api Key Secret Id */
-            api_key_secret_id?: string | null;
-            /** Max Seconds */
-            max_seconds?: number | null;
-            /** Max Steps */
-            max_steps?: number | null;
-            /** Max Tokens */
-            max_tokens?: number | null;
-            /** Model */
-            model: string;
-            /**
-             * Provider
-             * @enum {string}
-             */
-            provider: "anthropic" | "openai" | "gemini" | "openrouter" | "ollama" | "xai";
-        };
-        /** AgentSettingsResponse */
-        AgentSettingsResponse: {
-            /** Api Base */
-            api_base: string | null;
-            api_key_secret: components["schemas"]["SecretRef"] | null;
-            caps: components["schemas"]["LimitsResponse"];
-            /** Default Model */
-            default_model: string;
-            /** Has Api Key */
-            has_api_key: boolean;
-            limits: components["schemas"]["LimitsResponse"];
-            /** Model */
-            model: string;
-            /** Provider */
-            provider: string | null;
-            /** Providers */
-            providers: components["schemas"]["ProviderResponse"][];
-        };
-        /** AgentStateResponse */
-        AgentStateResponse: {
-            /** Messages */
-            messages: components["schemas"]["AgentMessageResponse"][];
-            /** Model */
-            model: string;
-            run: components["schemas"]["AgentRunResponse"] | null;
-            /** Running */
-            running: boolean;
         };
         /** ApiKeyRequest */
         ApiKeyRequest: {
@@ -2425,100 +1930,6 @@ export interface components {
              * @enum {string}
              */
             state: "missing" | "installing" | "failed" | "stopped" | "running";
-        };
-        /** BenchmarkDetailResponse */
-        BenchmarkDetailResponse: {
-            /** Created At */
-            created_at: string;
-            /** Error */
-            error: string | null;
-            /** Finished At */
-            finished_at: string | null;
-            /** Id */
-            id: string;
-            /** Models */
-            models: string[];
-            /** Name */
-            name: string;
-            /** Parallel */
-            parallel: number;
-            /** Results */
-            results: components["schemas"]["ResultResponse"][];
-            /** Started At */
-            started_at: string | null;
-            /** State */
-            state: string;
-            /** Summary */
-            summary: components["schemas"]["ModelSummary"][];
-            /** Tasks */
-            tasks: number;
-        };
-        /** BenchmarkRequest */
-        BenchmarkRequest: {
-            /** Models */
-            models: components["schemas"]["ModelChoice"][];
-            /**
-             * Parallel
-             * @default 2
-             */
-            parallel: number;
-            /** Suite */
-            suite: string | {
-                [key: string]: unknown;
-            };
-        };
-        /** BenchmarkResponse */
-        BenchmarkResponse: {
-            /** Created At */
-            created_at: string;
-            /** Error */
-            error: string | null;
-            /** Finished At */
-            finished_at: string | null;
-            /** Id */
-            id: string;
-            /** Models */
-            models: string[];
-            /** Name */
-            name: string;
-            /** Parallel */
-            parallel: number;
-            /** Started At */
-            started_at: string | null;
-            /** State */
-            state: string;
-            /** Tasks */
-            tasks: number;
-        };
-        /** ChannelRequest */
-        ChannelRequest: {
-            /** Allowed Users */
-            allowed_users?: string[];
-            /** External Id */
-            external_id: string;
-            /**
-             * Platform
-             * @enum {string}
-             */
-            platform: "slack" | "discord" | "whatsapp";
-        };
-        /** ChannelResponse */
-        ChannelResponse: {
-            /** Allowed Users */
-            allowed_users: string[];
-            /** Created At */
-            created_at: string;
-            /** External Id */
-            external_id: string;
-            /** Id */
-            id: string;
-            /** Platform */
-            platform: string;
-        };
-        /** ChannelUpdate */
-        ChannelUpdate: {
-            /** Allowed Users */
-            allowed_users: string[];
         };
         /** CreateSandboxRequest */
         CreateSandboxRequest: {
@@ -2715,12 +2126,8 @@ export interface components {
         };
         /** EmbedStateResponse */
         EmbedStateResponse: {
-            /** Agent */
-            agent: string;
             /** Mode */
             mode: string;
-            /** Paused By */
-            paused_by: string | null;
             /** Sandbox Status */
             sandbox_status: string;
         };
@@ -2776,40 +2183,6 @@ export interface components {
              */
             timed_out: boolean;
         };
-        /** ExportRequest */
-        ExportRequest: {
-            /** From */
-            from?: string | null;
-            /** Labels */
-            labels?: {
-                [key: string]: string;
-            } | null;
-            /** Run Id */
-            run_id?: string | null;
-            /** Sandbox Id */
-            sandbox_id?: string | null;
-            /** To */
-            to?: string | null;
-        };
-        /** ExportResponse */
-        ExportResponse: {
-            /** Created At */
-            created_at: string;
-            /** Error */
-            error: string | null;
-            /** Finished At */
-            finished_at: string | null;
-            /** Id */
-            id: string;
-            /** Runs */
-            runs: number;
-            /** Size Bytes */
-            size_bytes: number;
-            /** State */
-            state: string;
-            /** Steps */
-            steps: number;
-        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -2844,15 +2217,6 @@ export interface components {
             public_key: string;
             /** Requirements */
             requirements: string;
-        };
-        /** IntegrationResponse */
-        IntegrationResponse: {
-            /** Configured */
-            configured: boolean;
-            /** Platform */
-            platform: string;
-            /** Webhook Path */
-            webhook_path: string | null;
         };
         /** InvitationRequest */
         InvitationRequest: {
@@ -3018,15 +2382,6 @@ export interface components {
             /** Max Lifetime Minutes */
             max_lifetime_minutes?: number | null;
         };
-        /** LimitsResponse */
-        LimitsResponse: {
-            /** Max Seconds */
-            max_seconds: number;
-            /** Max Steps */
-            max_steps: number;
-            /** Max Tokens */
-            max_tokens: number;
-        };
         /** MemberResponse */
         MemberResponse: {
             /** Email */
@@ -3041,33 +2396,6 @@ export interface components {
             status: string;
             /** User Id */
             user_id: string;
-        };
-        /** ModelChoice */
-        ModelChoice: {
-            /** Model */
-            model?: string | null;
-            /**
-             * Provider
-             * @enum {string}
-             */
-            provider: "anthropic" | "openai" | "gemini" | "openrouter" | "ollama" | "xai";
-        };
-        /** ModelSummary */
-        ModelSummary: {
-            /** Mean Cost */
-            mean_cost: number;
-            /** Mean Seconds */
-            mean_seconds: number;
-            /** Mean Steps */
-            mean_steps: number;
-            /** Model */
-            model: string;
-            /** Pass Rate */
-            pass_rate: number;
-            /** Passed */
-            passed: number;
-            /** Tasks */
-            tasks: number;
         };
         /** MonitoringResponse */
         MonitoringResponse: {
@@ -3348,40 +2676,6 @@ export interface components {
             /** Version */
             version: number;
         };
-        /** ProviderResponse */
-        ProviderResponse: {
-            /** Default Base */
-            default_base: string | null;
-            /** Default Model */
-            default_model: string;
-            /** Id */
-            id: string;
-            /** Label */
-            label: string;
-            /** Needs Key */
-            needs_key: boolean;
-            /** Server Key */
-            server_key: boolean;
-        };
-        /** ProviderStatusResponse */
-        ProviderStatusResponse: {
-            /** Default Base */
-            default_base: string | null;
-            /** Default Model */
-            default_model: string;
-            /** Has Key */
-            has_key: boolean;
-            /** Id */
-            id: string;
-            /** Key Secret */
-            key_secret: string | null;
-            /** Label */
-            label: string;
-            /** Needs Key */
-            needs_key: boolean;
-            /** Server Key */
-            server_key: boolean;
-        };
         /** QuotaRequest */
         QuotaRequest: {
             /** Max Cpus */
@@ -3427,29 +2721,6 @@ export interface components {
              * @enum {string}
              */
             status: "ok" | "rotation_soon" | "expiring_soon" | "rotation_due" | "expired";
-        };
-        /** ResultResponse */
-        ResultResponse: {
-            /** Cost */
-            cost: number;
-            /** Error */
-            error: string | null;
-            /** Model */
-            model: string;
-            /** Passed */
-            passed: boolean | null;
-            /** Run Id */
-            run_id: string | null;
-            /** Score */
-            score: number | null;
-            /** Seconds */
-            seconds: number;
-            /** Steps */
-            steps: number;
-            /** Task Id */
-            task_id: string;
-            /** Tokens */
-            tokens: number;
         };
         /** RoleRequest */
         RoleRequest: {
@@ -3555,13 +2826,6 @@ export interface components {
             sandbox_id: string;
             /** Status */
             status: string;
-        };
-        /** SecretRef */
-        SecretRef: {
-            /** Id */
-            id: string;
-            /** Name */
-            name: string;
         };
         /** SecretRequest */
         SecretRequest: {
@@ -3687,11 +2951,6 @@ export interface components {
             /** Tool Name */
             tool_name: string;
         };
-        /** TrajectorySettingsRequest */
-        TrajectorySettingsRequest: {
-            /** Capture A11Y */
-            capture_a11y: boolean;
-        };
         /** UpdateSandboxRequest */
         UpdateSandboxRequest: {
             /** Labels */
@@ -3731,6 +2990,8 @@ export interface components {
             id: string;
             /** Name */
             name: string | null;
+            /** Onboarded At */
+            onboarded_at?: string | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -3787,8 +3048,6 @@ export interface components {
             status: "ok" | "rotation_soon" | "expiring_soon" | "rotation_due" | "expired";
             /** Updated At */
             updated_at: string;
-            /** Used By Agent */
-            used_by_agent: boolean;
         };
         /** VaultSecretUpdate */
         VaultSecretUpdate: {
@@ -3887,11 +3146,6 @@ export interface components {
         };
         /** WorkspaceResponse */
         WorkspaceResponse: {
-            /**
-             * Capture A11Y
-             * @default true
-             */
-            capture_a11y: boolean;
             /** Created At */
             created_at: string;
             /** Default Idle Timeout Minutes */
@@ -3941,26 +3195,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    home__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
     embed_embed__token__get: {
         parameters: {
             query?: never;
@@ -3980,35 +3214,6 @@ export interface operations {
                 content: {
                     "text/html": string;
                 };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    embed_release_embed__token__release_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                token: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -4052,36 +3257,7 @@ export interface operations {
             };
         };
     };
-    embed_takeover_embed__token__takeover_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                token: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_backups_admin_backups_get: {
+    list_backups_v1_admin_backups_get: {
         parameters: {
             query?: never;
             header?: {
@@ -4112,7 +3288,7 @@ export interface operations {
             };
         };
     };
-    create_backup_admin_backups_post: {
+    create_backup_v1_admin_backups_post: {
         parameters: {
             query?: never;
             header?: {
@@ -4143,7 +3319,7 @@ export interface operations {
             };
         };
     };
-    list_domains_admin_domains_get: {
+    list_domains_v1_admin_domains_get: {
         parameters: {
             query?: never;
             header?: {
@@ -4174,7 +3350,7 @@ export interface operations {
             };
         };
     };
-    add_domain_admin_domains_post: {
+    add_domain_v1_admin_domains_post: {
         parameters: {
             query?: never;
             header?: {
@@ -4209,7 +3385,7 @@ export interface operations {
             };
         };
     };
-    delete_domain_admin_domains__domain_id__delete: {
+    delete_domain_v1_admin_domains__domain_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -4240,7 +3416,7 @@ export interface operations {
             };
         };
     };
-    verify_domain_admin_domains__domain_id__verify_post: {
+    verify_domain_v1_admin_domains__domain_id__verify_post: {
         parameters: {
             query?: never;
             header?: {
@@ -4273,7 +3449,7 @@ export interface operations {
             };
         };
     };
-    list_sandboxes_admin_sandboxes_get: {
+    list_sandboxes_v1_admin_sandboxes_get: {
         parameters: {
             query?: never;
             header?: {
@@ -4304,7 +3480,7 @@ export interface operations {
             };
         };
     };
-    list_users_admin_users_get: {
+    list_users_v1_admin_users_get: {
         parameters: {
             query?: never;
             header?: {
@@ -4335,298 +3511,7 @@ export interface operations {
             };
         };
     };
-    list_exports_agent_exports_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ExportResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_export_agent_exports_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ExportRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ExportResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_export_agent_exports__export_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path: {
-                export_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ExportResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    download_agent_exports__export_id__download_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path: {
-                export_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    integrations_agent_integrations_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["IntegrationResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    providers_agent_providers_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProviderStatusResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_settings_agent_settings_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentSettingsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    put_settings_agent_settings_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AgentSettingsRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentSettingsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    reset_settings_agent_settings_delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentSettingsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_keys_api_keys_get: {
+    list_keys_v1_api_keys_get: {
         parameters: {
             query?: never;
             header?: {
@@ -4657,7 +3542,7 @@ export interface operations {
             };
         };
     };
-    create_key_api_keys_post: {
+    create_key_v1_api_keys_post: {
         parameters: {
             query?: never;
             header?: {
@@ -4692,7 +3577,7 @@ export interface operations {
             };
         };
     };
-    revoke_key_api_keys__key_id__delete: {
+    revoke_key_v1_api_keys__key_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -4725,7 +3610,7 @@ export interface operations {
             };
         };
     };
-    list_audit_logs_audit_logs_get: {
+    list_audit_logs_v1_audit_logs_get: {
         parameters: {
             query?: {
                 actor?: string | null;
@@ -4766,7 +3651,7 @@ export interface operations {
             };
         };
     };
-    export_audit_logs_audit_logs_export_get: {
+    export_audit_logs_v1_audit_logs_export_get: {
         parameters: {
             query?: {
                 actor?: string | null;
@@ -4804,7 +3689,7 @@ export interface operations {
             };
         };
     };
-    login_auth_login_post: {
+    login_v1_auth_login_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4837,7 +3722,7 @@ export interface operations {
             };
         };
     };
-    me_auth_me_get: {
+    me_v1_auth_me_get: {
         parameters: {
             query?: never;
             header?: {
@@ -4868,7 +3753,36 @@ export interface operations {
             };
         };
     };
-    register_auth_signup_post: {
+    onboarded_v1_auth_me_onboarded_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-zoo-workspace"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    register_v1_auth_signup_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4901,170 +3815,7 @@ export interface operations {
             };
         };
     };
-    list_benchmarks_benchmarks_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BenchmarkResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_benchmark_benchmarks_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BenchmarkRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BenchmarkResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_benchmark_benchmarks__benchmark_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path: {
-                benchmark_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BenchmarkDetailResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    cancel_benchmark_benchmarks__benchmark_id__cancel_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path: {
-                benchmark_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    export_benchmark_benchmarks__benchmark_id__export_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path: {
-                benchmark_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    check_domain_domains_check_get: {
+    check_domain_v1_domains_check_get: {
         parameters: {
             query?: {
                 domain?: string;
@@ -5095,7 +3846,7 @@ export interface operations {
             };
         };
     };
-    list_events_events_get: {
+    list_events_v1_events_get: {
         parameters: {
             query?: {
                 /** @description the seq of the last event seen */
@@ -5131,7 +3882,7 @@ export interface operations {
             };
         };
     };
-    stream_events_stream_get: {
+    stream_v1_events_stream_get: {
         parameters: {
             query?: {
                 /** @description start after this seq; default: from now */
@@ -5168,7 +3919,7 @@ export interface operations {
             };
         };
     };
-    accept_invitations__token__accept_post: {
+    accept_v1_invitations__token__accept_post: {
         parameters: {
             query?: never;
             header?: {
@@ -5201,7 +3952,7 @@ export interface operations {
             };
         };
     };
-    kubernetes_kubernetes_get: {
+    kubernetes_v1_kubernetes_get: {
         parameters: {
             query?: never;
             header?: {
@@ -5232,7 +3983,7 @@ export interface operations {
             };
         };
     };
-    kubernetes_check_kubernetes_check_post: {
+    kubernetes_check_v1_kubernetes_check_post: {
         parameters: {
             query?: never;
             header?: {
@@ -5263,7 +4014,7 @@ export interface operations {
             };
         };
     };
-    monitoring_monitoring_get: {
+    monitoring_v1_monitoring_get: {
         parameters: {
             query?: never;
             header?: {
@@ -5294,7 +4045,7 @@ export interface operations {
             };
         };
     };
-    download_nodes_download__os_name___arch__get: {
+    download_v1_nodes_download__os_name___arch__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5326,7 +4077,7 @@ export interface operations {
             };
         };
     };
-    join_nodes_join_post: {
+    join_v1_nodes_join_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -5359,7 +4110,7 @@ export interface operations {
             };
         };
     };
-    create_token_nodes_tokens_post: {
+    create_token_v1_nodes_tokens_post: {
         parameters: {
             query?: {
                 platform?: "linux" | "macos" | "windows";
@@ -5396,7 +4147,7 @@ export interface operations {
             };
         };
     };
-    list_platforms_platforms_get: {
+    list_platforms_v1_platforms_get: {
         parameters: {
             query?: never;
             header?: {
@@ -5427,7 +4178,7 @@ export interface operations {
             };
         };
     };
-    list_pool_pool_get: {
+    list_pool_v1_pool_get: {
         parameters: {
             query?: never;
             header?: {
@@ -5458,7 +4209,7 @@ export interface operations {
             };
         };
     };
-    set_pool_pool_put: {
+    set_pool_v1_pool_put: {
         parameters: {
             query?: never;
             header?: {
@@ -5493,7 +4244,7 @@ export interface operations {
             };
         };
     };
-    profile_apps_profile_apps_get: {
+    profile_apps_v1_profile_apps_get: {
         parameters: {
             query?: {
                 platform?: string;
@@ -5528,7 +4279,7 @@ export interface operations {
             };
         };
     };
-    list_profiles_profiles_get: {
+    list_profiles_v1_profiles_get: {
         parameters: {
             query?: never;
             header?: {
@@ -5559,7 +4310,7 @@ export interface operations {
             };
         };
     };
-    delete_profile_profiles__profile_id__delete: {
+    delete_profile_v1_profiles__profile_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -5590,7 +4341,7 @@ export interface operations {
             };
         };
     };
-    rename_profile_profiles__profile_id__patch: {
+    rename_profile_v1_profiles__profile_id__patch: {
         parameters: {
             query?: never;
             header?: {
@@ -5627,7 +4378,7 @@ export interface operations {
             };
         };
     };
-    list_profile_versions_profiles__profile_id__versions_get: {
+    list_profile_versions_v1_profiles__profile_id__versions_get: {
         parameters: {
             query?: never;
             header?: {
@@ -5660,7 +4411,7 @@ export interface operations {
             };
         };
     };
-    delete_profile_version_profiles__profile_id__versions__version__delete: {
+    delete_profile_version_v1_profiles__profile_id__versions__version__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -5694,7 +4445,7 @@ export interface operations {
             };
         };
     };
-    list_sandboxes_sandboxes_get: {
+    list_sandboxes_v1_sandboxes_get: {
         parameters: {
             query?: {
                 /** @description key=value; repeat to match all of them */
@@ -5731,7 +4482,7 @@ export interface operations {
             };
         };
     };
-    create_sandbox_sandboxes_post: {
+    create_sandbox_v1_sandboxes_post: {
         parameters: {
             query?: never;
             header?: {
@@ -5766,7 +4517,7 @@ export interface operations {
             };
         };
     };
-    get_sandbox_sandboxes__sandbox_id__get: {
+    get_sandbox_v1_sandboxes__sandbox_id__get: {
         parameters: {
             query?: never;
             header?: {
@@ -5799,7 +4550,7 @@ export interface operations {
             };
         };
     };
-    delete_sandbox_sandboxes__sandbox_id__delete: {
+    delete_sandbox_v1_sandboxes__sandbox_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -5832,7 +4583,7 @@ export interface operations {
             };
         };
     };
-    update_sandbox_sandboxes__sandbox_id__patch: {
+    update_sandbox_v1_sandboxes__sandbox_id__patch: {
         parameters: {
             query?: never;
             header?: {
@@ -5869,412 +4620,7 @@ export interface operations {
             };
         };
     };
-    state_sandboxes__sandbox_id__agent_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path: {
-                sandbox_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentStateResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    chat_sandboxes__sandbox_id__agent_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path: {
-                sandbox_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AgentRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    reset_sandboxes__sandbox_id__agent_delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path: {
-                sandbox_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_channels_sandboxes__sandbox_id__agent_channels_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path: {
-                sandbox_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ChannelResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    add_channel_sandboxes__sandbox_id__agent_channels_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path: {
-                sandbox_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ChannelRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ChannelResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    remove_channel_sandboxes__sandbox_id__agent_channels__channel_id__delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path: {
-                sandbox_id: string;
-                channel_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_channel_sandboxes__sandbox_id__agent_channels__channel_id__patch: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path: {
-                sandbox_id: string;
-                channel_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ChannelUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ChannelResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    screenshot_sandboxes__sandbox_id__agent_messages__message_id__screenshot_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path: {
-                sandbox_id: string;
-                message_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    release_sandboxes__sandbox_id__agent_release_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path: {
-                sandbox_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentRunResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    stop_sandboxes__sandbox_id__agent_stop_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path: {
-                sandbox_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    attach_sandboxes__sandbox_id__agent_stream_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path: {
-                sandbox_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    takeover_sandboxes__sandbox_id__agent_takeover_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path: {
-                sandbox_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentRunResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_apps_sandboxes__sandbox_id__apps_get: {
+    list_apps_v1_sandboxes__sandbox_id__apps_get: {
         parameters: {
             query?: never;
             header?: {
@@ -6307,7 +4653,7 @@ export interface operations {
             };
         };
     };
-    set_app_sandboxes__sandbox_id__apps__binary__put: {
+    set_app_v1_sandboxes__sandbox_id__apps__binary__put: {
         parameters: {
             query?: never;
             header?: {
@@ -6345,7 +4691,7 @@ export interface operations {
             };
         };
     };
-    backup_sandboxes__sandbox_id__backup_get: {
+    backup_v1_sandboxes__sandbox_id__backup_get: {
         parameters: {
             query?: never;
             header?: {
@@ -6378,7 +4724,7 @@ export interface operations {
             };
         };
     };
-    execute_sandboxes__sandbox_id__exec_post: {
+    execute_v1_sandboxes__sandbox_id__exec_post: {
         parameters: {
             query?: never;
             header?: {
@@ -6415,7 +4761,7 @@ export interface operations {
             };
         };
     };
-    execute_streamed_sandboxes__sandbox_id__exec_stream_post: {
+    execute_streamed_v1_sandboxes__sandbox_id__exec_stream_post: {
         parameters: {
             query?: never;
             header?: {
@@ -6452,7 +4798,7 @@ export interface operations {
             };
         };
     };
-    list_executions_sandboxes__sandbox_id__executions_get: {
+    list_executions_v1_sandboxes__sandbox_id__executions_get: {
         parameters: {
             query?: {
                 limit?: number;
@@ -6489,7 +4835,7 @@ export interface operations {
             };
         };
     };
-    download_file_sandboxes__sandbox_id__files_content_get: {
+    download_file_v1_sandboxes__sandbox_id__files_content_get: {
         parameters: {
             query: {
                 /** @description absolute, or relative to the home directory */
@@ -6525,7 +4871,7 @@ export interface operations {
             };
         };
     };
-    upload_file_sandboxes__sandbox_id__files_content_put: {
+    upload_file_v1_sandboxes__sandbox_id__files_content_put: {
         parameters: {
             query: {
                 /** @description absolute, or relative to the home directory */
@@ -6563,7 +4909,7 @@ export interface operations {
             };
         };
     };
-    guest_status_sandboxes__sandbox_id__guest_get: {
+    guest_status_v1_sandboxes__sandbox_id__guest_get: {
         parameters: {
             query?: never;
             header?: {
@@ -6598,7 +4944,7 @@ export interface operations {
             };
         };
     };
-    set_lifecycle_sandboxes__sandbox_id__lifecycle_put: {
+    set_lifecycle_v1_sandboxes__sandbox_id__lifecycle_put: {
         parameters: {
             query?: never;
             header?: {
@@ -6635,7 +4981,7 @@ export interface operations {
             };
         };
     };
-    move_sandbox_sandboxes__sandbox_id__move_post: {
+    move_sandbox_v1_sandboxes__sandbox_id__move_post: {
         parameters: {
             query?: never;
             header?: {
@@ -6672,7 +5018,7 @@ export interface operations {
             };
         };
     };
-    get_network_sandboxes__sandbox_id__network_get: {
+    get_network_v1_sandboxes__sandbox_id__network_get: {
         parameters: {
             query?: never;
             header?: {
@@ -6705,7 +5051,7 @@ export interface operations {
             };
         };
     };
-    set_network_sandboxes__sandbox_id__network_put: {
+    set_network_v1_sandboxes__sandbox_id__network_put: {
         parameters: {
             query?: never;
             header?: {
@@ -6742,7 +5088,7 @@ export interface operations {
             };
         };
     };
-    add_rule_sandboxes__sandbox_id__network_rules_post: {
+    add_rule_v1_sandboxes__sandbox_id__network_rules_post: {
         parameters: {
             query?: never;
             header?: {
@@ -6779,7 +5125,7 @@ export interface operations {
             };
         };
     };
-    delete_rule_sandboxes__sandbox_id__network_rules__rule_id__delete: {
+    delete_rule_v1_sandboxes__sandbox_id__network_rules__rule_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -6813,7 +5159,7 @@ export interface operations {
             };
         };
     };
-    list_permissions_sandboxes__sandbox_id__permissions_get: {
+    list_permissions_v1_sandboxes__sandbox_id__permissions_get: {
         parameters: {
             query?: never;
             header?: {
@@ -6846,7 +5192,7 @@ export interface operations {
             };
         };
     };
-    set_permission_sandboxes__sandbox_id__permissions_put: {
+    set_permission_v1_sandboxes__sandbox_id__permissions_put: {
         parameters: {
             query?: never;
             header?: {
@@ -6883,7 +5229,7 @@ export interface operations {
             };
         };
     };
-    capture_profile_sandboxes__sandbox_id__profiles_post: {
+    capture_profile_v1_sandboxes__sandbox_id__profiles_post: {
         parameters: {
             query?: never;
             header?: {
@@ -6920,7 +5266,7 @@ export interface operations {
             };
         };
     };
-    apply_profile_sandboxes__sandbox_id__profiles__profile_id__post: {
+    apply_profile_v1_sandboxes__sandbox_id__profiles__profile_id__post: {
         parameters: {
             query?: {
                 version?: number | null;
@@ -6956,7 +5302,7 @@ export interface operations {
             };
         };
     };
-    restore_sandboxes__sandbox_id__restore_post: {
+    restore_v1_sandboxes__sandbox_id__restore_post: {
         parameters: {
             query?: never;
             header?: {
@@ -6989,7 +5335,7 @@ export interface operations {
             };
         };
     };
-    screenshot_sandboxes__sandbox_id__screenshot_post: {
+    screenshot_v1_sandboxes__sandbox_id__screenshot_post: {
         parameters: {
             query?: {
                 format?: "png" | "webp" | "jpeg";
@@ -7026,7 +5372,7 @@ export interface operations {
             };
         };
     };
-    list_secrets_sandboxes__sandbox_id__secrets_get: {
+    list_secrets_v1_sandboxes__sandbox_id__secrets_get: {
         parameters: {
             query?: never;
             header?: {
@@ -7059,7 +5405,7 @@ export interface operations {
             };
         };
     };
-    set_secret_sandboxes__sandbox_id__secrets_put: {
+    set_secret_v1_sandboxes__sandbox_id__secrets_put: {
         parameters: {
             query?: never;
             header?: {
@@ -7096,7 +5442,7 @@ export interface operations {
             };
         };
     };
-    delete_secret_sandboxes__sandbox_id__secrets__secret_id__delete: {
+    delete_secret_v1_sandboxes__sandbox_id__secrets__secret_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -7130,7 +5476,7 @@ export interface operations {
             };
         };
     };
-    list_snapshots_sandboxes__sandbox_id__snapshots_get: {
+    list_snapshots_v1_sandboxes__sandbox_id__snapshots_get: {
         parameters: {
             query?: never;
             header?: {
@@ -7163,7 +5509,7 @@ export interface operations {
             };
         };
     };
-    create_snapshot_sandboxes__sandbox_id__snapshots_post: {
+    create_snapshot_v1_sandboxes__sandbox_id__snapshots_post: {
         parameters: {
             query?: never;
             header?: {
@@ -7200,7 +5546,7 @@ export interface operations {
             };
         };
     };
-    delete_snapshot_sandboxes__sandbox_id__snapshots__snapshot_id__delete: {
+    delete_snapshot_v1_sandboxes__sandbox_id__snapshots__snapshot_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -7232,7 +5578,7 @@ export interface operations {
             };
         };
     };
-    restore_from_snapshot_sandboxes__sandbox_id__snapshots__snapshot_id__restore_post: {
+    restore_from_snapshot_v1_sandboxes__sandbox_id__snapshots__snapshot_id__restore_post: {
         parameters: {
             query?: never;
             header?: {
@@ -7266,7 +5612,7 @@ export interface operations {
             };
         };
     };
-    start_sandbox_sandboxes__sandbox_id__start_post: {
+    start_sandbox_v1_sandboxes__sandbox_id__start_post: {
         parameters: {
             query?: never;
             header?: {
@@ -7299,7 +5645,7 @@ export interface operations {
             };
         };
     };
-    stop_sandbox_sandboxes__sandbox_id__stop_post: {
+    stop_sandbox_v1_sandboxes__sandbox_id__stop_post: {
         parameters: {
             query?: never;
             header?: {
@@ -7332,7 +5678,7 @@ export interface operations {
             };
         };
     };
-    terminal_ticket_sandboxes__sandbox_id__terminal_ticket_post: {
+    terminal_ticket_v1_sandboxes__sandbox_id__terminal_ticket_post: {
         parameters: {
             query?: never;
             header?: {
@@ -7365,7 +5711,7 @@ export interface operations {
             };
         };
     };
-    call_tool_sandboxes__sandbox_id__tools__name__post: {
+    call_tool_v1_sandboxes__sandbox_id__tools__name__post: {
         parameters: {
             query?: never;
             header?: {
@@ -7405,7 +5751,7 @@ export interface operations {
             };
         };
     };
-    upgrade_sandbox_sandboxes__sandbox_id__upgrade_post: {
+    upgrade_sandbox_v1_sandboxes__sandbox_id__upgrade_post: {
         parameters: {
             query?: never;
             header?: {
@@ -7438,7 +5784,7 @@ export interface operations {
             };
         };
     };
-    attached_secrets_sandboxes__sandbox_id__vault_secrets_get: {
+    attached_secrets_v1_sandboxes__sandbox_id__vault_secrets_get: {
         parameters: {
             query?: never;
             header?: {
@@ -7471,41 +5817,7 @@ export interface operations {
             };
         };
     };
-    attach_secret_sandboxes__sandbox_id__vault_secrets__secret_id__put: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path: {
-                sandbox_id: string;
-                secret_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AttachedSecretResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    detach_secret_sandboxes__sandbox_id__vault_secrets__secret_id__delete: {
+    attach_secret_v1_sandboxes__sandbox_id__vault_secrets__secret_id__put: {
         parameters: {
             query?: never;
             header?: {
@@ -7539,7 +5851,41 @@ export interface operations {
             };
         };
     };
-    list_links_sandboxes__sandbox_id__viewer_links_get: {
+    detach_secret_v1_sandboxes__sandbox_id__vault_secrets__secret_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-zoo-workspace"?: string | null;
+            };
+            path: {
+                sandbox_id: string;
+                secret_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachedSecretResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_links_v1_sandboxes__sandbox_id__viewer_links_get: {
         parameters: {
             query?: never;
             header?: {
@@ -7572,7 +5918,7 @@ export interface operations {
             };
         };
     };
-    create_link_sandboxes__sandbox_id__viewer_links_post: {
+    create_link_v1_sandboxes__sandbox_id__viewer_links_post: {
         parameters: {
             query?: never;
             header?: {
@@ -7609,7 +5955,7 @@ export interface operations {
             };
         };
     };
-    revoke_link_sandboxes__sandbox_id__viewer_links__link_id__delete: {
+    revoke_link_v1_sandboxes__sandbox_id__viewer_links__link_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -7641,7 +5987,7 @@ export interface operations {
             };
         };
     };
-    vnc_ticket_sandboxes__sandbox_id__vnc_ticket_post: {
+    vnc_ticket_v1_sandboxes__sandbox_id__vnc_ticket_post: {
         parameters: {
             query?: never;
             header?: {
@@ -7674,7 +6020,7 @@ export interface operations {
             };
         };
     };
-    list_servers_servers_get: {
+    list_servers_v1_servers_get: {
         parameters: {
             query?: never;
             header?: {
@@ -7705,7 +6051,7 @@ export interface operations {
             };
         };
     };
-    add_server_servers_post: {
+    add_server_v1_servers_post: {
         parameters: {
             query?: never;
             header?: {
@@ -7740,7 +6086,7 @@ export interface operations {
             };
         };
     };
-    server_install_command_servers_install_command_get: {
+    server_install_command_v1_servers_install_command_get: {
         parameters: {
             query: {
                 platform: "linux" | "macos" | "windows";
@@ -7773,7 +6119,7 @@ export interface operations {
             };
         };
     };
-    delete_server_servers__server_id__delete: {
+    delete_server_v1_servers__server_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -7804,7 +6150,7 @@ export interface operations {
             };
         };
     };
-    base_status_servers__server_id__base_get: {
+    base_status_v1_servers__server_id__base_get: {
         parameters: {
             query?: never;
             header?: {
@@ -7837,7 +6183,7 @@ export interface operations {
             };
         };
     };
-    base_install_servers__server_id__base_install_post: {
+    base_install_v1_servers__server_id__base_install_post: {
         parameters: {
             query?: never;
             header?: {
@@ -7874,7 +6220,7 @@ export interface operations {
             };
         };
     };
-    base_setup_servers__server_id__base_setup_post: {
+    base_setup_v1_servers__server_id__base_setup_post: {
         parameters: {
             query?: never;
             header?: {
@@ -7905,7 +6251,7 @@ export interface operations {
             };
         };
     };
-    base_start_servers__server_id__base_start_post: {
+    base_start_v1_servers__server_id__base_start_post: {
         parameters: {
             query?: never;
             header?: {
@@ -7938,7 +6284,7 @@ export interface operations {
             };
         };
     };
-    base_stop_servers__server_id__base_stop_post: {
+    base_stop_v1_servers__server_id__base_stop_post: {
         parameters: {
             query?: never;
             header?: {
@@ -7971,7 +6317,7 @@ export interface operations {
             };
         };
     };
-    base_vnc_ticket_servers__server_id__base_vnc_ticket_post: {
+    base_vnc_ticket_v1_servers__server_id__base_vnc_ticket_post: {
         parameters: {
             query?: never;
             header?: {
@@ -8004,7 +6350,7 @@ export interface operations {
             };
         };
     };
-    migrate_server_servers__server_id__migrate_post: {
+    migrate_server_v1_servers__server_id__migrate_post: {
         parameters: {
             query?: never;
             header?: {
@@ -8035,7 +6381,7 @@ export interface operations {
             };
         };
     };
-    server_status_servers__server_id__status_get: {
+    server_status_v1_servers__server_id__status_get: {
         parameters: {
             query?: never;
             header?: {
@@ -8068,7 +6414,7 @@ export interface operations {
             };
         };
     };
-    list_tools_tools_get: {
+    list_tools_v1_tools_get: {
         parameters: {
             query?: {
                 kind?: string | null;
@@ -8103,7 +6449,7 @@ export interface operations {
             };
         };
     };
-    usage_usage_get: {
+    usage_v1_usage_get: {
         parameters: {
             query: {
                 from: string;
@@ -8139,7 +6485,7 @@ export interface operations {
             };
         };
     };
-    export_usage_export_get: {
+    export_v1_usage_export_get: {
         parameters: {
             query: {
                 from: string;
@@ -8175,7 +6521,7 @@ export interface operations {
             };
         };
     };
-    activity_vault_activity_get: {
+    activity_v1_vault_activity_get: {
         parameters: {
             query?: never;
             header?: {
@@ -8206,7 +6552,7 @@ export interface operations {
             };
         };
     };
-    reminders_vault_reminders_get: {
+    reminders_v1_vault_reminders_get: {
         parameters: {
             query?: never;
             header?: {
@@ -8237,7 +6583,7 @@ export interface operations {
             };
         };
     };
-    list_secrets_vault_secrets_get: {
+    list_secrets_v1_vault_secrets_get: {
         parameters: {
             query?: never;
             header?: {
@@ -8268,7 +6614,7 @@ export interface operations {
             };
         };
     };
-    create_secret_vault_secrets_post: {
+    create_secret_v1_vault_secrets_post: {
         parameters: {
             query?: never;
             header?: {
@@ -8303,7 +6649,7 @@ export interface operations {
             };
         };
     };
-    delete_secret_vault_secrets__secret_id__delete: {
+    delete_secret_v1_vault_secrets__secret_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -8336,7 +6682,7 @@ export interface operations {
             };
         };
     };
-    update_secret_vault_secrets__secret_id__patch: {
+    update_secret_v1_vault_secrets__secret_id__patch: {
         parameters: {
             query?: never;
             header?: {
@@ -8373,7 +6719,7 @@ export interface operations {
             };
         };
     };
-    list_webhooks_webhooks_get: {
+    list_webhooks_v1_webhooks_get: {
         parameters: {
             query?: never;
             header?: {
@@ -8404,7 +6750,7 @@ export interface operations {
             };
         };
     };
-    create_webhook_webhooks_post: {
+    create_webhook_v1_webhooks_post: {
         parameters: {
             query?: never;
             header?: {
@@ -8439,7 +6785,7 @@ export interface operations {
             };
         };
     };
-    update_webhook_webhooks__webhook_id__put: {
+    update_webhook_v1_webhooks__webhook_id__put: {
         parameters: {
             query?: never;
             header?: {
@@ -8476,7 +6822,7 @@ export interface operations {
             };
         };
     };
-    delete_webhook_webhooks__webhook_id__delete: {
+    delete_webhook_v1_webhooks__webhook_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -8507,7 +6853,7 @@ export interface operations {
             };
         };
     };
-    deliveries_webhooks__webhook_id__deliveries_get: {
+    deliveries_v1_webhooks__webhook_id__deliveries_get: {
         parameters: {
             query?: {
                 limit?: number;
@@ -8544,7 +6890,7 @@ export interface operations {
             };
         };
     };
-    test_webhook_webhooks__webhook_id__test_post: {
+    test_webhook_v1_webhooks__webhook_id__test_post: {
         parameters: {
             query?: never;
             header?: {
@@ -8579,7 +6925,7 @@ export interface operations {
             };
         };
     };
-    list_workspaces_workspaces_get: {
+    list_workspaces_v1_workspaces_get: {
         parameters: {
             query?: never;
             header?: {
@@ -8610,7 +6956,7 @@ export interface operations {
             };
         };
     };
-    create_workspace_workspaces_post: {
+    create_workspace_v1_workspaces_post: {
         parameters: {
             query?: never;
             header?: {
@@ -8645,7 +6991,7 @@ export interface operations {
             };
         };
     };
-    delete_workspace_workspaces__workspace_id__delete: {
+    delete_workspace_v1_workspaces__workspace_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -8676,7 +7022,7 @@ export interface operations {
             };
         };
     };
-    rename_workspace_workspaces__workspace_id__patch: {
+    rename_workspace_v1_workspaces__workspace_id__patch: {
         parameters: {
             query?: never;
             header?: {
@@ -8713,7 +7059,7 @@ export interface operations {
             };
         };
     };
-    list_invitations_workspaces__workspace_id__invitations_get: {
+    list_invitations_v1_workspaces__workspace_id__invitations_get: {
         parameters: {
             query?: never;
             header?: {
@@ -8746,7 +7092,7 @@ export interface operations {
             };
         };
     };
-    invite_workspaces__workspace_id__invitations_post: {
+    invite_v1_workspaces__workspace_id__invitations_post: {
         parameters: {
             query?: never;
             header?: {
@@ -8783,7 +7129,7 @@ export interface operations {
             };
         };
     };
-    revoke_invitation_workspaces__workspace_id__invitations__invitation_id__delete: {
+    revoke_invitation_v1_workspaces__workspace_id__invitations__invitation_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -8815,7 +7161,7 @@ export interface operations {
             };
         };
     };
-    list_label_quotas_workspaces__workspace_id__label_quotas_get: {
+    list_label_quotas_v1_workspaces__workspace_id__label_quotas_get: {
         parameters: {
             query?: never;
             header?: {
@@ -8848,7 +7194,7 @@ export interface operations {
             };
         };
     };
-    set_label_quota_workspaces__workspace_id__label_quotas_put: {
+    set_label_quota_v1_workspaces__workspace_id__label_quotas_put: {
         parameters: {
             query?: never;
             header?: {
@@ -8885,7 +7231,7 @@ export interface operations {
             };
         };
     };
-    remove_label_quota_workspaces__workspace_id__label_quotas_delete: {
+    remove_label_quota_v1_workspaces__workspace_id__label_quotas_delete: {
         parameters: {
             query: {
                 key: string;
@@ -8919,7 +7265,7 @@ export interface operations {
             };
         };
     };
-    set_lifecycle_defaults_workspaces__workspace_id__lifecycle_put: {
+    set_lifecycle_defaults_v1_workspaces__workspace_id__lifecycle_put: {
         parameters: {
             query?: never;
             header?: {
@@ -8956,7 +7302,7 @@ export interface operations {
             };
         };
     };
-    list_members_workspaces__workspace_id__members_get: {
+    list_members_v1_workspaces__workspace_id__members_get: {
         parameters: {
             query?: never;
             header?: {
@@ -8989,7 +7335,7 @@ export interface operations {
             };
         };
     };
-    remove_member_workspaces__workspace_id__members__user_id__delete: {
+    remove_member_v1_workspaces__workspace_id__members__user_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -9021,7 +7367,7 @@ export interface operations {
             };
         };
     };
-    change_role_workspaces__workspace_id__members__user_id__patch: {
+    change_role_v1_workspaces__workspace_id__members__user_id__patch: {
         parameters: {
             query?: never;
             header?: {
@@ -9059,7 +7405,7 @@ export interface operations {
             };
         };
     };
-    get_quota_workspaces__workspace_id__quota_get: {
+    get_quota_v1_workspaces__workspace_id__quota_get: {
         parameters: {
             query?: never;
             header?: {
@@ -9092,7 +7438,7 @@ export interface operations {
             };
         };
     };
-    set_quota_workspaces__workspace_id__quota_put: {
+    set_quota_v1_workspaces__workspace_id__quota_put: {
         parameters: {
             query?: never;
             header?: {
@@ -9116,43 +7462,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuotaResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_trajectory_settings_workspaces__workspace_id__trajectories_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TrajectorySettingsRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceResponse"];
                 };
             };
             /** @description Validation Error */

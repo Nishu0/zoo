@@ -293,20 +293,6 @@ class AsyncSandbox:
     async def screenshot(self) -> bytes:
         return base64.b64decode(await self.tool("screenshot"))
 
-    async def ask(self, message: str, model: str | None = None, provider: str | None = None) -> AsyncIterator[dict]:
-        body = {"message": message, "model": model, "provider": provider, "stream": True}
-        async for _, data in self.client._sse("POST", f"/sandboxes/{self.id}/agent", json=body):
-            yield data
-
-    async def stop_agent(self):
-        await self.client.request("POST", f"/sandboxes/{self.id}/agent/stop")
-
-    async def takeover(self) -> dict:
-        return await self._json("POST", "/agent/takeover")
-
-    async def release(self) -> dict:
-        return await self._json("POST", "/agent/release")
-
     async def viewer_link(self, mode: str = "view", expires_in: int = 60, end_user: str | None = None) -> dict:
         body = {"mode": mode, "expires_in_minutes": expires_in, "end_user": end_user}
         return await self._json("POST", "/viewer-links", json=body)

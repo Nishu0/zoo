@@ -46,7 +46,6 @@ const linux = (s: Sandbox) => s.kind !== "macos" && s.kind !== "windows"
 // each tab is a route of its own under /sandboxes/$sandboxId
 export const TABS: Tab[] = [
   { to: "/sandboxes/$sandboxId", label: "Overview" },
-  { to: "/sandboxes/$sandboxId/agent", label: "Agent", shown: desktop },
   { to: "/sandboxes/$sandboxId/terminal", label: "Terminal", shown: linux },
   { to: "/sandboxes/$sandboxId/permissions", label: "Permissions" },
   { to: "/sandboxes/$sandboxId/network", label: "Network" },

@@ -58,5 +58,3 @@ The MCP server serves the same tools as the REST API and the Python SDK — one 
 three doors. Anything you can do from the dashboard, an agent can do here.
 :::
 
-For a walk-through that ends with a working computer-use agent, see
-[A computer-use agent in 5 minutes](/docs/get-started/cua-agent/).

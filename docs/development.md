@@ -51,7 +51,6 @@ server/            FastAPI app
 mcp_tools/         MCP server built from the registry
 db/                migrations, queries, generated client
 sdk/python/        zoo_sdk and zoo_sdk.agent
-examples/          claude_code.py, cua-ts/
 web/               dashboard (TanStack Start, React Query, shadcn)
 macos/             zoovm (Virtualization.framework helper) and guest setup
 windows/           zoovm.ps1 (Hyper-V helper), guest setup and desktop agent

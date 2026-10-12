@@ -307,15 +307,13 @@ def client_message_size(data: bytes) -> int | None:
 class Gate:
     """Sits between a viewer and the VNC server, after the security handshake, and reads what the viewer sends as
     whole RFB messages. A view-only gate drops input, and ends the connection (ValueError) at a message it can't
-    read. Any other gate notes when the viewer acted (a key, or the pointer with a button down), which is what takes
-    the screen over from a running agent; at a message it can't read it stops reading and passes everything on."""
+    read. Any other gate passes messages on; at a message it can't read it stops reading and passes everything on."""
 
     def __init__(self, view_only: bool):
         self.view_only = view_only
         self.buffer = b""
         # the viewer's first byte is its ClientInit
         self.initialised = False
-        self.acted = False
         self.passthrough = False
 
     def feed(self, data: bytes) -> bytes:
@@ -338,14 +336,7 @@ class Gate:
                 break
             message, self.buffer = self.buffer[:size], self.buffer[size:]
             kind = message[0]
-            if kind == 4 or kind == 255 or (kind == 5 and message[1] != 0):
-                self.acted = True
             if self.view_only and kind in INPUT_MESSAGES:
                 continue
             out += message
         return out
-
-    def take_action(self) -> bool:
-        """Whether the viewer acted since this was last asked."""
-        acted, self.acted = self.acted, False
-        return acted

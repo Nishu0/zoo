@@ -454,11 +454,10 @@ def app_running(container_id: str, app: str) -> bool:
     return result.exit_code == 0
 
 
-def write_secrets(container_id: str, values: dict[str, str], unset: list[str] | None = None):
-    """Writes a sandbox's secrets where its guest reads them for every command: those of a sandbox claimed from the
-    warm pool, and changes made while it runs. `unset` names secrets of the container's environment to drop."""
-    files = {"env.json": json.dumps(values).encode(), "unset.json": json.dumps(unset or []).encode()}
-    import_dir(container_id, SECRETS_DIR, tar_files(files))
+def write_secrets(container_id: str, values: dict[str, str]):
+    """Writes a sandbox's secrets where its guest reads them for every command: at boot, and changes made while it
+    runs."""
+    import_dir(container_id, SECRETS_DIR, tar_file("env.json", json.dumps(values).encode()))
 
 
 def tar_file(name: str, data: bytes, mode: int = 0o600) -> bytes:

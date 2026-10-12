@@ -12,7 +12,7 @@ os.environ.setdefault("ZOO_SECRETS_KEY", "openapi")
 os.environ.setdefault("DATABASE_URL", "postgresql://openapi:openapi@127.0.0.1:1/openapi")
 os.environ.setdefault("ZOO_OBJECT_STORE", "s3://openapi")
 
-from main import app  # noqa: E402
+from main import app
 
 with open(sys.argv[1], "w") as f:
     json.dump(app.openapi(), f, indent=1, sort_keys=True)

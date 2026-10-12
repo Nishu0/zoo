@@ -4,7 +4,7 @@
                "request_id": "..."}}
 
 `code` is stable, snake_case and documented (CODES, rendered into the errors reference page); `message` is for
-people and may change. Handlers raise ZooError for a specific code, or HTTPException as before, whose code comes from
+people and may change. Route code raises ZooError for a specific code, or HTTPException as before, whose code comes from
 its message ("<thing> not found" -> <thing>_not_found, "...quota..." -> quota_exceeded) or else its status. A 500
 never carries exception text: the traceback is logged under the request id, which the response and the
 X-Request-Id header carry."""
@@ -44,6 +44,7 @@ CODES: dict[str, tuple[int, str]] = {
     "not_supported": (501, "This runtime or deployment doesn't support it."),
     "upstream_error": (502, "A sandbox, node or provider Zoo talks to failed."),
     "unavailable": (503, "Zoo or a dependency is starting or overloaded. Retry with backoff."),
+    "guest_unavailable": (503, "The sandbox's guest agent isn't connected, and every tool goes through it."),
     "timeout": (504, "A sandbox, node or provider didn't answer in time."),
 }
 
@@ -56,6 +57,7 @@ HINTS = {
     "rate_limited": "Retry after the number of seconds in the Retry-After header.",
     "internal_error": "Retry. If it keeps failing, report the request id to your Zoo operator.",
     "unavailable": "Retry with exponential backoff.",
+    "guest_unavailable": "the sandbox's guest agent is not connected; restart the sandbox",
     "timeout": "Retry; long commands can pass a larger `timeout`.",
 }
 

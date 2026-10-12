@@ -10,32 +10,6 @@
                 }
             }
         ],
-        "./sdk/python/zoo_sdk/agent.py": [
-            {
-                "code": "reportMissingImports",
-                "range": {
-                    "startColumn": 7,
-                    "endColumn": 16,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportCallIssue",
-                "range": {
-                    "startColumn": 16,
-                    "endColumn": 38,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 56,
-                    "endColumn": 63,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./server/auth_api.py": [
             {
                 "code": "reportArgumentType",
@@ -162,14 +136,6 @@
                 "range": {
                     "startColumn": 15,
                     "endColumn": 21,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 48,
-                    "endColumn": 66,
                     "lineCount": 1
                 }
             }
@@ -432,14 +398,6 @@
                 "range": {
                     "startColumn": 30,
                     "endColumn": 37,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 23,
-                    "endColumn": 25,
                     "lineCount": 1
                 }
             },

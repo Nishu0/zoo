@@ -174,19 +174,13 @@ def test_api_keys_are_rate_limited(client, alice, monkeypatch):
     assert client.get("/sandboxes", headers=alice).status_code == 200
 
 
-def test_new_installs_need_a_secrets_key(monkeypatch):
+def test_a_secrets_key_is_required(monkeypatch):
     monkeypatch.delenv("ZOO_SECRETS_KEY", raising=False)
-    with db_manager.session() as db, pytest.raises(RuntimeError, match="ZOO_SECRETS_KEY"):
-        security.require_secrets_key(db)
+    monkeypatch.delenv("ZOO_KMS", raising=False)
+    with pytest.raises(RuntimeError, match="ZOO_SECRETS_KEY"):
+        security.require_secrets_key()
     monkeypatch.setenv("ZOO_SECRETS_KEY", "a-separate-key")
-    with db_manager.session() as db:
-        security.require_secrets_key(db)
-
-
-def test_existing_installs_keep_the_jwt_fallback(alice, monkeypatch):
-    monkeypatch.delenv("ZOO_SECRETS_KEY", raising=False)
-    with db_manager.session() as db:
-        security.require_secrets_key(db)
+    security.require_secrets_key()
 
 
 def test_rotation_rewraps_vnc_passwords(sandbox, fake, monkeypatch):

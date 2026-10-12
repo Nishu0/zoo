@@ -29,11 +29,10 @@ export function PermissionsTab({ sandboxId }: { sandboxId: string }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <ShieldCheck className="size-4" />
-          Agent permissions
+          Tool permissions
         </CardTitle>
         <CardDescription>
-          What agents and API clients may do in this sandbox. Enforced by the
-          zoo API.
+          What API clients may do in this sandbox. Enforced by the zoo API.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col divide-y divide-border">

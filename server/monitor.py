@@ -2,7 +2,7 @@ import asyncio
 from datetime import UTC, datetime
 
 import docker
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from db.connection import db_manager
@@ -145,7 +145,7 @@ class MonitoringResponse(BaseModel):
 
 
 class MonitoringApi:
-    def __init__(self, app: FastAPI, auth: AuthApi):
+    def __init__(self, app: APIRouter, auth: AuthApi):
         self.app = app
         self.auth = auth
         self._register_routes()

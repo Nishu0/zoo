@@ -6,69 +6,6 @@ import pydantic
 from typing import Optional
 
 
-class AgentChannel(pydantic.BaseModel):
-    id: str
-    sandbox_id: str
-    platform: str
-    external_id: str
-    created_by: str
-    created_at: datetime.datetime
-    allowed_users: str
-
-
-class AgentMessage(pydantic.BaseModel):
-    id: str
-    sandbox_id: str
-    run_id: Optional[str]
-    kind: str
-    content: str
-    source: str
-    screenshot: Optional[str]
-    created_at: datetime.datetime
-    seq: Optional[int]
-    a11y: Optional[str]
-
-
-class AgentRun(pydantic.BaseModel):
-    id: str
-    sandbox_id: str
-    user_id: str
-    source: str
-    model: Optional[str]
-    state: str
-    attempts: int
-    max_attempts: int
-    steps: int
-    tokens: int
-    cost: float
-    max_steps: int
-    max_seconds: int
-    max_tokens: int
-    worker: Optional[str]
-    heartbeat_at: Optional[datetime.datetime]
-    cancel_requested: bool
-    error: Optional[str]
-    created_at: datetime.datetime
-    started_at: Optional[datetime.datetime]
-    finished_at: Optional[datetime.datetime]
-    seq: Optional[int]
-    paused_at: Optional[datetime.datetime]
-    paused_by: Optional[str]
-    provider: Optional[str]
-    api_base: Optional[str]
-
-
-class AgentSession(pydantic.BaseModel):
-    id: str
-    sandbox_id: str
-    created_by: Optional[str]
-    agent_type: str
-    status: str
-    config: str
-    started_at: datetime.datetime
-    ended_at: Optional[datetime.datetime]
-
-
 class ApiKey(pydantic.BaseModel):
     id: str
     workspace_id: str
@@ -108,47 +45,6 @@ class AuditLog(pydantic.BaseModel):
     created_at: datetime.datetime
 
 
-class Benchmark(pydantic.BaseModel):
-    id: str
-    seq: int
-    workspace_id: str
-    created_by: str
-    name: str
-    suite: str
-    models: str
-    parallel: int
-    state: str
-    worker: Optional[str]
-    heartbeat_at: Optional[datetime.datetime]
-    cancel_requested: bool
-    error: Optional[str]
-    created_at: datetime.datetime
-    started_at: Optional[datetime.datetime]
-    finished_at: Optional[datetime.datetime]
-
-
-class BenchmarkResult(pydantic.BaseModel):
-    benchmark_id: str
-    task_id: str
-    model: str
-    run_id: Optional[str]
-    sandbox_id: Optional[str]
-    passed: Optional[bool]
-    score: Optional[float]
-    steps: int
-    tokens: int
-    cost: float
-    seconds: float
-    error: Optional[str]
-    finished_at: datetime.datetime
-
-
-class ChatEvent(pydantic.BaseModel):
-    platform: str
-    event_id: str
-    created_at: datetime.datetime
-
-
 class Domain(pydantic.BaseModel):
     id: str
     hostname: str
@@ -161,26 +57,9 @@ class Event(pydantic.BaseModel):
     seq: int
     workspace_id: str
     sandbox_id: Optional[str]
-    run_id: Optional[str]
     type: str
     data: str
     created_at: datetime.datetime
-
-
-class Export(pydantic.BaseModel):
-    id: str
-    seq: int
-    workspace_id: str
-    created_by: Optional[str]
-    run_ids: str
-    state: str
-    worker: Optional[str]
-    claimed_at: Optional[datetime.datetime]
-    steps: int
-    size_bytes: int
-    error: Optional[str]
-    created_at: datetime.datetime
-    finished_at: Optional[datetime.datetime]
 
 
 class IdempotencyKey(pydantic.BaseModel):
@@ -261,6 +140,7 @@ class NodeAuthority(pydantic.BaseModel):
 
 class NodeToken(pydantic.BaseModel):
     id: str
+    workspace_id: str
     secret_hash: str
     created_by: str
     server_id: Optional[str]
@@ -268,7 +148,6 @@ class NodeToken(pydantic.BaseModel):
     expires_at: datetime.datetime
     used_at: Optional[datetime.datetime]
     created_at: datetime.datetime
-    workspace_id: str
 
 
 class PoolSandbox(pydantic.BaseModel):
@@ -297,6 +176,7 @@ class PoolSetting(pydantic.BaseModel):
 
 class Profile(pydantic.BaseModel):
     id: str
+    workspace_id: str
     user_id: str
     name: str
     app: str
@@ -304,7 +184,6 @@ class Profile(pydantic.BaseModel):
     created_at: datetime.datetime
     encrypted: bool
     platform: str
-    workspace_id: str
 
 
 class ProfileVersion(pydantic.BaseModel):
@@ -357,18 +236,6 @@ class SandboxAppPermission(pydantic.BaseModel):
     app_id: str
     action: str
     effect: str
-    created_at: datetime.datetime
-
-
-class SandboxArtifact(pydantic.BaseModel):
-    id: str
-    sandbox_id: str
-    session_id: Optional[str]
-    type: str
-    storage_key: str
-    mime_type: Optional[str]
-    size_bytes: Optional[int]
-    metadata: str
     created_at: datetime.datetime
 
 
@@ -466,6 +333,7 @@ class SecretKey(pydantic.BaseModel):
 
 class Server(pydantic.BaseModel):
     id: str
+    workspace_id: str
     name: str
     docker_url: str
     bind_address: str
@@ -473,7 +341,6 @@ class Server(pydantic.BaseModel):
     created_at: datetime.datetime
     platform: str
     capabilities: str
-    workspace_id: str
 
 
 class Snapshot(pydantic.BaseModel):
@@ -498,7 +365,7 @@ class Ticket(pydantic.BaseModel):
 
 class ToolExecution(pydantic.BaseModel):
     id: str
-    session_id: str
+    sandbox_id: str
     tool_name: str
     status: str
     input: str
@@ -529,13 +396,14 @@ class User(pydantic.BaseModel):
     name: Optional[str]
     password: str
     avatar_url: Optional[str]
+    onboarded_at: Optional[datetime.datetime]
     created_at: datetime.datetime
     updated_at: datetime.datetime
-    onboarded_at: Optional[datetime.datetime]
 
 
 class VaultSecret(pydantic.BaseModel):
     id: str
+    workspace_id: str
     user_id: str
     name: str
     description: Optional[str]
@@ -546,7 +414,6 @@ class VaultSecret(pydantic.BaseModel):
     expires_at: Optional[datetime.datetime]
     rotate_every_days: Optional[int]
     rotated_at: Optional[datetime.datetime]
-    workspace_id: str
 
 
 class ViewerLink(pydantic.BaseModel):
@@ -598,20 +465,6 @@ class Workspace(pydantic.BaseModel):
     default_idle_timeout_minutes: Optional[int]
     default_max_lifetime_minutes: Optional[int]
     storage_metered_at: Optional[datetime.datetime]
-    capture_a11y: bool
-
-
-class WorkspaceAgentSetting(pydantic.BaseModel):
-    workspace_id: str
-    provider: str
-    model: str
-    api_key_secret_id: Optional[str]
-    api_base: Optional[str]
-    max_steps: Optional[int]
-    max_seconds: Optional[int]
-    max_tokens: Optional[int]
-    updated_by: Optional[str]
-    updated_at: datetime.datetime
 
 
 class WorkspaceInvitation(pydantic.BaseModel):
@@ -623,8 +476,8 @@ class WorkspaceInvitation(pydantic.BaseModel):
     token_hash: str
     expires_at: datetime.datetime
     accepted_at: Optional[datetime.datetime]
-    created_at: datetime.datetime
     revoked_at: Optional[datetime.datetime]
+    created_at: datetime.datetime
 
 
 class WorkspaceMember(pydantic.BaseModel):

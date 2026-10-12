@@ -446,50 +446,15 @@ RETURNING *;
 -- name: DeleteSandboxSecret :exec
 DELETE FROM sandbox_secrets WHERE id = $1;
 
--- name: CreateAgentSession :one
-INSERT INTO agent_sessions (
-    id, sandbox_id, created_by, agent_type, config
-)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING *;
-
--- name: GetAgentSession :one
-SELECT * FROM agent_sessions WHERE id = $1 LIMIT 1;
-
--- name: ListAgentSessionsBySandbox :many
-SELECT * FROM agent_sessions
-WHERE sandbox_id = $1
-ORDER BY started_at DESC;
-
--- name: ListActiveAgentSessions :many
-SELECT * FROM agent_sessions
-WHERE sandbox_id = $1 AND status = 'active'
-ORDER BY started_at DESC;
-
--- name: UpdateAgentSessionStatus :one
-UPDATE agent_sessions
-SET status = $1,
-    ended_at = CASE WHEN $2 = 'active' THEN NULL ELSE CURRENT_TIMESTAMP END
-WHERE id = $3
-RETURNING *;
-
--- name: DeleteAgentSession :exec
-DELETE FROM agent_sessions WHERE id = $1;
-
 -- name: CreateToolExecution :one
 INSERT INTO tool_executions (
-    id, session_id, tool_name, input
+    id, sandbox_id, tool_name, input
 )
 VALUES ($1, $2, $3, $4)
 RETURNING *;
 
 -- name: GetToolExecution :one
 SELECT * FROM tool_executions WHERE id = $1 LIMIT 1;
-
--- name: ListToolExecutionsBySession :many
-SELECT * FROM tool_executions
-WHERE session_id = $1
-ORDER BY created_at ASC;
 
 -- name: UpdateToolExecutionStatus :one
 UPDATE tool_executions
@@ -512,30 +477,6 @@ SET status = 'failed',
     completed_at = CURRENT_TIMESTAMP
 WHERE id = $2
 RETURNING *;
-
--- name: CreateSandboxArtifact :one
-INSERT INTO sandbox_artifacts (
-    id, sandbox_id, session_id, type,
-    storage_key, mime_type, size_bytes, metadata
-)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING *;
-
--- name: GetSandboxArtifact :one
-SELECT * FROM sandbox_artifacts WHERE id = $1 LIMIT 1;
-
--- name: ListSandboxArtifacts :many
-SELECT * FROM sandbox_artifacts
-WHERE sandbox_id = $1
-ORDER BY created_at DESC;
-
--- name: ListSessionArtifacts :many
-SELECT * FROM sandbox_artifacts
-WHERE session_id = $1
-ORDER BY created_at DESC;
-
--- name: DeleteSandboxArtifact :exec
-DELETE FROM sandbox_artifacts WHERE id = $1;
 
 -- name: CreateAPIKey :one
 INSERT INTO api_keys (
@@ -594,12 +535,6 @@ LIMIT $2 OFFSET $3;
 
 -- name: DeleteAuditLogsBefore :exec
 DELETE FROM audit_logs WHERE created_at < $1;
--- name: ListToolExecutionsBySandbox :many
-SELECT te.* FROM tool_executions te
-JOIN agent_sessions s ON s.id = te.session_id
-WHERE s.sandbox_id = $1
-ORDER BY te.created_at DESC
-LIMIT $2;
 
 -- name: ListAllSandboxes :many
 SELECT * FROM sandboxes
@@ -708,53 +643,6 @@ SELECT * FROM domains ORDER BY created_at;
 
 -- name: DeleteDomain :exec
 DELETE FROM domains WHERE id = $1;
-
--- name: CreateAgentMessage :one
-INSERT INTO agent_messages (id, sandbox_id, run_id, kind, content, source, screenshot, a11y)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING *;
-
--- name: GetAgentMessage :one
-SELECT * FROM agent_messages WHERE id = $1 LIMIT 1;
-
--- name: ListAgentRunMessages :many
-SELECT * FROM agent_messages
-WHERE run_id = $1
-ORDER BY seq ASC
-LIMIT 1000 OFFSET $2;
-
--- name: ListAgentMessages :many
-SELECT * FROM agent_messages
-WHERE sandbox_id = $1
-ORDER BY seq ASC;
-
--- name: DeleteAgentMessages :exec
-DELETE FROM agent_messages WHERE sandbox_id = $1;
-
--- name: CreateAgentChannel :one
-INSERT INTO agent_channels (id, sandbox_id, platform, external_id, created_by, allowed_users)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING *;
-
--- name: SetAgentChannelAllowedUsers :one
-UPDATE agent_channels SET allowed_users = $1 WHERE id = $2
-RETURNING *;
-
--- name: ListAgentChannelsBySandbox :many
-SELECT * FROM agent_channels
-WHERE sandbox_id = $1
-ORDER BY created_at ASC;
-
--- name: GetAgentChannel :one
-SELECT * FROM agent_channels
-WHERE platform = $1 AND external_id = $2
-LIMIT 1;
-
--- name: GetAgentChannelByID :one
-SELECT * FROM agent_channels WHERE id = $1 LIMIT 1;
-
--- name: DeleteAgentChannel :exec
-DELETE FROM agent_channels WHERE id = $1;
 
 -- name: CreateVaultSecret :one
 INSERT INTO vault_secrets (id, user_id, name, description, ciphertext, workspace_id)
@@ -979,94 +867,6 @@ UPDATE sandboxes
 SET recovered_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
 WHERE id = $1;
 
--- name: GetWorkspaceAgentSettings :one
-SELECT * FROM workspace_agent_settings WHERE workspace_id = $1 LIMIT 1;
-
--- name: UpsertWorkspaceAgentSettings :one
-INSERT INTO workspace_agent_settings (
-    workspace_id, provider, model, api_key_secret_id, api_base, max_steps, max_seconds, max_tokens, updated_by
-)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-ON CONFLICT (workspace_id)
-DO UPDATE SET
-    provider = excluded.provider,
-    model = excluded.model,
-    api_key_secret_id = excluded.api_key_secret_id,
-    api_base = excluded.api_base,
-    max_steps = excluded.max_steps,
-    max_seconds = excluded.max_seconds,
-    max_tokens = excluded.max_tokens,
-    updated_by = excluded.updated_by,
-    updated_at = CURRENT_TIMESTAMP
-RETURNING *;
-
--- name: DeleteWorkspaceAgentSettings :exec
-DELETE FROM workspace_agent_settings WHERE workspace_id = $1;
-
--- name: ListAgentKeySecrets :many
-SELECT api_key_secret_id FROM workspace_agent_settings WHERE api_key_secret_id IS NOT NULL;
-
--- name: CreateAgentRun :one
-INSERT INTO agent_runs (
-    id, sandbox_id, user_id, source, model, max_steps, max_seconds, max_tokens, max_attempts, provider, api_base
-)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING *;
-
--- name: GetAgentRun :one
-SELECT * FROM agent_runs WHERE id = $1 LIMIT 1;
-
--- name: GetActiveAgentRun :one
-SELECT * FROM agent_runs WHERE sandbox_id = $1 AND state IN ('queued', 'running') LIMIT 1;
-
--- name: GetLatestAgentRun :one
-SELECT * FROM agent_runs WHERE sandbox_id = $1 ORDER BY created_at DESC, seq DESC LIMIT 1;
-
--- name: ListQueuedAgentRuns :many
-SELECT * FROM agent_runs WHERE state = 'queued' ORDER BY created_at ASC, seq ASC;
-
--- name: ListStaleAgentRuns :many
-SELECT * FROM agent_runs WHERE state = 'running' AND (heartbeat_at IS NULL OR heartbeat_at < $1);
-
--- name: ClaimAgentRun :one
-UPDATE agent_runs
-SET state = 'running', worker = $1, attempts = attempts + 1, heartbeat_at = CURRENT_TIMESTAMP,
-    started_at = COALESCE(started_at, CURRENT_TIMESTAMP)
-WHERE id = $2 AND state = 'queued'
-RETURNING *;
-
--- name: HeartbeatAgentRun :one
-UPDATE agent_runs SET heartbeat_at = CURRENT_TIMESTAMP
-WHERE id = $1 AND state = 'running' AND worker = $2
-RETURNING cancel_requested, paused_at;
-
--- name: RecordAgentRunUsage :exec
-UPDATE agent_runs SET steps = $1, tokens = $2, cost = $3 WHERE id = $4;
-
--- name: RequestAgentRunCancel :exec
-UPDATE agent_runs SET cancel_requested = true WHERE id = $1 AND state IN ('queued', 'running');
-
--- name: RequeueAgentRun :exec
-UPDATE agent_runs
-SET state = 'queued', worker = NULL, heartbeat_at = NULL, error = $1, attempts = GREATEST(attempts - $2, 0)
-WHERE id = $3 AND state = 'running';
-
--- name: FinishAgentRun :exec
-UPDATE agent_runs
-SET state = $1, error = $2, finished_at = CURRENT_TIMESTAMP, worker = NULL, paused_at = NULL, paused_by = NULL
-WHERE id = $3 AND state IN ('queued', 'running');
-
--- name: ListAgentRunIds :many
-SELECT id FROM agent_runs;
-
--- name: RecordChatEvent :one
-INSERT INTO chat_events (platform, event_id) VALUES ($1, $2)
-ON CONFLICT (platform, event_id) DO NOTHING
-RETURNING event_id;
-
--- name: PurgeChatEvents :exec
-DELETE FROM chat_events WHERE created_at < $1;
-
 -- name: AcquireLease :one
 INSERT INTO leases (name, holder, expires_at) VALUES ($1, $2, $3)
 ON CONFLICT (name) DO UPDATE SET holder = excluded.holder, expires_at = excluded.expires_at
@@ -1078,9 +878,6 @@ DELETE FROM leases WHERE name = $1 AND holder = $2;
 
 -- name: CountSandboxesByState :many
 SELECT status, kind, COUNT(*) AS count FROM sandboxes WHERE status != 'deleted' GROUP BY status, kind;
-
--- name: ListAgentRunsBySandbox :many
-SELECT * FROM agent_runs WHERE sandbox_id = $1 ORDER BY created_at DESC, seq DESC;
 
 -- name: GetNodeAuthority :one
 SELECT * FROM node_authority WHERE id = 1;
@@ -1290,18 +1087,6 @@ SELECT * FROM viewer_links WHERE sandbox_id = $1 ORDER BY created_at DESC LIMIT 
 -- name: RevokeViewerLink :exec
 UPDATE viewer_links SET revoked_at = CURRENT_TIMESTAMP WHERE id = $1 AND revoked_at IS NULL;
 
--- Takeover (server/agent_api.py)
-
--- name: PauseAgentRun :one
-UPDATE agent_runs SET paused_at = CURRENT_TIMESTAMP, paused_by = $1
-WHERE id = $2 AND state = 'running' AND paused_at IS NULL
-RETURNING *;
-
--- name: ResumeAgentRun :one
-UPDATE agent_runs SET paused_at = NULL, paused_by = NULL
-WHERE id = $1 AND paused_at IS NOT NULL
-RETURNING *;
-
 -- Labels (server/labels.py)
 
 -- name: SetSandboxLabel :exec
@@ -1399,7 +1184,7 @@ SELECT COALESCE(MAX(seq), 0)::bigint AS seq FROM events WHERE workspace_id = $1;
 DELETE FROM events WHERE created_at < $1;
 
 -- name: EmitEvent :exec
-SELECT zoo_event(sqlc.arg(workspace_id)::text, sqlc.narg(sandbox_id)::text, NULL::text, sqlc.arg(type)::text,
+SELECT zoo_event(sqlc.arg(workspace_id)::text, sqlc.narg(sandbox_id)::text, sqlc.arg(type)::text,
     sqlc.arg(data)::jsonb);
 
 -- name: GetEvent :one
@@ -1506,106 +1291,6 @@ ORDER BY day, u.sandbox_id, u.metric;
 SELECT ul.* FROM usage_labels ul
 WHERE ul.sandbox_id IN (SELECT DISTINCT u.sandbox_id FROM usage u WHERE u.workspace_id = $1);
 
--- Trajectory exports (server/exports.py)
-
--- name: SetWorkspaceCaptureA11y :one
-UPDATE workspaces SET capture_a11y = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *;
-
--- name: ListExportableRuns :many
--- finished runs in the workspace, oldest first
-SELECT r.* FROM agent_runs r
-JOIN sandboxes s ON s.id = r.sandbox_id
-WHERE s.workspace_id = sqlc.arg(workspace_id)
-  AND r.state IN ('succeeded', 'failed', 'cancelled')
-  AND (sqlc.narg(sandbox_id)::text IS NULL OR r.sandbox_id = sqlc.narg(sandbox_id))
-  AND (sqlc.narg(since)::timestamptz IS NULL OR r.created_at >= sqlc.narg(since))
-  AND (sqlc.narg(until)::timestamptz IS NULL OR r.created_at < sqlc.narg(until))
-ORDER BY r.created_at ASC
-LIMIT sqlc.arg(row_limit);
-
--- name: CreateExport :one
-INSERT INTO exports (id, workspace_id, created_by, run_ids) VALUES ($1, $2, $3, $4) RETURNING *;
-
--- name: GetExport :one
-SELECT * FROM exports WHERE id = $1 LIMIT 1;
-
--- name: ListExports :many
-SELECT * FROM exports WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT 100;
-
--- name: ClaimExport :one
--- the oldest queued export, or one whose worker went quiet for stale_seconds
-UPDATE exports SET state = 'running', worker = sqlc.arg(worker), claimed_at = CURRENT_TIMESTAMP
-WHERE id = (
-    SELECT e.id FROM exports e
-    WHERE e.state = 'queued'
-       OR (e.state = 'running'
-           AND e.claimed_at < CURRENT_TIMESTAMP - make_interval(secs => sqlc.arg(stale_seconds)::int))
-    ORDER BY e.seq
-    LIMIT 1
-    FOR UPDATE SKIP LOCKED
-)
-RETURNING *;
-
--- name: FinishExport :exec
-UPDATE exports SET state = $1, error = $2, steps = $3, size_bytes = $4, finished_at = CURRENT_TIMESTAMP, worker = NULL
-WHERE id = $5;
-
--- name: PurgeExports :many
-DELETE FROM exports WHERE created_at < $1 RETURNING id;
-
--- Benchmarks (server/bench.py)
-
--- name: CreateBenchmark :one
-INSERT INTO benchmarks (id, workspace_id, created_by, name, suite, models, parallel)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING *;
-
--- name: GetBenchmark :one
-SELECT * FROM benchmarks WHERE id = $1 LIMIT 1;
-
--- name: ListBenchmarks :many
-SELECT * FROM benchmarks WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT 100;
-
--- name: ClaimBenchmark :one
-UPDATE benchmarks
-SET state = 'running', worker = $1, heartbeat_at = CURRENT_TIMESTAMP, started_at = CURRENT_TIMESTAMP
-WHERE id = (
-    SELECT b.id FROM benchmarks b WHERE b.state = 'queued' ORDER BY b.seq LIMIT 1 FOR UPDATE SKIP LOCKED
-)
-RETURNING *;
-
--- name: HeartbeatBenchmark :one
-UPDATE benchmarks SET heartbeat_at = CURRENT_TIMESTAMP
-WHERE id = $1 AND state = 'running' AND worker = $2
-RETURNING cancel_requested;
-
--- name: RequestBenchmarkCancel :exec
-UPDATE benchmarks SET cancel_requested = true WHERE id = $1 AND state IN ('queued', 'running');
-
--- name: FinishBenchmark :exec
-UPDATE benchmarks SET state = $1, error = $2, finished_at = CURRENT_TIMESTAMP, worker = NULL
-WHERE id = $3 AND state IN ('queued', 'running');
-
--- name: FailStaleBenchmarks :many
--- a benchmark whose worker stopped heartbeating isn't resumed: its sandboxes and runs were that worker's
-UPDATE benchmarks
-SET state = 'failed', error = 'its worker stopped', finished_at = CURRENT_TIMESTAMP, worker = NULL
-WHERE state = 'running' AND heartbeat_at < $1
-RETURNING id;
-
--- name: UpsertBenchmarkResult :exec
-INSERT INTO benchmark_results (
-    benchmark_id, task_id, model, run_id, sandbox_id, passed, score, steps, tokens, cost, seconds, error
-)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-ON CONFLICT (benchmark_id, task_id, model) DO UPDATE SET
-    run_id = EXCLUDED.run_id, sandbox_id = EXCLUDED.sandbox_id, passed = EXCLUDED.passed, score = EXCLUDED.score,
-    steps = EXCLUDED.steps, tokens = EXCLUDED.tokens, cost = EXCLUDED.cost, seconds = EXCLUDED.seconds,
-    error = EXCLUDED.error, finished_at = CURRENT_TIMESTAMP;
-
--- name: ListBenchmarkResults :many
-SELECT * FROM benchmark_results WHERE benchmark_id = $1 ORDER BY task_id, model;
-
 -- name: RenameSandbox :one
 UPDATE sandboxes SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *;
 
@@ -1640,8 +1325,7 @@ LIMIT sqlc.arg(row_limit);
 
 -- name: PageToolExecutions :many
 SELECT te.* FROM tool_executions te
-JOIN agent_sessions s ON s.id = te.session_id
-WHERE s.sandbox_id = sqlc.arg(sandbox_id)
+WHERE te.sandbox_id = sqlc.arg(sandbox_id)
   AND (sqlc.narg(before_at)::timestamptz IS NULL
        OR (te.created_at, te.id) < (sqlc.narg(before_at)::timestamptz, sqlc.narg(before_id)::text))
 ORDER BY te.created_at DESC, te.id DESC

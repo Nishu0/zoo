@@ -8,7 +8,7 @@ sidebar:
     variant: note
 ---
 
-import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
 
 Zoo gives AI agents their own computers: Linux, macOS or Windows desktops, browsers and
 shells, each in its own [microVM](/docs/concepts/runtimes/). Agents drive them over
@@ -18,30 +18,36 @@ Everything runs on your hardware. One command installs the whole stack on a sing
 Ubuntu or Debian host.
 
 <CardGrid stagger>
-    <Card title="Install">
-        One command on a fresh Ubuntu or Debian server, with or without KVM.
-    </Card>
-    <Card title="Your first sandbox">
-        Create a desktop, browser or code sandbox in the dashboard and drive it.
-    </Card>
-    <Card title="Connect Claude Code or Claude Desktop">
-        Point any MCP client at Zoo and it gets every sandbox tool.
-    </Card>
-    <Card title="A computer-use agent in 5 minutes">
-        A Claude computer-use loop, in Python or TypeScript, driving a sandbox.
-    </Card>
-    <Card title="Run Claude Code in a sandbox">
-        Code sandboxes ship with Claude Code preinstalled.
-    </Card>
-    <Card title="Policies">
-        Tool permissions, network rules and app blocking, per sandbox.
-    </Card>
+  <Card title="Install">
+    One command on a fresh Ubuntu or Debian server, with or without KVM.
+  </Card>
+  <Card title="Your first sandbox">
+    Create a desktop, browser or code sandbox in the dashboard and drive it.
+  </Card>
+  <Card title="Connect Claude Code or Claude Desktop">
+    Point any MCP client at Zoo and it gets every sandbox tool.
+  </Card>
+  <Card title="Policies">
+    Tool permissions, network rules and app blocking, per sandbox.
+  </Card>
 </CardGrid>
 
 ## Where to go next
 
-- <LinkCard title="Guides" href="/docs/guides/remote-servers/" description="Add Linux, macOS and Windows servers, policies, vault, chat channels, Kubernetes." />
-- <LinkCard title="Concepts" href="/docs/concepts/architecture/" description="Architecture, the sandbox lifecycle, the job system, the security model, runtimes." />
-- <LinkCard title="Reference" href="/docs/reference/api/" description="REST API, tools, SDK, configuration and errors — generated from the code, so they can't drift." />
+- <LinkCard
+    title="Guides"
+    href="/docs/guides/remote-servers/"
+    description="Add macOS and Windows servers, policies, vault, Kubernetes."
+  />
+- <LinkCard
+    title="Concepts"
+    href="/docs/concepts/architecture/"
+    description="Architecture, the sandbox lifecycle, the job system, the security model, runtimes."
+  />
+- <LinkCard
+    title="Reference"
+    href="/docs/reference/api/"
+    description="REST API, tools, SDK, configuration and errors — generated from the code, so they can't drift."
+  />
 
 Compare Zoo with the rest of the field on the [comparison page](/compare).

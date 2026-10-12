@@ -10,7 +10,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from db.connection import db_manager
@@ -75,7 +75,6 @@ class VaultSecretResponse(BaseModel):
     rotated_at: str | None
     rotation_due_at: str | None
     status: Status
-    used_by_agent: bool
     sandboxes: list[SandboxRef]
 
 
@@ -148,7 +147,7 @@ def remind():
 
 
 class VaultApi:
-    def __init__(self, app: FastAPI, auth: AuthApi, sandboxes: SandboxApi):
+    def __init__(self, app: APIRouter, auth: AuthApi, sandboxes: SandboxApi):
         self.app = app
         self.auth = auth
         self.sandboxes = sandboxes
@@ -334,7 +333,6 @@ class VaultApi:
                     last_used_at=to_stamp(g.last_used_at),
                 )
             )
-        agent_keys = set(db.list_agent_key_secrets())
         responses = []
         for s in db.list_vault_secrets_by_workspace(workspace_id=user.workspace_id):
             status, _ = status_of(s)
@@ -351,7 +349,6 @@ class VaultApi:
                     rotated_at=to_stamp(s.rotated_at),
                     rotation_due_at=to_stamp(rotation_due(s)),
                     status=status,
-                    used_by_agent=s.id in agent_keys,
                     sandboxes=grants.get(s.id, []),
                 )
             )

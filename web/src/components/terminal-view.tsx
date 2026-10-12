@@ -16,7 +16,7 @@ import { terminalSocketUrl } from "@/lib/api_client"
 
 type Status = "connecting" | "open" | "closed"
 
-// A shell in the sandbox, streamed through its guest agent. Each session is a fresh login shell.
+// A shell in the sandbox, streamed through its guest. Each session is a fresh login shell.
 export function TerminalView({
   sandboxId,
   running,

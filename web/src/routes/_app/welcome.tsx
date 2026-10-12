@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { Box, Check, KeyRound, Plug, Rocket, Sparkles } from "lucide-react"
+import { Box, Check, KeyRound, Plug, Rocket } from "lucide-react"
 import { useState } from "react"
 
 import { CopyBlock, mcpConfig, SecretOnce } from "@/components/connect"
@@ -73,7 +73,6 @@ function WelcomePage() {
   const createKey = useCreateApiKey()
   const finish = useFinishOnboarding()
   const [sandboxId, setSandboxId] = useState<string | null>(null)
-  const [demo, setDemo] = useState(false)
   const [key, setKey] = useState<string | null>(null)
   const sandbox = useSandbox(sandboxId ?? "", sandboxId !== null)
 
@@ -81,30 +80,18 @@ function WelcomePage() {
     finish.mutate(undefined, {
       onSuccess: () =>
         to === "sandbox" && sandboxId
-          ? navigate({
-              to: demo
-                ? "/sandboxes/$sandboxId/agent"
-                : "/sandboxes/$sandboxId",
-              params: { sandboxId },
-            })
+          ? navigate({ to: "/sandboxes/$sandboxId", params: { sandboxId } })
           : navigate({ to: "/sandboxes" }),
     })
 
-  const create = (asDemo: boolean) => {
-    setDemo(asDemo)
-    createSandbox.mutate(
-      asDemo
-        ? { name: "demo", kind: "desktop", labels: { demo: "true" } }
-        : { kind: "desktop" },
-      { onSuccess: (data) => setSandboxId(data.id) }
-    )
-  }
+  const create = () =>
+    createSandbox.mutate({ kind: "desktop" }, { onSuccess: (data) => setSandboxId(data.id) })
 
   return (
     <Page
       icon={Rocket}
       title="Welcome to Zoo"
-      description="Three steps to drive a desktop with an agent."
+      description="Three steps to drive a desktop from your code."
       action={
         <Button
           variant="ghost"
@@ -120,8 +107,8 @@ function WelcomePage() {
           n={1}
           done={sandbox.data?.status === "running"}
           icon={Box}
-          title="Create a sandbox"
-          description="A Linux desktop your agent can see and use."
+          title="Create a desktop"
+          description="A Linux desktop your code can see and use."
         >
           {sandbox.data ? (
             <>
@@ -135,25 +122,12 @@ function WelcomePage() {
             <div className="flex flex-wrap gap-2">
               <Button
                 disabled={createSandbox.isPending}
-                onClick={() => create(true)}
-              >
-                <Sparkles />
-                Start with a demo
-              </Button>
-              <Button
-                variant="outline"
-                disabled={createSandbox.isPending}
-                onClick={() => create(false)}
+                onClick={() => create()}
               >
                 <Box />
-                Empty desktop
+                Create a desktop
               </Button>
             </div>
-          )}
-          {demo && !sandbox.data && (
-            <p className="text-xs text-muted-foreground">
-              The demo comes with a task ready to run in its Agent tab.
-            </p>
           )}
           {createSandbox.error && (
             <p className="text-sm text-destructive">
@@ -167,7 +141,7 @@ function WelcomePage() {
           done={key !== null}
           icon={KeyRound}
           title="Copy an API key"
-          description="Agents and code use it to reach your sandboxes."
+          description="Your code and clients use it to reach your sandboxes."
         >
           {key ? (
             <SecretOnce value={key} />
@@ -204,7 +178,7 @@ function WelcomePage() {
           n={3}
           done={false}
           icon={Plug}
-          title="Connect your agent"
+          title="Connect your client"
           description="Paste this into Claude Desktop, Claude Code (.mcp.json), Cursor or any MCP client."
         >
           <CopyBlock code={mcpConfig(key ?? "zoo_YOUR_KEY")} />

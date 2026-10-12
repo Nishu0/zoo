@@ -20,7 +20,7 @@ export function ActivityTab({ sandboxId }: { sandboxId: string }) {
           Activity
         </CardTitle>
         <CardDescription>
-          Every tool call made through the API, MCP or the agent.
+          Every tool call made through the API or MCP.
         </CardDescription>
       </CardHeader>
       <CardContent>

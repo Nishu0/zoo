@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"os"
 	"os/exec"
 	"syscall"
 )
@@ -14,11 +13,8 @@ var services = []string{"exec", "pty", "files", "windows", "a11y", "metrics", "u
 // dropTo is Unix only: on Windows the guest starts as the desktop user already.
 func dropTo(name string) error { return errors.New("-user is not supported on Windows") }
 
-// secretEnv is for pooled Linux containers; Windows VMs get their secrets from ~\.zoo\env.ps1.
+// secretEnv is for Linux containers; Windows VMs get their secrets from ~\.zoo\env.ps1.
 func secretEnv() []string { return nil }
-
-// baseEnv is the guest's environment; on Windows no secrets live in it.
-func baseEnv() []string { return os.Environ() }
 
 // hideWindow keeps a console command from opening a window: the guest is a GUI-subsystem program with no console
 // of its own to share.

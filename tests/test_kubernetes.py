@@ -246,7 +246,8 @@ def test_readiness_can_leave_remote_servers_out(client, alice, monkeypatch):
     )
     monkeypatch.setattr(docker.docker_client, "ping", lambda: True, raising=False)
     res = client.get("/readyz?servers=false")
-    assert set(res.json()["checks"]) == {"database", "object_store", "docker"} and not pinged
+    assert set(res.json()["checks"]) == {"database", "object_store", "jwt_secret", "secrets_key", "api_url", "docker"}
+    assert not pinged
 
 
 def test_the_kubernetes_status(client, alice, monkeypatch):

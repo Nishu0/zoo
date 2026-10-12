@@ -363,63 +363,6 @@
       ]
     },
     {
-      "type": "stat",
-      "title": "Agent tokens (last 24h)",
-      "id": 7,
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 20,
-        "y": 1
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "purple",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "colorMode": "value",
-        "graphMode": "area",
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "expr": "sum(increase(zoo_agent_tokens_total{service_name=~\"$service\"}[24h])) or vector(0)",
-          "refId": "A",
-          "instant": false
-        }
-      ]
-    },
-    {
       "type": "timeseries",
       "title": "Sandboxes by status",
       "id": 8,
@@ -848,7 +791,7 @@
     },
     {
       "type": "row",
-      "title": "Errors and agent runs",
+      "title": "Errors",
       "id": 18,
       "collapsed": false,
       "gridPos": {
@@ -863,14 +806,14 @@
       "type": "timeseries",
       "title": "Errors per minute by source",
       "id": 19,
-      "description": "job: a lifecycle job attempt failed. tool: a tool call failed. agent: an agent run failed. chat: a Slack, Discord or WhatsApp call failed. vault: a secret update didn't reach a sandbox. http: the API answered 5xx.",
+      "description": "job: a lifecycle job attempt failed. tool: a tool call failed. vault: a secret update didn't reach a sandbox. http: the API answered 5xx.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 24,
         "x": 0,
         "y": 32
       },
@@ -904,55 +847,6 @@
           },
           "expr": "sum by (source) (rate(zoo_errors_total{service_name=~\"$service\"}[$__rate_interval])) * 60",
           "legendFormat": "{{source}}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
-      "title": "Agent runs per hour by outcome",
-      "id": 20,
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 32
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "expr": "sum by (outcome) (rate(zoo_agent_runs_total{service_name=~\"$service\"}[$__rate_interval])) * 3600",
-          "legendFormat": "{{outcome}}",
           "refId": "A"
         }
       ]

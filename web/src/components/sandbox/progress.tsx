@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 const STEPS = [
   { key: "queued", label: "Queued" },
   { key: "creating", label: "Creating the sandbox" },
-  { key: "booting", label: "Starting the desktop and guest agent" },
+  { key: "booting", label: "Starting the desktop and guest" },
   { key: "running", label: "Running" },
 ] as const
 

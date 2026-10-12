@@ -210,9 +210,8 @@ class Zoo:
     def events(
         self, after: int | None = None, sandbox_id: str | None = None, type: str | None = None
     ) -> Iterator[dict]:
-        """Follows the workspace's events (sandbox.state, run.started, run.step, run.finished, takeover.started,
-        takeover.ended) as they happen, from after `after` (a seq) or from now. Pass the last event's seq back to
-        resume after a disconnect."""
+        """Follows the workspace's events (sandbox.state) as they happen, from after `after` (a seq) or from now.
+        Pass the last event's seq back to resume after a disconnect."""
         params = {k: v for k, v in {"after": after, "sandbox_id": sandbox_id, "type": type}.items() if v is not None}
         for _, data in self._sse("GET", "/events/stream", params=params):
             yield data
@@ -221,39 +220,6 @@ class Zoo:
         """Metered usage between two ISO times, by sandbox, day or a label (group_by="label:end_user")."""
         params = {"from": since, "to": until, "group_by": group_by, "metric": metric}
         return self._json("GET", "/usage", params={k: v for k, v in params.items() if v})["rows"]
-
-    def export_trajectories(self, path: str, wait: bool = True, timeout: float = 3600, **filters: Any) -> dict:
-        """Exports finished agent runs (run_id=, or sandbox_id=, labels=, from_=, to=) as a .tar.gz of JSONL and
-        frames, and saves it to `path` once the server has built it."""
-        body = {("from" if k == "from_" else k): v for k, v in filters.items()}
-        export = self._json("POST", "/agent/exports", json=body)
-        deadline = time.monotonic() + timeout
-        while wait and export["state"] in ("queued", "running"):
-            if time.monotonic() > deadline:
-                raise ZooError(f"export {export['id']} wasn't ready within {timeout}s")
-            time.sleep(2)
-            export = self._json("GET", f"/agent/exports/{export['id']}")
-        if export["state"] == "failed":
-            raise ZooError(f"export failed: {export['error']}")
-        if wait:
-            response = self.request("GET", f"/agent/exports/{export['id']}/download", stream=True, timeout=None)
-            try:
-                with open(path, "wb") as f:
-                    f.writelines(response.iter_bytes(1 << 20))
-            finally:
-                response.close()
-        return export
-
-    def benchmark(self, suite: str | dict, models: list[dict], parallel: int = 2, wait: bool = True) -> dict:
-        """Runs a task suite (YAML/JSON text, or parsed) against models ([{"provider", "model"}]) in parallel
-        sandboxes; returns the benchmark with its per-model summary and per-task results."""
-        body = {"suite": suite, "models": models, "parallel": parallel}
-        benchmark = self._json("POST", "/benchmarks", json=body)
-        while True:
-            detail = self._json("GET", f"/benchmarks/{benchmark['id']}")
-            if not wait or detail["state"] not in ("queued", "running"):
-                return detail
-            time.sleep(10)
 
 
 class Sandbox:
@@ -369,30 +335,9 @@ class Sandbox:
     def screenshot(self) -> bytes:
         return base64.b64decode(self.tool("screenshot"))
 
-    def ask(self, message: str, model: str | None = None, provider: str | None = None) -> Iterator[dict]:
-        """Runs the server-side CUA agent on this sandbox and yields its events as they stream in:
-        {"type": "user" | "reasoning" | "action" | "text" | "status" | "error", "text": ...}, then
-        {"type": "usage", "steps", "tokens", "cost", "elapsed", "max_steps", ...} after each model call and
-        {"type": "done", "state": "succeeded" | "failed" | "cancelled"} at the end. An action event's "id" fetches the
-        screenshot it was decided on with step_screenshot()."""
-        body = {"message": message, "model": model, "provider": provider, "stream": True}
-        for _, data in self.client._sse("POST", f"/sandboxes/{self.id}/agent", json=body):
-            yield data
-
-    def stop_agent(self):
-        self.client.request("POST", f"/sandboxes/{self.id}/agent/stop")
-
-    def takeover(self) -> dict:
-        """Pauses the running agent before its next action, so a person can use the screen."""
-        return self._json("POST", "/agent/takeover")
-
-    def release(self) -> dict:
-        """Hands the screen back; the agent carries on from it as it is now."""
-        return self._json("POST", "/agent/release")
-
     def viewer_link(self, mode: str = "view", expires_in: int = 60, end_user: str | None = None) -> dict:
         """A link to this sandbox's screen for someone without a Zoo account: "view" only watches, "control" can
-        type and click (and take over from the agent). Its "url" opens in a browser or an iframe; expires_in is in
+        type and click. Its "url" opens in a browser or an iframe; expires_in is in
         minutes."""
         body = {"mode": mode, "expires_in_minutes": expires_in, "end_user": end_user}
         return self._json("POST", "/viewer-links", json=body)
@@ -401,14 +346,6 @@ class Sandbox:
         """Replaces the sandbox's labels."""
         self.data = self._json("PATCH", "", json={"labels": labels})
         return self
-
-    def agent_state(self) -> dict:
-        """The conversation, and the latest run with its usage and limits."""
-        return self._json("GET", "/agent")
-
-    def step_screenshot(self, message_id: str) -> bytes:
-        """The screen the agent saw before an action (an action message's or event's id)."""
-        return self.client.request("GET", f"/sandboxes/{self.id}/agent/messages/{message_id}/screenshot").content
 
     def executions(self, limit: int = 50) -> list[dict]:
         """The latest tool calls on this sandbox, newest first."""

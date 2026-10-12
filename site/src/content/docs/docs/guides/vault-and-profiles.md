@@ -11,11 +11,9 @@ Stored secrets are envelope-encrypted: each workspace has its own data key, wrap
 `ZOO_SECRETS_KEY` loses every stored secret — back it up; the installer writes it to
 `/opt/zoo/.env`.
 
-Secrets are injected as environment variables when the sandbox starts, and pushed to
-running sandboxes through the guest agent when they change. On Linux the guest reads
-`/run/zoo/env.json` for every command and drops removed names listed in
-`/run/zoo/unset.json`; on macOS and Windows every command sources `~/.zoo/env` (or
-`env.ps1`). New commands and terminals see the change immediately; programs already
+Secrets are written when the sandbox starts, and pushed to running sandboxes through the
+guest agent when they change. On Linux the guest reads `/run/zoo/env.json` for every
+command; on macOS and Windows every command sources `~/.zoo/env` (or `env.ps1`). New commands and terminals see the change immediately; programs already
 running keep the environment they started with. GUI apps don't see secrets.
 
 Secrets can carry an expiry date and a rotation interval; the Vault page,

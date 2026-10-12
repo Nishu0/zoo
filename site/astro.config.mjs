@@ -16,8 +16,6 @@ const sidebar = [
             "docs/get-started/install",
             "docs/get-started/first-sandbox",
             "docs/get-started/mcp",
-            "docs/get-started/cua-agent",
-            "docs/get-started/claude-code",
         ],
     },
     {
@@ -28,12 +26,10 @@ const sidebar = [
             "docs/guides/windows",
             "docs/guides/policies",
             "docs/guides/vault-and-profiles",
-            "docs/guides/chat-channels",
             "docs/guides/domain-https-backups",
             "docs/guides/upgrading",
             "docs/guides/kubernetes",
             "docs/guides/building-on-zoo",
-            "docs/guides/agent-frameworks",
         ],
     },
     {

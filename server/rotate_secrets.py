@@ -1,5 +1,4 @@
-"""Rewraps every workspace's data key with the current ZOO_SECRETS_KEY or ZOO_KMS, and moves secrets, agent keys,
-VNC passwords and app profiles from before envelope encryption onto their workspace's data key.
+"""Rewraps every workspace's data key with the current ZOO_SECRETS_KEY or ZOO_KMS.
 
 Set the new ZOO_SECRETS_KEY (or ZOO_KMS), put the old key in ZOO_SECRETS_KEY_PREVIOUS (and keep the old KMS's
 credentials set), run `make rotate-secrets`, then drop ZOO_SECRETS_KEY_PREVIOUS.

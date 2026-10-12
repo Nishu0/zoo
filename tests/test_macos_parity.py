@@ -10,6 +10,7 @@ import pytest
 from db.connection import db_manager
 from server import jobs as jobs_module
 from server import macos, macos_tools, objects, sandbox_api
+from server.errors import ZooError
 from server.jobs import WAITING, Handler, Wait
 from server.sandbox_api import AUTO, CreateSandboxRequest
 from tests.conftest import member, present
@@ -198,10 +199,9 @@ class WindowGuest:
         return {}, b""
 
 
-def test_window_tools_use_the_guest_and_fall_back_to_system_events(monkeypatch):
-    agent, scripts = WindowGuest(), []
-    monkeypatch.setattr(macos_tools.hub, "for_runtime", lambda rid: agent)
-    monkeypatch.setattr(macos_tools, "osascript", lambda rid, script: scripts.append(script) or "")
+def test_window_tools_use_the_guest(monkeypatch):
+    agent = WindowGuest()
+    monkeypatch.setattr(macos.hub, "for_runtime", lambda rid: agent)
     tools = macos_tools.MacWindows
     assert tools.windows_list("r") == [{"id": "TextEdit:1", "title": "Untitled", "app": "TextEdit"}]
     assert tools.window_maximize("r", "TextEdit:1") and tools.window_close("r", "TextEdit:1")
@@ -211,7 +211,6 @@ def test_window_tools_use_the_guest_and_fall_back_to_system_events(monkeypatch):
     ]
     with pytest.raises(ValueError):
         tools.window_focus("r", "TextEdit")
-    assert scripts == []
-    monkeypatch.setattr(macos_tools.hub, "for_runtime", lambda rid: None)
-    tools.window_minimize("r", "TextEdit:1")
-    assert len(scripts) == 1 and 'tell process "TextEdit"' in scripts[0]
+    monkeypatch.setattr(macos.hub, "for_runtime", lambda rid: None)
+    with pytest.raises(ZooError, match="guest agent is not connected"):
+        tools.window_minimize("r", "TextEdit:1")

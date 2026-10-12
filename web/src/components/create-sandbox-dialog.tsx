@@ -245,7 +245,7 @@ export function CreateSandboxDialog({
           <DialogHeader>
             <DialogTitle>Create a sandbox</DialogTitle>
             <DialogDescription>
-              Pick what the agent needs and where it should run.
+              Pick what you need and where it should run.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4 py-4">

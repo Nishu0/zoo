@@ -2,7 +2,7 @@
 the meter is a no-op, so recording costs next to nothing.
 
 Prometheus names, as the dashboard queries them: zoo_sandboxes, zoo_job_duration_seconds, zoo_job_wait_seconds,
-zoo_tool_duration_seconds, zoo_errors_total, zoo_agent_runs_total, zoo_agent_tokens_total.
+zoo_tool_duration_seconds, zoo_errors_total.
 """
 
 from collections.abc import Iterable
@@ -26,8 +26,6 @@ tool_duration = meter.create_histogram(
     "zoo.tool.duration", unit="s", description="Tool call latency, by tool, channel and outcome"
 )
 errors = meter.create_counter("zoo.errors", unit="{error}", description="Errors, by source")
-agent_runs = meter.create_counter("zoo.agent.runs", unit="{run}", description="Finished agent runs, by outcome")
-agent_tokens = meter.create_counter("zoo.agent.tokens", unit="{token}", description="Model tokens agent runs used")
 
 
 def _sandboxes(options: CallbackOptions) -> Iterable[Observation]:

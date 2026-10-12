@@ -1,13 +1,13 @@
 """accessibility_tree: one window's UI elements as an indented outline, with screen boxes to click.
 
 Each OS returns the same pre-order node list, `{"app", "window", "nodes": [{d, role, name, value, states, box}],
-"truncated"}`, from the guest's `a11y` service: AT-SPI on Linux, AX on macOS, UI Automation on Windows. macOS and
-Windows fall back to a script (System Events, PowerShell UI Automation) when the guest can't. This module turns the
+"truncated"}`, from the guest's `a11y` service: AT-SPI on Linux, AX on macOS, UI Automation on Windows. This module turns the
 list into the outline agents read."""
 
 import json
 import re
 
+from server.errors import ZooError
 from server.guest import hub
 
 DEFAULT_NODES = 300
@@ -88,23 +88,14 @@ def render(result: dict) -> dict:
     }
 
 
-def native(container_id: str, app: str, title: str, max_nodes: int) -> dict | None:
-    """The tree from the guest's native walker, or None when the guest doesn't offer it (an older guest, or a Mac
-    whose guest lacks the Accessibility permission), so the caller falls back to its script."""
-    guest = hub.for_runtime(container_id)
-    if guest is None or not guest.has("a11y"):
-        return None
-    result, _ = guest.call("a11y", {"app": app, "title": title, "max_nodes": max_nodes}, timeout=30)
-    return render(result)
-
-
 def accessibility_tree(container_id: str, app: str = "", title: str = "", max_nodes: int = DEFAULT_NODES) -> dict:
     """The UI elements of one window: the active one, or the first whose app and title contain `app` and `title`.
     Each line is `role "name" = "value" [states] @(x,y wxh)`; click the middle of the box to press an element.
     Faster and more exact than reading a screenshot when the app exposes accessibility (most GTK, Qt, browser,
     macOS and Windows apps do)."""
     check(max_nodes)
-    tree = native(container_id, app, title, max_nodes)
-    if tree is None:
-        raise RuntimeError("the accessibility tree needs the sandbox's guest; upgrade the sandbox to a newer image")
-    return tree
+    guest = hub.for_runtime(container_id)
+    if guest is None or not guest.has("a11y"):
+        raise ZooError("guest_unavailable", "the sandbox's guest agent is not connected")
+    result, _ = guest.call("a11y", {"app": app, "title": title, "max_nodes": max_nodes}, timeout=30)
+    return render(result)

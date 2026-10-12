@@ -1,16 +1,9 @@
-import json
 import shlex
 import time
 
-from server import a11y
-from server.guest import hub
-from server.macos import ENV_FILE, guest, guest_check
+from server.macos import ENV_FILE, connected, guest, guest_check
 
 APP_DIRS = '/Applications /System/Applications /System/Applications/Utilities "$HOME/Applications"'
-
-
-def osascript(container_id: str, script: str) -> str:
-    return guest_check(container_id, f"osascript -e {shlex.quote(script)}", ssh=True).strip()
 
 
 def window_ref(window_id: str) -> tuple[str, int]:
@@ -20,100 +13,49 @@ def window_ref(window_id: str) -> tuple[str, int]:
     return app, int(index)
 
 
-def native_window(container_id: str, action: str, window_id: str = "") -> dict | None:
-    """The guest's window service (AX), or None to fall back to System Events over SSH: an older guest, or one
-    without the Accessibility permission."""
-    agent = hub.for_runtime(container_id)
-    if agent is None or not agent.has("windows"):
-        return None
+def window(container_id: str, action: str, window_id: str = "") -> dict:
+    """The guest's window service (AX): "list", or an action on one window."""
+    agent = connected(container_id, "windows")
     if window_id:
         window_ref(window_id)
     result, _ = agent.call("window", {"action": action, "id": window_id}, timeout=30)
     return result
 
 
-def on_window(container_id: str, window_id: str, action: str, native: str):
-    if native_window(container_id, native, window_id) is not None:
-        return True
-    app, index = window_ref(window_id)
-    osascript(
-        container_id,
-        f'tell application "System Events" to tell process "{app}"\nset w to window {index}\n{action}\nend tell',
-    )
+def on_window(container_id: str, window_id: str, action: str):
+    window(container_id, action, window_id)
     return True
 
 
 class MacWindows:
     @staticmethod
     def windows_list(container_id: str, display: str = ":1"):
-        listed = native_window(container_id, "list")
-        if listed is not None:
-            return [{"id": w["id"], "title": w["title"], "app": w["app"]} for w in listed.get("windows") or []]
-        output = osascript(
-            container_id,
-            'set out to ""\n'
-            'tell application "System Events"\n'
-            "repeat with p in (every process whose background only is false)\n"
-            "set i to 0\n"
-            "repeat with w in windows of p\n"
-            "set i to i + 1\n"
-            'set out to out & (name of p) & ":" & i & tab & (name of w as text) & linefeed\n'
-            "end repeat\nend repeat\nend tell\nreturn out",
-        )
-        return [
-            {"id": window_id, "title": title}
-            for window_id, _, title in (line.partition("\t") for line in output.splitlines() if line.strip())
-        ]
+        listed = window(container_id, "list")
+        return [{"id": w["id"], "title": w["title"], "app": w["app"]} for w in listed.get("windows") or []]
 
     @staticmethod
     def window_focus(container_id: str, window_id: str, display: str = ":1"):
-        return on_window(container_id, window_id, 'set frontmost to true\nperform action "AXRaise" of w', "focus")
+        return on_window(container_id, window_id, "focus")
 
     @staticmethod
     def window_minimize(container_id: str, window_id: str, display: str = ":1"):
-        return on_window(container_id, window_id, 'set value of attribute "AXMinimized" of w to true', "minimize")
+        return on_window(container_id, window_id, "minimize")
 
     @staticmethod
     def window_restore(container_id: str, window_id: str, display: str = ":1"):
-        return on_window(
-            container_id,
-            window_id,
-            'set value of attribute "AXMinimized" of w to false\nset frontmost to true\nperform action "AXRaise" of w',
-            "restore",
-        )
+        return on_window(container_id, window_id, "restore")
 
     @staticmethod
     def window_maximize(container_id: str, window_id: str, display: str = ":1"):
-        if native_window(container_id, "maximize", window_id) is not None:
-            return True
-        app, index = window_ref(window_id)
-        osascript(
-            container_id,
-            'tell application "Finder" to set b to bounds of window of desktop\n'
-            f'tell application "System Events" to tell process "{app}"\n'
-            f"set position of window {index} to {{0, 25}}\n"
-            f"set size of window {index} to {{item 3 of b, (item 4 of b) - 25}}\nend tell",
-        )
-        return True
+        return on_window(container_id, window_id, "maximize")
 
     @staticmethod
     def window_unmaximize(container_id: str, window_id: str, display: str = ":1"):
-        if native_window(container_id, "unmaximize", window_id) is not None:
-            return True
-        app, index = window_ref(window_id)
-        osascript(
-            container_id,
-            'tell application "Finder" to set b to bounds of window of desktop\n'
-            "set {sw, sh} to {item 3 of b, item 4 of b}\n"
-            f'tell application "System Events" to tell process "{app}"\n'
-            f"set size of window {index} to {{sw * 2 div 3, sh * 2 div 3}}\n"
-            f"set position of window {index} to {{sw div 6, sh div 6}}\nend tell",
-        )
-        return True
+        return on_window(container_id, window_id, "unmaximize")
 
     @staticmethod
     def window_close(container_id: str, window_id: str, display: str = ":1"):
-        return on_window(container_id, window_id, 'click (first button of w whose subrole is "AXCloseButton")', "close")
+        return on_window(container_id, window_id, "close")
 
 
 def app_path(container_id: str, name: str) -> str | None:
@@ -127,12 +69,8 @@ def app_path(container_id: str, name: str) -> str | None:
     return out.decode(errors="replace").strip() if code == 0 else None
 
 
-def app_running(container_id: str, name: str) -> bool:
-    # "is running" asks LaunchServices, not the app, so it needs no permission and runs through the guest
-    code, out, _ = guest(
-        container_id, f"osascript -e {shlex.quote(f'application {chr(34)}{name}{chr(34)} is running')}"
-    )
-    return code == 0 and out.strip() == b"true"
+def app_running(container_id: str, path: str) -> bool:
+    return guest(container_id, f"pgrep -f {shlex.quote(f'{path}/Contents/MacOS/')} >/dev/null")[0] == 0
 
 
 class MacApps:
@@ -160,11 +98,10 @@ class MacApps:
             alive = pid is not None and guest(container_id, f"kill -0 {pid}")[0] == 0
             return {"started": alive, "pid": pid, "pid_alive": alive, "window_found": False}
         guest_check(container_id, f"open -a {shlex.quote(path)}")
-        name = path.rsplit("/", 1)[-1][:-4]
         deadline = time.time() + timeout
         running = False
         while time.time() < deadline and not running:
-            running = app_running(container_id, name)
+            running = app_running(container_id, path)
             if not running:
                 time.sleep(0.3)
         return {"started": running, "pid": None, "pid_alive": running, "window_found": running}
@@ -176,14 +113,7 @@ class MacApps:
                 return MacWindows.window_close(container_id, target)
             except RuntimeError:
                 return False
-        quoted = target.replace('"', "")
-        code, _, _ = guest(
-            container_id,
-            f"osascript -e {shlex.quote(f'tell application {chr(34)}{quoted}{chr(34)} to quit')}",
-            ssh=True,
-        )
-        if code != 0:
-            code, _, _ = guest(container_id, f"killall {shlex.quote(target)}")
+        code, _, _ = guest(container_id, f"killall {shlex.quote(target)}")
         return code == 0
 
 
@@ -273,57 +203,3 @@ class MacFiles:
         data = content.encode("utf-8")
         guest_check(container_id, f"cat > {shlex.quote(path)}", stdin=data)
         return {"success": True, "path": path, "size": len(data)}
-
-
-# The fallback when the guest can't read AX itself: System Events over SSH, where the older Accessibility grant
-# lives. One Apple event per element for its properties and one for its children, so it takes seconds.
-A11Y = r"""
-function run(argv) {
-  const args = JSON.parse(argv[0]);
-  const lower = (s) => String(s || "").toLowerCase();
-  const se = Application("System Events");
-  let procs = se.processes.whose({ backgroundOnly: false })();
-  if (args.app) procs = procs.filter((p) => lower(p.name()).includes(lower(args.app)));
-  else if (!args.title) procs = procs.filter((p) => p.frontmost());
-  let proc = null, win = null;
-  for (const p of procs) {
-    win = p.windows().find((w) => !args.title || lower(w.name()).includes(lower(args.title)));
-    if (win) { proc = p; break; }
-  }
-  if (!win) throw new Error("no matching window; pass app or title (see windows_list)");
-  const nodes = [];
-  let truncated = false;
-  const text = (v) => (v === null || v === undefined || typeof v === "object") ? "" : String(v);
-  function walk(el, d) {
-    if (nodes.length >= args.max_nodes) { truncated = true; return; }
-    let p;
-    try { p = el.properties(); } catch (e) { return; }
-    const states = [];
-    if (p.focused) states.push("focused");
-    if (p.selected) states.push("selected");
-    if (p.enabled === false) states.push("disabled");
-    const box = p.position && p.size ? [p.position[0], p.position[1], p.size[0], p.size[1]] : null;
-    const role = p.roleDescription || p.role || "";
-    const secure = p.subrole === "AXSecureTextField";
-    nodes.push({ d, role, name: text(p.name || p.title || p.description), value: secure ? "" : text(p.value), states, box });
-    if (d >= 40) return;
-    let kids = [];
-    try { kids = el.uiElements(); } catch (e) {}
-    for (const k of kids) walk(k, d + 1);
-  }
-  walk(win, 0);
-  return JSON.stringify({ app: proc.name(), window: text(win.name()), nodes, truncated });
-}
-"""
-
-
-def accessibility_tree(container_id: str, app: str = "", title: str = "", max_nodes: int = a11y.DEFAULT_NODES) -> dict:
-    a11y.check(max_nodes)
-    tree = a11y.native(container_id, app, title, max_nodes)
-    if tree is not None:
-        return tree
-    args = json.dumps({"app": app, "title": title, "max_nodes": max_nodes})
-    out = guest_check(
-        container_id, f"osascript -l JavaScript -e {shlex.quote(A11Y)} {shlex.quote(args)}", ssh=True, timeout=120
-    )
-    return a11y.render(json.loads(out))

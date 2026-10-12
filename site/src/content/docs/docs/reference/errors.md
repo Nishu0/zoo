@@ -123,16 +123,16 @@ Where each HTTP status is declared or raised.
 
 | Status | Where it comes from |
 | --- | --- |
-| `200` | `GET /`, `POST /v1/auth/login`, `GET /v1/auth/me`, +115 more |
-| `201` | `POST /v1/auth/signup`, `POST /v1/api-keys`, `POST /v1/sandboxes`, +12 more |
-| `202` | `POST /v1/sandboxes/{sandbox_id}/snapshots`, `POST /v1/webhooks/{webhook_id}/test`, `POST /v1/agent/exports`, +1 more |
-| `204` | `PUT /v1/auth/me/onboarded`, `DELETE /v1/sandboxes/{sandbox_id}/snapshots/{snapshot_id}`, `DELETE /v1/sandboxes/{sandbox_id}/agent`, +16 more |
+| `200` | `GET /embed/{token}`, `GET /embed/{token}/state`, `POST /v1/auth/login`, +94 more |
+| `201` | `POST /v1/auth/signup`, `POST /v1/api-keys`, `POST /v1/sandboxes`, +11 more |
+| `202` | `POST /v1/sandboxes/{sandbox_id}/snapshots`, `POST /v1/webhooks/{webhook_id}/test` |
+| `204` | `PUT /v1/auth/me/onboarded`, `DELETE /v1/sandboxes/{sandbox_id}/snapshots/{snapshot_id}`, `DELETE /v1/admin/domains/{domain_id}`, +10 more |
 | `400` | raised by the handlers |
 | `401` | raised by the handlers |
 | `403` | raised by the handlers |
 | `404` | raised by the handlers |
 | `409` | raised by the handlers |
-| `422` | `POST /v1/auth/signup`, `POST /v1/auth/login`, `GET /v1/auth/me`, +152 more |
+| `422` | `GET /embed/{token}`, `GET /embed/{token}/state`, `POST /v1/auth/signup`, +123 more |
 | `429` | raised by the handlers |
 | `500` | raised by the handlers |
 | `502` | raised by the handlers |

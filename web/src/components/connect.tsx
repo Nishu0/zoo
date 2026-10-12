@@ -151,7 +151,7 @@ export function ConnectDialog({ sandbox }: { sandbox: Sandbox }) {
         <DialogHeader>
           <DialogTitle>Connect to {sandbox.name}</DialogTitle>
           <DialogDescription>
-            Paste one of these into your agent or code. They need an API key;
+            Paste one of these into your client or code. They need an API key;
             create one scoped to this sandbox, or use one from Settings.
           </DialogDescription>
         </DialogHeader>

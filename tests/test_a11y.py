@@ -1,8 +1,7 @@
-import json
-
 import pytest
 
-from server import a11y, macos_tools, windows_tools
+from server import a11y
+from server.errors import ZooError
 
 TREE = {
     "app": "Firefox",
@@ -66,42 +65,5 @@ def test_linux_reads_the_guest(monkeypatch):
 
 def test_linux_without_the_service_says_why(monkeypatch):
     monkeypatch.setattr(a11y.hub, "for_runtime", lambda rid: Guest({"exec"}))
-    with pytest.raises(RuntimeError, match="upgrade"):
+    with pytest.raises(ZooError, match="guest agent is not connected"):
         a11y.accessibility_tree("c1")
-
-
-def test_vms_prefer_the_native_guest(monkeypatch):
-    guest = Guest({"a11y"})
-    monkeypatch.setattr(a11y.hub, "for_runtime", lambda rid: guest)
-    monkeypatch.setattr(macos_tools, "guest_check", lambda *a, **k: pytest.fail("used the script"))
-    monkeypatch.setattr(windows_tools, "desktop_json", lambda *a, **k: pytest.fail("used the script"))
-    assert macos_tools.accessibility_tree("mac-1")["elements"] == 5
-    assert windows_tools.accessibility_tree("win-1")["elements"] == 5
-    assert [op for op, _ in guest.calls] == ["a11y", "a11y"]
-
-
-def test_macos_runs_jxa_over_ssh(monkeypatch):
-    seen = {}
-
-    def guest_check(rid, script, stdin=None, timeout=60, root=False, ssh=False):
-        seen.update(script=script, ssh=ssh)
-        return json.dumps(TREE)
-
-    monkeypatch.setattr(macos_tools, "guest_check", guest_check)
-    out = macos_tools.accessibility_tree("mac-1", title="Zoo")
-    assert seen["ssh"] and "osascript -l JavaScript" in seen["script"]
-    assert '"title": "Zoo"' in seen["script"]
-    assert out["elements"] == 5
-
-
-def test_windows_runs_uia_in_the_desktop(monkeypatch):
-    seen = {}
-
-    def desktop_json(rid, script, timeout=30):
-        seen["script"] = script
-        return TREE
-
-    monkeypatch.setattr(windows_tools, "desktop_json", desktop_json)
-    out = windows_tools.accessibility_tree("win-1", app="O'Brien")
-    assert "UIAutomationClient" in seen["script"] and "O''Brien" in seen["script"]
-    assert out["window"] == "Zoo"

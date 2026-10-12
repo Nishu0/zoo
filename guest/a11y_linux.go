@@ -77,7 +77,7 @@ func a11yBus() (*dbus.Conn, error) {
 	}
 	session, err := dbus.ConnectSessionBus()
 	if err != nil {
-		return nil, errors.New("no session bus (the image predates accessibility support): " + err.Error())
+		return nil, errors.New("no session bus: " + err.Error())
 	}
 	defer session.Close()
 	bus := session.Object("org.a11y.Bus", "/org/a11y/bus")

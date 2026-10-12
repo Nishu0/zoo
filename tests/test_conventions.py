@@ -1,5 +1,5 @@
-"""API conventions every endpoint follows: one error format, /v1 with deprecated unprefixed routes, idempotency keys
-on POSTs, and cursor pagination."""
+"""API conventions every endpoint follows: one error format, /v1-only routes, idempotency keys on POSTs, and
+cursor pagination."""
 
 from fastapi.testclient import TestClient
 
@@ -45,17 +45,14 @@ def test_request_ids_are_echoed(client):
     assert res.headers["x-request-id"] == "abc123" and res.json()["error"]["request_id"] == "abc123"
 
 
-def test_v1_and_deprecated_routes(client, alice):
-    assert client.get("/v1/sandboxes", headers=alice).headers.get("deprecation") is None
-    old = client.get("/sandboxes", headers=alice)
-    assert old.status_code == 200 and old.headers["deprecation"] == "true"
-    assert old.headers["link"] == '</v1/sandboxes>; rel="successor-version"'
+def test_routes_are_v1_only(client, alice):
+    assert client.get("/sandboxes", headers=alice).status_code == 404
     # not part of the versioned API
-    assert "deprecation" not in client.get("/healthz").headers
+    assert client.get("/healthz").status_code == 200
 
-    paths = client.get("/v1/openapi.json").json()["paths"]
+    paths = client.get("/openapi.json").json()["paths"]
     assert "/v1/sandboxes" in paths and "/sandboxes" not in paths
-    assert all(p.startswith("/v1/") for p in paths if not p.startswith(("/embed", "/healthz", "/readyz")) and p != "/")
+    assert all(p.startswith("/v1/") for p in paths if not p.startswith("/embed"))
 
 
 def test_idempotency_keys_make_creates_safe_to_retry(client, alice):

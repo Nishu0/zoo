@@ -270,7 +270,7 @@ def logs(
     limit: Annotated[int, typer.Option(help="How many recent tool calls.")] = 20,
     as_json: Json = False,
 ):
-    """A sandbox's recent tool calls and, with -f, its events (state changes, agent steps) as they happen."""
+    """A sandbox's recent tool calls and, with -f, its events (state changes) as they happen."""
     zoo = client()
     box: Sandbox = run(lambda: zoo.get(sandbox_id))
     for e in reversed(run(lambda: box.executions(limit))):

@@ -2,11 +2,9 @@
 through zoo-guest in the desktop session: window tools through its windows service, and app, shell and file tools as
 PowerShell."""
 
-import json
 import re
 import time
 
-from server import a11y
 from server.windows import (
     ENV_FILE,
     HOME,
@@ -265,72 +263,3 @@ class WinFiles:
         data = content.encode("utf-8")
         guest_check(container_id, f"[IO.File]::WriteAllBytes({resolved(path)}, (Read-ZooInput))", data)
         return {"success": True, "path": path, "size": len(data)}
-
-
-# The fallback for guests without the a11y service: UI Automation from PowerShell in the desktop session. Each
-# property read is a call into the app, so it's far slower than the guest's single cached request.
-A11Y = r"""
-Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
-$a = '__ARGS__' | ConvertFrom-Json
-$A = [Windows.Automation.AutomationElement]
-$walker = [Windows.Automation.TreeWalker]::ControlViewWalker
-$root = $A::RootElement
-$win = $null
-if (-not $a.app -and -not $a.title) {
-    $el = $A::FocusedElement
-    while ($el) {
-        $parent = $walker.GetParent($el)
-        if (-not $parent -or [Windows.Automation.Automation]::Compare($parent, $root)) { break }
-        $el = $parent
-    }
-    $win = $el
-} else {
-    $tops = $root.FindAll([Windows.Automation.TreeScope]::Children, [Windows.Automation.Condition]::TrueCondition)
-    foreach ($t in $tops) {
-        $proc = try { (Get-Process -Id $t.Current.ProcessId -ErrorAction Stop).ProcessName } catch { '' }
-        if ($a.app -and $proc -notlike "*$($a.app)*") { continue }
-        if ($a.title -and $t.Current.Name -notlike "*$($a.title)*") { continue }
-        $win = $t; break
-    }
-}
-if (-not $win) { throw 'no matching window; pass app or title (see windows_list)' }
-$nodes = [Collections.Generic.List[object]]::new()
-$script:truncated = $false
-function Walk($el, $d) {
-    if ($nodes.Count -ge $a.max_nodes) { $script:truncated = $true; return }
-    $c = $el.Current
-    if ($d -gt 0 -and $c.IsOffscreen) { return }
-    $states = @()
-    if ($c.HasKeyboardFocus) { $states += 'focused' }
-    if (-not $c.IsEnabled) { $states += 'disabled' }
-    $value = ''
-    $p = $null
-    if (-not $c.IsPassword -and $el.TryGetCurrentPattern([Windows.Automation.ValuePattern]::Pattern, [ref]$p)) {
-        $value = $p.Current.Value
-        if (-not $p.Current.IsReadOnly) { $states += 'editable' }
-    }
-    if ($el.TryGetCurrentPattern([Windows.Automation.TogglePattern]::Pattern, [ref]$p) -and $p.Current.ToggleState -eq 'On') { $states += 'checked' }
-    if ($el.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern, [ref]$p) -and $p.Current.IsSelected) { $states += 'selected' }
-    if ($el.TryGetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$p)) {
-        switch ($p.Current.ExpandCollapseState) { 'Expanded' { $states += 'expanded' } 'Collapsed' { $states += 'collapsed' } }
-    }
-    $r = $c.BoundingRectangle
-    $box = if ($r.IsEmpty) { $null } else { @([int]$r.X, [int]$r.Y, [int]$r.Width, [int]$r.Height) }
-    $nodes.Add([ordered]@{ d = $d; role = $c.ControlType.ProgrammaticName -replace '^ControlType\.', ''; name = $c.Name; value = $value; states = $states; box = $box })
-    if ($d -ge 40) { return }
-    $child = $walker.GetFirstChild($el)
-    while ($child) { Walk $child ($d + 1); $child = $walker.GetNextSibling($child) }
-}
-Walk $win 0
-$app = try { (Get-Process -Id $win.Current.ProcessId -ErrorAction Stop).ProcessName } catch { '' }
-ConvertTo-Json -Compress -Depth 4 -InputObject @{ app = $app; window = $win.Current.Name; nodes = $nodes.ToArray(); truncated = $script:truncated }
-"""
-
-
-def accessibility_tree(container_id: str, app: str = "", title: str = "", max_nodes: int = a11y.DEFAULT_NODES) -> dict:
-    a11y.check(max_nodes)
-    tree = a11y.native(container_id, app, title, max_nodes)
-    if tree is not None:
-        return tree
-    args = json.dumps({"app": app, "title": title, "max_nodes": max_nodes}).replace("'", "''")
-    return a11y.render(desktop_json(container_id, A11Y.replace("__ARGS__", args), timeout=120))

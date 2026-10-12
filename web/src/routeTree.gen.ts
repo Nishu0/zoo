@@ -27,7 +27,6 @@ import { Route as AppSandboxesIndexRouteImport } from './routes/_app/sandboxes/i
 import { Route as AppSandboxesSandboxIdRouteImport } from './routes/_app/sandboxes/$sandboxId'
 import { Route as AppSandboxesSandboxIdIndexRouteImport } from './routes/_app/sandboxes/$sandboxId/index'
 import { Route as AppSandboxesSandboxIdActivityRouteImport } from './routes/_app/sandboxes/$sandboxId/activity'
-import { Route as AppSandboxesSandboxIdAgentRouteImport } from './routes/_app/sandboxes/$sandboxId/agent'
 import { Route as AppSandboxesSandboxIdAppsRouteImport } from './routes/_app/sandboxes/$sandboxId/apps'
 import { Route as AppSandboxesSandboxIdNetworkRouteImport } from './routes/_app/sandboxes/$sandboxId/network'
 import { Route as AppSandboxesSandboxIdPermissionsRouteImport } from './routes/_app/sandboxes/$sandboxId/permissions'
@@ -129,12 +128,6 @@ const AppSandboxesSandboxIdActivityRoute =
     path: '/activity',
     getParentRoute: () => AppSandboxesSandboxIdRoute,
   } as any)
-const AppSandboxesSandboxIdAgentRoute =
-  AppSandboxesSandboxIdAgentRouteImport.update({
-    id: '/agent',
-    path: '/agent',
-    getParentRoute: () => AppSandboxesSandboxIdRoute,
-  } as any)
 const AppSandboxesSandboxIdAppsRoute =
   AppSandboxesSandboxIdAppsRouteImport.update({
     id: '/apps',
@@ -207,7 +200,6 @@ export interface FileRoutesByFullPath {
   '/sandboxes/$sandboxId': typeof AppSandboxesSandboxIdRouteWithChildren
   '/sandboxes/': typeof AppSandboxesIndexRoute
   '/sandboxes/$sandboxId/activity': typeof AppSandboxesSandboxIdActivityRoute
-  '/sandboxes/$sandboxId/agent': typeof AppSandboxesSandboxIdAgentRoute
   '/sandboxes/$sandboxId/apps': typeof AppSandboxesSandboxIdAppsRoute
   '/sandboxes/$sandboxId/network': typeof AppSandboxesSandboxIdNetworkRoute
   '/sandboxes/$sandboxId/permissions': typeof AppSandboxesSandboxIdPermissionsRoute
@@ -235,7 +227,6 @@ export interface FileRoutesByTo {
   '/invite/$token': typeof AppInviteTokenRoute
   '/sandboxes': typeof AppSandboxesIndexRoute
   '/sandboxes/$sandboxId/activity': typeof AppSandboxesSandboxIdActivityRoute
-  '/sandboxes/$sandboxId/agent': typeof AppSandboxesSandboxIdAgentRoute
   '/sandboxes/$sandboxId/apps': typeof AppSandboxesSandboxIdAppsRoute
   '/sandboxes/$sandboxId/network': typeof AppSandboxesSandboxIdNetworkRoute
   '/sandboxes/$sandboxId/permissions': typeof AppSandboxesSandboxIdPermissionsRoute
@@ -266,7 +257,6 @@ export interface FileRoutesById {
   '/_app/sandboxes/$sandboxId': typeof AppSandboxesSandboxIdRouteWithChildren
   '/_app/sandboxes/': typeof AppSandboxesIndexRoute
   '/_app/sandboxes/$sandboxId/activity': typeof AppSandboxesSandboxIdActivityRoute
-  '/_app/sandboxes/$sandboxId/agent': typeof AppSandboxesSandboxIdAgentRoute
   '/_app/sandboxes/$sandboxId/apps': typeof AppSandboxesSandboxIdAppsRoute
   '/_app/sandboxes/$sandboxId/network': typeof AppSandboxesSandboxIdNetworkRoute
   '/_app/sandboxes/$sandboxId/permissions': typeof AppSandboxesSandboxIdPermissionsRoute
@@ -297,7 +287,6 @@ export interface FileRouteTypes {
     | '/sandboxes/$sandboxId'
     | '/sandboxes/'
     | '/sandboxes/$sandboxId/activity'
-    | '/sandboxes/$sandboxId/agent'
     | '/sandboxes/$sandboxId/apps'
     | '/sandboxes/$sandboxId/network'
     | '/sandboxes/$sandboxId/permissions'
@@ -325,7 +314,6 @@ export interface FileRouteTypes {
     | '/invite/$token'
     | '/sandboxes'
     | '/sandboxes/$sandboxId/activity'
-    | '/sandboxes/$sandboxId/agent'
     | '/sandboxes/$sandboxId/apps'
     | '/sandboxes/$sandboxId/network'
     | '/sandboxes/$sandboxId/permissions'
@@ -355,7 +343,6 @@ export interface FileRouteTypes {
     | '/_app/sandboxes/$sandboxId'
     | '/_app/sandboxes/'
     | '/_app/sandboxes/$sandboxId/activity'
-    | '/_app/sandboxes/$sandboxId/agent'
     | '/_app/sandboxes/$sandboxId/apps'
     | '/_app/sandboxes/$sandboxId/network'
     | '/_app/sandboxes/$sandboxId/permissions'
@@ -504,13 +491,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSandboxesSandboxIdActivityRouteImport
       parentRoute: typeof AppSandboxesSandboxIdRoute
     }
-    '/_app/sandboxes/$sandboxId/agent': {
-      id: '/_app/sandboxes/$sandboxId/agent'
-      path: '/agent'
-      fullPath: '/sandboxes/$sandboxId/agent'
-      preLoaderRoute: typeof AppSandboxesSandboxIdAgentRouteImport
-      parentRoute: typeof AppSandboxesSandboxIdRoute
-    }
     '/_app/sandboxes/$sandboxId/apps': {
       id: '/_app/sandboxes/$sandboxId/apps'
       path: '/apps'
@@ -579,7 +559,6 @@ declare module '@tanstack/react-router' {
 
 interface AppSandboxesSandboxIdRouteChildren {
   AppSandboxesSandboxIdActivityRoute: typeof AppSandboxesSandboxIdActivityRoute
-  AppSandboxesSandboxIdAgentRoute: typeof AppSandboxesSandboxIdAgentRoute
   AppSandboxesSandboxIdAppsRoute: typeof AppSandboxesSandboxIdAppsRoute
   AppSandboxesSandboxIdNetworkRoute: typeof AppSandboxesSandboxIdNetworkRoute
   AppSandboxesSandboxIdPermissionsRoute: typeof AppSandboxesSandboxIdPermissionsRoute
@@ -594,7 +573,6 @@ interface AppSandboxesSandboxIdRouteChildren {
 
 const AppSandboxesSandboxIdRouteChildren: AppSandboxesSandboxIdRouteChildren = {
   AppSandboxesSandboxIdActivityRoute: AppSandboxesSandboxIdActivityRoute,
-  AppSandboxesSandboxIdAgentRoute: AppSandboxesSandboxIdAgentRoute,
   AppSandboxesSandboxIdAppsRoute: AppSandboxesSandboxIdAppsRoute,
   AppSandboxesSandboxIdNetworkRoute: AppSandboxesSandboxIdNetworkRoute,
   AppSandboxesSandboxIdPermissionsRoute: AppSandboxesSandboxIdPermissionsRoute,

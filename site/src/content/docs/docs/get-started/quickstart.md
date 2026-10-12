@@ -67,6 +67,5 @@ console.log((await box.exec("uname -a")).stdout)
 
 ## Next
 
-- [A computer-use agent in 5 minutes](/docs/get-started/cua-agent/) and [agent frameworks](/docs/guides/agent-frameworks/)
 - [The `zoo` CLI](/docs/reference/cli/) and [API conventions](/docs/reference/conventions/): errors, versions,
   idempotency keys, pagination

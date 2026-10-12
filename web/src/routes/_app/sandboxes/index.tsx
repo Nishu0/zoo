@@ -145,7 +145,7 @@ function SandboxesPage() {
           description={
             query
               ? "Nothing matches that filter."
-              : "Create a sandbox to spin up a desktop an agent can use. Press c any time, or ⌘K for everything."
+              : "Create a sandbox to spin up a desktop in seconds. Press c any time, or ⌘K for everything."
           }
           action={
             query ? undefined : (

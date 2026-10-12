@@ -17,6 +17,7 @@ import paramiko
 
 from logger.logger import logger
 from server import egress, objects
+from server.errors import ZooError
 from server.guest import guest_endpoint, guest_env, hub
 from server.jobs import Wait
 from server.ssh import alive, execute, open_client, output_of
@@ -239,7 +240,7 @@ def start(sandbox_id: str, server, env: dict[str, str], admin: bool = False) -> 
             url = boot(server_id, name)
     wait_for_guest(rid)
     set_admin(rid, admin)
-    write_env(rid, env)
+    write_env(rid, env, ssh=True)
     hub.bind(rid, sandbox_id)
     install_guest(rid, sandbox_id)
     return rid, url
@@ -348,7 +349,7 @@ def wait_for_guest(rid: str, timeout: int = 300):
     error = None
     while time.monotonic() < deadline:
         try:
-            if guest(rid, "true", timeout=15)[0] == 0:
+            if guest(rid, "true", timeout=15, ssh=True)[0] == 0:
                 return
         except Exception as e:
             error = e
@@ -360,18 +361,25 @@ def wait_for_guest(rid: str, timeout: int = 300):
 def guest(
     rid: str, script: str, stdin: bytes | None = None, timeout: float = 60, root: bool = False, ssh: bool = False
 ):
-    """Runs a script in the VM as the guest user, through zoo-guest when it's connected and over SSH otherwise.
-    Root scripts and ssh=True stay on SSH: osascript needs the Accessibility grant sshd has (see macos/README.md)."""
+    """Runs a script in the VM as the guest user through zoo-guest. Root scripts and ssh=True go over SSH: setting
+    the VM up before its guest runs, and what only root can do."""
     command = f"cd {HOME} && {script}"
-    agent = None if root or ssh else hub.for_runtime(rid)
-    if agent is not None and agent.has("exec"):
-        return agent.exec_run(["/bin/sh", "-c", command], stdin=stdin or b"", timeout=timeout)
+    if not root and not ssh:
+        return connected(rid).exec_run(["/bin/sh", "-c", command], stdin=stdin or b"", timeout=timeout)
     if root:
         client = root_client(rid)
         if client is not None:
             return execute(client, command, stdin, timeout)
         command = f"sudo -n sh -c {shlex.quote(command)}"
     return execute(guest_client(rid), command, stdin, timeout)
+
+
+def connected(rid: str, service: str = "exec"):
+    """This VM's zoo-guest, which every tool goes through."""
+    agent = hub.for_runtime(rid)
+    if agent is None or not agent.has(service):
+        raise ZooError("guest_unavailable", "the sandbox's guest agent is not connected")
+    return agent
 
 
 def guest_check(
@@ -387,9 +395,10 @@ def guest_bytes(rid: str, script: str, timeout: float) -> bytes:
     return out
 
 
-def write_env(rid: str, env: dict[str, str]):
+def write_env(rid: str, env: dict[str, str], ssh: bool = False):
+    """ssh=True at boot, before the guest is installed."""
     lines = "".join(f"export {k}={shlex.quote(v)}\n" for k, v in env.items() if re.fullmatch(r"[A-Za-z_]\w*", k))
-    guest_check(rid, f"mkdir -p {HOME}/.zoo && umask 077 && cat > {ENV_FILE}", stdin=lines.encode())
+    guest_check(rid, f"mkdir -p {HOME}/.zoo && umask 077 && cat > {ENV_FILE}", stdin=lines.encode(), ssh=ssh)
 
 
 def install_guest(rid: str, sandbox_id: str, timeout: float = 15):
@@ -737,7 +746,7 @@ def base_ready(server_id: str) -> bool:
     if run(server_id, f"nc -z -G 2 $(zoovm ip {BASE_VM}) 22", timeout=10)[0] != 0:
         return False
     try:
-        ok = guest(base_id(server_id), "true", timeout=5)[0] == 0
+        ok = guest(base_id(server_id), "true", timeout=5, ssh=True)[0] == 0
     except Exception:
         guests.pop(base_id(server_id), None)
         return False

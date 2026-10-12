@@ -16,7 +16,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
 from db.connection import db_manager
@@ -48,12 +48,6 @@ class WorkspaceResponse(BaseModel):
     # what a sandbox without settings of its own gets (null: never)
     default_idle_timeout_minutes: int | None
     default_max_lifetime_minutes: int | None
-    # agent steps store the accessibility tree next to the screenshot, for trajectory exports (server/exports.py)
-    capture_a11y: bool = True
-
-
-class TrajectorySettingsRequest(BaseModel):
-    capture_a11y: bool
 
 
 class LifecycleDefaultsRequest(BaseModel):
@@ -71,7 +65,6 @@ def workspace_response(workspace, role: str) -> WorkspaceResponse:
         created_at=to_stamp(workspace.created_at),
         default_idle_timeout_minutes=workspace.default_idle_timeout_minutes,
         default_max_lifetime_minutes=workspace.default_max_lifetime_minutes,
-        capture_a11y=workspace.capture_a11y,
     )
 
 
@@ -181,7 +174,7 @@ def invitation_response(row) -> InvitationResponse:
 
 
 class WorkspacesApi:
-    def __init__(self, app: FastAPI, auth: AuthApi):
+    def __init__(self, app: APIRouter, auth: AuthApi):
         self.app = app
         self.auth = auth
         self._register_routes()
@@ -389,18 +382,6 @@ class WorkspacesApi:
         ):
             self.role_in(workspace_id, user, db, "admin")
             db.delete_label_quota(workspace_id=workspace_id, key=key, value=value)
-
-        @self.app.put("/workspaces/{workspace_id}/trajectories", response_model=WorkspaceResponse)
-        def set_trajectory_settings(
-            workspace_id: str,
-            payload: TrajectorySettingsRequest,
-            user: Member = Depends(current_user),
-            db: Querier = Depends(db_manager.get_client),
-        ) -> WorkspaceResponse:
-            role = self.role_in(workspace_id, user, db, "admin")
-            workspace = db.set_workspace_capture_a11y(capture_a11y=payload.capture_a11y, id=workspace_id)
-            assert workspace is not None
-            return workspace_response(workspace, role)
 
         @self.app.get("/workspaces/{workspace_id}/invitations", response_model=list[InvitationResponse])
         def list_invitations(

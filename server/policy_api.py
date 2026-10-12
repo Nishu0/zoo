@@ -3,7 +3,7 @@ import re
 import uuid
 from typing import Literal, cast
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
 from db.connection import db_manager
@@ -105,7 +105,7 @@ class SecretResponse(BaseModel):
 
 
 class SandboxPolicyApi:
-    def __init__(self, app: FastAPI, auth: AuthApi, sandboxes: SandboxApi):
+    def __init__(self, app: APIRouter, auth: AuthApi, sandboxes: SandboxApi):
         self.logger = logger
         self.app = app
         self.auth = auth
@@ -342,10 +342,7 @@ class SandboxPolicyApi:
             for p in db.list_sandbox_app_permissions(sandbox_id=sandbox.id)
             if p.action == APP_ACTION
         }
-        try:
-            apps = TOOLS["installed_apps"].call(sandbox.runtime_id)["gui_apps"]
-        except Exception:
-            raise HTTPException(status_code=409, detail="sandbox runs an outdated image; stop and start it to upgrade")
+        apps = TOOLS["installed_apps"].call(sandbox.runtime_id or "")["gui_apps"]
         seen = {}
         for a in apps:
             if a["binary"] and a["binary"] not in seen:

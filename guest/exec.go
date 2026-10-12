@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"os"
 	"os/exec"
-	"strings"
 	"syscall"
 	"time"
 )
@@ -31,7 +31,7 @@ func execOp(c call) (any, []byte, error) {
 	cmd := exec.Command(a.Argv[0], a.Argv[1:]...)
 	cmd.Dir = a.Cwd
 	hideWindow(cmd)
-	cmd.Env = append(baseEnv(), secretEnv()...)
+	cmd.Env = append(os.Environ(), secretEnv()...)
 	for k, v := range a.Env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
@@ -68,20 +68,4 @@ func exitCode(exit *exec.ExitError) int {
 		return 128 + int(ws.Signal())
 	}
 	return exit.ExitCode()
-}
-
-// withoutNames drops the variables called `names` from an environment.
-func withoutNames(env []string, names []string) []string {
-	drop := make(map[string]bool, len(names))
-	for _, name := range names {
-		drop[name] = true
-	}
-	kept := make([]string, 0, len(env))
-	for _, kv := range env {
-		name, _, _ := strings.Cut(kv, "=")
-		if !drop[name] {
-			kept = append(kept, kv)
-		}
-	}
-	return kept
 }

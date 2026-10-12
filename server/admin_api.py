@@ -3,7 +3,7 @@ import os
 import socket
 import uuid
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from db.connection import db_manager
@@ -70,7 +70,7 @@ def backup_response(key: str, size: int) -> BackupResponse:
 
 
 class AdminApi:
-    def __init__(self, app: FastAPI, auth: AuthApi, sandboxes: SandboxApi):
+    def __init__(self, app: APIRouter, auth: AuthApi, sandboxes: SandboxApi):
         self.sandboxes = sandboxes
         self.app = app
         self.auth = auth

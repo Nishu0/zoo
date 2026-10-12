@@ -21,9 +21,7 @@ DEFAULT_RETRIES = 3
 VERSION = "0.2.0"
 
 # POSTs that create something; the SDK gives each an Idempotency-Key, so retrying one never creates two
-CREATES = re.compile(
-    r"^/(sandboxes|sandboxes/[^/]+/snapshots|sandboxes/[^/]+/viewer-links|webhooks|api-keys|agent/exports|benchmarks)$"
-)
+CREATES = re.compile(r"^/(sandboxes|sandboxes/[^/]+/snapshots|sandboxes/[^/]+/viewer-links|webhooks|api-keys)$")
 IDEMPOTENT = {"GET", "HEAD", "PUT", "DELETE", "OPTIONS"}
 
 

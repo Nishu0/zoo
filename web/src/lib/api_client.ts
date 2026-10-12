@@ -328,7 +328,6 @@ export const vaultSecretSchema = z.object({
   rotated_at: z.string().nullable().default(null),
   rotation_due_at: z.string().nullable().default(null),
   status: secretStatusSchema.default("ok"),
-  used_by_agent: z.boolean().default(false),
   sandboxes: z.array(
     z.object({
       id: z.string(),
@@ -562,8 +561,6 @@ export const workspaceSchema = z.object({
   // what a sandbox without its own settings gets; null: never
   default_idle_timeout_minutes: z.number().nullable(),
   default_max_lifetime_minutes: z.number().nullable(),
-  // agent steps store the accessibility tree too, for trajectory exports
-  capture_a11y: z.boolean().default(true),
 })
 
 export const quotaSchema = z.object({
@@ -635,217 +632,6 @@ function auditQuery(filters: AuditFilters, cursor?: string | null) {
   return query ? `?${query}` : ""
 }
 
-export const agentKindSchema = z.enum([
-  "user",
-  "text",
-  "reasoning",
-  "action",
-  "error",
-  "status",
-])
-
-export const agentMessageSchema = z.object({
-  id: z.string(),
-  kind: agentKindSchema,
-  content: z.string(),
-  source: z.string(),
-  run_id: z.string().nullable().optional(),
-  has_screenshot: z.boolean().default(false),
-  created_at: z.string(),
-})
-
-export const agentRunSchema = z.object({
-  id: z.string(),
-  state: z.enum(["queued", "running", "succeeded", "failed", "cancelled"]),
-  source: z.string(),
-  attempts: z.number(),
-  steps: z.number(),
-  tokens: z.number(),
-  cost: z.number(),
-  max_steps: z.number(),
-  max_seconds: z.number(),
-  max_tokens: z.number(),
-  elapsed_seconds: z.number(),
-  error: z.string().nullable(),
-  created_at: z.string(),
-  started_at: z.string().nullable(),
-  finished_at: z.string().nullable(),
-  // someone took the screen over: the agent waits until it is handed back
-  paused_at: z.string().nullable().default(null),
-  paused_by: z.string().nullable().default(null),
-  provider: z.string().nullable().default(null),
-  model: z.string().nullable().default(null),
-})
-
-export const agentStateSchema = z.object({
-  running: z.boolean(),
-  model: z.string(),
-  run: agentRunSchema.nullable().default(null),
-  messages: z.array(agentMessageSchema),
-})
-
-export const agentUsageSchema = z.object({
-  type: z.literal("usage"),
-  steps: z.number(),
-  tokens: z.number(),
-  cost: z.number(),
-  elapsed: z.number(),
-  max_steps: z.number(),
-  max_seconds: z.number(),
-  max_tokens: z.number(),
-})
-
-export const agentEventSchema = z.union([
-  z.object({
-    type: agentKindSchema,
-    text: z.string(),
-    id: z.string().optional(),
-    screenshot: z.boolean().optional(),
-  }),
-  agentUsageSchema,
-  z.object({ type: z.literal("done"), state: z.string().optional() }),
-])
-
-export const chatPlatformSchema = z.enum(["slack", "discord", "whatsapp"])
-
-export const agentChannelSchema = z.object({
-  id: z.string(),
-  platform: chatPlatformSchema,
-  external_id: z.string(),
-  // platform user IDs allowed to command the sandbox, or ["*"] for anyone in the channel
-  allowed_users: z.array(z.string()).default([]),
-  created_at: z.string(),
-})
-
-export const agentChannelInputSchema = z.object({
-  platform: chatPlatformSchema,
-  external_id: z.string().trim().min(1, "Enter a channel ID or phone number."),
-  allowed_users: z.array(z.string()).default([]),
-})
-
-export const integrationSchema = z.object({
-  platform: chatPlatformSchema,
-  configured: z.boolean(),
-  webhook_path: z.string().nullable(),
-})
-
-export const agentProviderIdSchema = z.enum([
-  "anthropic",
-  "openai",
-  "gemini",
-  "openrouter",
-  "ollama",
-  "xai",
-])
-
-export const viewerLinkModeSchema = z.enum(["view", "control"])
-
-export const viewerLinkSchema = z.object({
-  id: z.string(),
-  sandbox_id: z.string(),
-  mode: viewerLinkModeSchema,
-  end_user: z.string().nullable(),
-  expires_at: z.string(),
-  revoked_at: z.string().nullable(),
-  created_at: z.string(),
-})
-
-// the url (and token) are only shown once, when the link is made
-export const createdViewerLinkSchema = viewerLinkSchema.extend({
-  token: z.string(),
-  url: z.string(),
-})
-
-export type CreateViewerLinkInput = {
-  mode: ViewerLinkMode
-  expires_in_minutes: number
-  end_user?: string | null
-}
-
-export const WEBHOOK_EVENT_TYPES = [
-  "sandbox.state",
-  "run.started",
-  "run.step",
-  "run.finished",
-  "takeover.started",
-  "takeover.ended",
-] as const
-
-export const webhookSchema = z.object({
-  id: z.string(),
-  url: z.string(),
-  // empty: every event
-  types: z.array(z.string()),
-  label_selector: z.record(z.string(), z.string()).nullable(),
-  enabled: z.boolean(),
-  created_at: z.string(),
-})
-
-// the signing secret is only shown once, when the webhook is made
-export const createdWebhookSchema = webhookSchema.extend({ secret: z.string() })
-
-export type WebhookInput = {
-  url: string
-  types: string[]
-  label_selector?: Record<string, string> | null
-  enabled: boolean
-}
-
-export const webhookDeliverySchema = z.object({
-  id: z.string(),
-  event_id: z.string(),
-  event_type: z.string(),
-  status: z.enum(["pending", "delivered", "failed"]),
-  attempts: z.number(),
-  next_attempt_at: z.string(),
-  last_error: z.string().nullable(),
-  response_status: z.number().nullable(),
-  created_at: z.string(),
-  delivered_at: z.string().nullable(),
-})
-
-const agentLimitsSchema = z.object({
-  max_steps: z.number(),
-  max_seconds: z.number(),
-  max_tokens: z.number(),
-})
-
-export const agentSettingsSchema = z.object({
-  provider: agentProviderIdSchema.nullable(),
-  model: z.string(),
-  has_api_key: z.boolean(),
-  // the vault secret holding the provider key
-  api_key_secret: z.object({ id: z.string(), name: z.string() }).nullable(),
-  api_base: z.string().nullable(),
-  default_model: z.string(),
-  limits: agentLimitsSchema,
-  // the server's caps; a workspace's limits can't go past them
-  caps: agentLimitsSchema,
-  providers: z.array(
-    z.object({
-      id: agentProviderIdSchema,
-      label: z.string(),
-      default_model: z.string(),
-      default_base: z.string().nullable(),
-      needs_key: z.boolean(),
-      server_key: z.boolean(),
-    })
-  ),
-})
-
-export const agentSettingsInputSchema = z.object({
-  provider: agentProviderIdSchema,
-  model: z.string().trim().min(1, "Enter a model name."),
-  // a key typed in, saved to the vault; undefined keeps the saved key, "" removes it
-  api_key: z.string().optional(),
-  // or an existing vault secret; "" removes it
-  api_key_secret_id: z.string().optional(),
-  api_base: z.string().trim().optional(),
-  max_steps: z.number().int().min(1).optional(),
-  max_seconds: z.number().int().min(10).optional(),
-  max_tokens: z.number().int().min(1000).optional(),
-})
-
 export type LoginInput = z.infer<typeof loginSchema>
 export type RegisterInput = z.infer<typeof registerSchema>
 export type TokenResponse = z.infer<typeof tokenSchema>
@@ -868,19 +654,12 @@ export type Quota = z.infer<typeof quotaSchema>
 export type Member = z.infer<typeof memberSchema>
 export type Invitation = z.infer<typeof invitationSchema>
 export type AuditEntry = z.infer<typeof auditEntrySchema>
-export type AgentMessage = z.infer<typeof agentMessageSchema>
-export type AgentEvent = z.infer<typeof agentEventSchema>
-export type AgentRun = z.infer<typeof agentRunSchema>
-export type AgentUsage = z.infer<typeof agentUsageSchema>
-export type AgentChannel = z.infer<typeof agentChannelSchema>
-export type ChatPlatform = z.infer<typeof chatPlatformSchema>
-export type AgentChannelInput = z.infer<typeof agentChannelInputSchema>
-export type AgentProviderId = z.infer<typeof agentProviderIdSchema>
 export type ViewerLinkMode = z.infer<typeof viewerLinkModeSchema>
 export type ViewerLink = z.infer<typeof viewerLinkSchema>
 export type Webhook = z.infer<typeof webhookSchema>
 export type WebhookDelivery = z.infer<typeof webhookDeliverySchema>
-export type AgentSettingsInput = z.infer<typeof agentSettingsInputSchema>
+
+export const WEBHOOK_EVENT_TYPES = ["sandbox.state"] as const
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null
@@ -996,49 +775,6 @@ async function requestAll<T extends z.ZodType>(
     cursor = page.next_cursor
   } while (cursor)
   return items
-}
-
-/** Fetches an authenticated image and returns an object URL for an <img>; revoke it when done. */
-async function fetchBlobUrl(path: string): Promise<string> {
-  const res = await fetch(`${API_URL}${path}`, { headers: authHeaders() })
-  if (!res.ok)
-    throw responseError(res.status, await res.json().catch(() => null))
-  return URL.createObjectURL(await res.blob())
-}
-
-/** Reads a server-sent event stream of agent events until it ends or `signal` aborts. */
-async function streamEvents(
-  path: string,
-  init: RequestInit,
-  onEvent: (event: AgentEvent) => void
-) {
-  const headers = authHeaders(init.headers)
-  headers.set("Content-Type", "application/json")
-
-  const res = await fetch(`${API_URL}${path}`, { ...init, headers })
-  if (!res.ok || !res.body) {
-    throw responseError(res.status, await res.json().catch(() => null))
-  }
-
-  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
-  let buffer = ""
-  for (;;) {
-    const { value, done } = await reader.read()
-    if (done) return
-    buffer += value
-    let end
-    while ((end = buffer.indexOf("\n\n")) >= 0) {
-      const chunk = buffer.slice(0, end)
-      buffer = buffer.slice(end + 2)
-      for (const line of chunk.split("\n")) {
-        if (line.startsWith("data: ")) {
-          const parsed = agentEventSchema.safeParse(JSON.parse(line.slice(6)))
-          // an event kind from a newer API is skipped rather than ending the stream
-          if (parsed.success) onEvent(parsed.data)
-        }
-      }
-    }
-  }
 }
 
 export const api = {
@@ -1350,69 +1086,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ server_id: serverId }),
     }),
-  agent: {
-    state: (id: string) => request(`/sandboxes/${id}/agent`, agentStateSchema),
-    screenshot: (id: string, messageId: string) =>
-      fetchBlobUrl(`/sandboxes/${id}/agent/messages/${messageId}/screenshot`),
-    send: (
-      id: string,
-      message: string,
-      onEvent: (event: AgentEvent) => void,
-      signal: AbortSignal
-    ) =>
-      streamEvents(
-        `/sandboxes/${id}/agent`,
-        { method: "POST", body: JSON.stringify({ message }), signal },
-        onEvent
-      ),
-    attach: (
-      id: string,
-      onEvent: (event: AgentEvent) => void,
-      signal: AbortSignal
-    ) => streamEvents(`/sandboxes/${id}/agent/stream`, { signal }, onEvent),
-    stop: (id: string) =>
-      request(`/sandboxes/${id}/agent/stop`, z.null(), { method: "POST" }),
-    takeover: (id: string) =>
-      request(`/sandboxes/${id}/agent/takeover`, agentRunSchema, {
-        method: "POST",
-      }),
-    release: (id: string) =>
-      request(`/sandboxes/${id}/agent/release`, agentRunSchema, {
-        method: "POST",
-      }),
-    reset: (id: string) =>
-      request(`/sandboxes/${id}/agent`, z.null(), { method: "DELETE" }),
-    channels: (id: string) =>
-      request(`/sandboxes/${id}/agent/channels`, z.array(agentChannelSchema)),
-    addChannel: (id: string, input: AgentChannelInput) =>
-      request(`/sandboxes/${id}/agent/channels`, agentChannelSchema, {
-        method: "POST",
-        body: JSON.stringify(input),
-      }),
-    updateChannel: (id: string, channelId: string, allowedUsers: string[]) =>
-      request(
-        `/sandboxes/${id}/agent/channels/${channelId}`,
-        agentChannelSchema,
-        {
-          method: "PATCH",
-          body: JSON.stringify({ allowed_users: allowedUsers }),
-        }
-      ),
-    removeChannel: (id: string, channelId: string) =>
-      request(`/sandboxes/${id}/agent/channels/${channelId}`, z.null(), {
-        method: "DELETE",
-      }),
-    integrations: () =>
-      request("/agent/integrations", z.array(integrationSchema)),
-    settings: () => request("/agent/settings", agentSettingsSchema),
-    saveSettings: (input: AgentSettingsInput) =>
-      request("/agent/settings", agentSettingsSchema, {
-        method: "PUT",
-        body: JSON.stringify(input),
-      }),
-    resetSettings: () =>
-      request("/agent/settings", agentSettingsSchema, { method: "DELETE" }),
-  },
   apiKeys: {
     list: () => request("/api-keys", z.array(apiKeySchema)),
     create: (input: CreateApiKeyInput) =>
@@ -1534,7 +1207,7 @@ export function baseSocketUrl(serverId: string) {
   return ticketedSocketUrl(`/servers/${serverId}/base`)
 }
 
-// a shell in the sandbox; needs the sandbox's guest agent, which sandboxes started before it don't have
+// a shell in the sandbox; needs its guest, which sandboxes started before it don't have
 export async function terminalSocketUrl(
   id: string,
   cols: number,
@@ -1565,11 +1238,6 @@ export const queryKeys = {
   apps: (id: string) => ["sandboxes", id, "apps"] as const,
   secrets: (id: string) => ["sandboxes", id, "secrets"] as const,
   executions: (id: string) => ["sandboxes", id, "executions"] as const,
-  agent: (id: string) => ["sandboxes", id, "agent"] as const,
-  agentChannels: (id: string) =>
-    ["sandboxes", id, "agent", "channels"] as const,
-  integrations: ["agent", "integrations"] as const,
-  agentSettings: ["agent", "settings"] as const,
   monitoring: ["monitoring"] as const,
   apiKeys: ["api-keys"] as const,
   workspaces: ["workspaces"] as const,
@@ -1677,7 +1345,6 @@ const eventSchema = z.object({
   seq: z.number(),
   type: z.string(),
   sandbox_id: z.string().nullable(),
-  run_id: z.string().nullable(),
   data: z.record(z.string(), z.unknown()),
 })
 
@@ -1688,7 +1355,7 @@ export type Connection = "connecting" | "live" | "offline"
 
 /**
  * Follows the workspace's events (GET /events/stream) for as long as the app is open, reconnecting with backoff and
- * Last-Event-ID, and refreshes the queries each event touches; this replaces polling for sandbox and agent state.
+ * Last-Event-ID, and refreshes the queries each event touches; this replaces polling for sandbox state.
  */
 export function useEventStream(
   enabled: boolean,
@@ -1716,14 +1383,6 @@ export function useEventStream(
         void queryClient.invalidateQueries({
           queryKey: queryKeys.sandbox(id),
           exact: true,
-        })
-      } else if (
-        event.type.startsWith("run.") ||
-        event.type.startsWith("takeover.")
-      ) {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.agent(id) })
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.executions(id),
         })
       }
     }
@@ -1929,25 +1588,6 @@ export function useExecutions(id: string) {
   })
 }
 
-export function useAgent(id: string) {
-  return useQuery({
-    queryKey: queryKeys.agent(id),
-    queryFn: () => api.agent.state(id),
-    refetchOnWindowFocus: false,
-  })
-}
-
-export function useStopAgent(id: string) {
-  return useMutation({ mutationFn: () => api.agent.stop(id) })
-}
-
-/** Takes the screen over from the running agent, or hands it back; either changes the run, so the agent refreshes. */
-export function useTakeover(id: string) {
-  return useInvalidatingMutation(queryKeys.agent(id), (take: boolean) =>
-    take ? api.agent.takeover(id) : api.agent.release(id)
-  )
-}
-
 export function useViewerLinks(sandboxId: string) {
   return useQuery({
     queryKey: queryKeys.viewerLinks(sandboxId),
@@ -2000,74 +1640,6 @@ export function useWebhookDeliveries(id: string, enabled: boolean) {
     queryFn: () => api.webhooks.deliveries(id),
     enabled,
     refetchInterval: enabled ? 5000 : false,
-  })
-}
-
-export function useResetAgent(id: string) {
-  return useInvalidatingMutation(queryKeys.agent(id), () => api.agent.reset(id))
-}
-
-export function useAgentChannels(id: string) {
-  return useQuery({
-    queryKey: queryKeys.agentChannels(id),
-    queryFn: () => api.agent.channels(id),
-  })
-}
-
-export function useAddAgentChannel(id: string) {
-  return useInvalidatingMutation(
-    queryKeys.agentChannels(id),
-    (input: AgentChannelInput) => api.agent.addChannel(id, input)
-  )
-}
-
-export function useUpdateAgentChannel(id: string) {
-  return useInvalidatingMutation(
-    queryKeys.agentChannels(id),
-    ({
-      channelId,
-      allowedUsers,
-    }: {
-      channelId: string
-      allowedUsers: string[]
-    }) => api.agent.updateChannel(id, channelId, allowedUsers)
-  )
-}
-
-export function useRemoveAgentChannel(id: string) {
-  return useInvalidatingMutation(
-    queryKeys.agentChannels(id),
-    (channelId: string) => api.agent.removeChannel(id, channelId)
-  )
-}
-
-export function useIntegrations() {
-  return useQuery({
-    queryKey: queryKeys.integrations,
-    queryFn: api.agent.integrations,
-  })
-}
-
-export function useAgentSettings() {
-  return useQuery({
-    queryKey: queryKeys.agentSettings,
-    queryFn: api.agent.settings,
-  })
-}
-
-/** Saves (or with `null`, resets) the user's agent model, then refreshes every sandbox's agent state, which shows it. */
-export function useSaveAgentSettings() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (input: AgentSettingsInput | null) =>
-      input ? api.agent.saveSettings(input) : api.agent.resetSettings(),
-    onSuccess: (data) => {
-      queryClient.setQueryData(queryKeys.agentSettings, data)
-      return queryClient.invalidateQueries({
-        predicate: (q) =>
-          q.queryKey[0] === "sandboxes" && q.queryKey[2] === "agent",
-      })
-    },
   })
 }
 

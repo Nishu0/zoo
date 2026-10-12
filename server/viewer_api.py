@@ -1,7 +1,6 @@
 """Viewer links: signed URLs to a sandbox's screen, to embed in another app or to share with an end user or a support
 person. A view link only watches: the proxy drops its input (server/vnc.py, Gate), whatever the page does. A control
-link's input reaches the sandbox, and acting while an agent runs takes the screen over from the agent until it is
-handed back.
+link's input reaches the sandbox.
 
 A link is a random token; only its SHA-256 is stored. GET /embed/{token} is a page with nothing but the screen,
 which only the origins in ZOO_EMBED_ORIGINS may frame (none when unset); its websocket is /embed/{token}/ws.
@@ -15,7 +14,7 @@ import secrets
 import uuid
 from typing import Literal
 
-from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
@@ -23,7 +22,6 @@ from db.connection import db_manager
 from db.generated.models import ViewerLink
 from db.generated.query import CreateViewerLinkParams, Querier
 from logger.logger import logger
-from server import audit_api
 from server.auth_api import AuthApi, Member, require
 from server.jobs import stamp
 from server.sandbox_api import SandboxApi
@@ -48,7 +46,7 @@ def api_url(request: Request) -> str:
 class ViewerLinkRequest(BaseModel):
     mode: Literal["view", "control"] = "view"
     expires_in_minutes: int = Field(default=60, ge=1, le=MAX_HOURS * 60)
-    # who the link is for, as the embedding app knows them; shown in takeovers and the audit log
+    # who the link is for, as the embedding app knows them; shown in the audit log
     end_user: str | None = Field(default=None, max_length=200)
 
 
@@ -71,9 +69,6 @@ class CreatedViewerLinkResponse(ViewerLinkResponse):
 class EmbedStateResponse(BaseModel):
     mode: str
     sandbox_status: str
-    # idle, running or paused (taken over)
-    agent: str
-    paused_by: str | None
 
 
 def link_response(link: ViewerLink) -> ViewerLinkResponse:
@@ -98,11 +93,13 @@ def frame_ancestors() -> str:
 
 
 class ViewerApi:
-    def __init__(self, app: FastAPI, auth: AuthApi, sandboxes: SandboxApi):
+    def __init__(self, app: APIRouter, auth: AuthApi, sandboxes: SandboxApi, unversioned: FastAPI):
         self.logger = logger
         self.app = app
         self.auth = auth
         self.sandboxes = sandboxes
+        # routes that are not part of the versioned API (/embed/{token}...)
+        self.unversioned = unversioned
         self._register_routes()
 
     def _register_routes(self):
@@ -160,7 +157,7 @@ class ViewerApi:
                 raise HTTPException(status_code=404, detail="viewer link not found")
             db.revoke_viewer_link(id=link.id)
 
-        @self.app.get("/embed/{token}", response_class=HTMLResponse)
+        @self.unversioned.get("/embed/{token}", response_class=HTMLResponse)
         def embed(token: str) -> HTMLResponse:
             headers = {
                 "Content-Security-Policy": f"frame-ancestors {frame_ancestors()}",
@@ -173,45 +170,17 @@ class ViewerApi:
                 return HTMLResponse(GONE, status_code=404, headers=headers)
             return HTMLResponse(page(token, link.mode), headers=headers)
 
-        @self.app.get("/embed/{token}/state", response_model=EmbedStateResponse)
+        @self.unversioned.get("/embed/{token}/state", response_model=EmbedStateResponse)
         def embed_state(token: str) -> EmbedStateResponse:
             with db_manager.session() as db:
                 link = self.link(token, db)
                 sandbox = db.get_sandbox(id=link.sandbox_id)
-                run = db.get_active_agent_run(sandbox_id=link.sandbox_id)
-            agent = "idle" if run is None else "paused" if run.paused_at is not None else run.state
             return EmbedStateResponse(
                 mode=link.mode,
                 sandbox_status=sandbox.status if sandbox is not None else "deleted",
-                agent=agent,
-                paused_by=run.paused_by if run is not None else None,
             )
 
-        @self.app.post("/embed/{token}/takeover", status_code=204)
-        def embed_takeover(token: str):
-            with db_manager.session() as db:
-                link = self.control_link(token, db)
-                run = db.get_active_agent_run(sandbox_id=link.sandbox_id)
-                if run is None or run.state != "running":
-                    raise HTTPException(status_code=409, detail="the agent is not running")
-                if db.pause_agent_run(paused_by=f"link:{link.id}", id=run.id) is None:
-                    raise HTTPException(status_code=409, detail="the screen is already taken over")
-            audit_api.system(
-                link.workspace_id, "takeover", "sandboxes", link.sandbox_id, source="viewer_link", link_id=link.id
-            )
-
-        @self.app.post("/embed/{token}/release", status_code=204)
-        def embed_release(token: str):
-            with db_manager.session() as db:
-                link = self.control_link(token, db)
-                run = db.get_active_agent_run(sandbox_id=link.sandbox_id)
-                if run is None or db.resume_agent_run(id=run.id) is None:
-                    raise HTTPException(status_code=409, detail="the screen is not taken over")
-            audit_api.system(
-                link.workspace_id, "release", "sandboxes", link.sandbox_id, source="viewer_link", link_id=link.id
-            )
-
-        self.app.websocket("/embed/{token}/ws")(self.screen)
+        self.unversioned.websocket("/embed/{token}/ws")(self.screen)
 
     def link(self, token: str, db: Querier) -> ViewerLink:
         link = db.get_live_viewer_link(token_hash=hash_token(token))
@@ -240,7 +209,7 @@ class ViewerApi:
             await websocket.close(code=1008, reason="sandbox not available")
             return
         gate = Gate(view_only=link.mode == "view")
-        await self.sandboxes.screen(websocket, sandbox, gate, f"link:{link.id}", lambda: live(link.id))
+        await self.sandboxes.screen(websocket, sandbox, gate, lambda: live(link.id))
 
 
 GONE = """<!doctype html><meta charset="utf-8"><title>Link expired</title>
@@ -249,9 +218,8 @@ color:#a1a1aa;font:14px system-ui,sans-serif">This link was revoked or has expir
 
 
 def page(token: str, mode: str) -> str:
-    """The embed page: the screen, a status line, and for a control link Take over / Hand back. It tells the page
-    that frames it what happens with postMessage ({source: "zoo", type: "connect" | "disconnect" | "takeover" |
-    "release" | "agent", ...}) and takes {source: "zoo", type: "takeover" | "release"} from it."""
+    """The embed page: the screen and a status line. It tells the page that frames it what happens with postMessage
+    ({source: "zoo", type: "connect" | "disconnect", ...})."""
     # script contents aren't HTML-decoded, so only a closing tag could break out of it
     config = json.dumps({"token": token, "mode": mode}).replace("<", "\\u003c")
     return f"""<!doctype html>
@@ -262,24 +230,15 @@ def page(token: str, mode: str) -> str:
   #screen {{ position: absolute; inset: 0; }}
   #status {{ position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
     color: #a1a1aa; pointer-events: none; }}
-  #bar {{ position: absolute; right: 12px; bottom: 12px; display: none; gap: 8px; align-items: center; }}
-  #bar span {{ color: #e4e4e7; background: rgba(0,0,0,.6); padding: 6px 10px; border-radius: 6px; }}
-  #bar button {{ font: inherit; padding: 6px 12px; border-radius: 6px; border: 0; cursor: pointer;
-    background: #fafafa; color: #18181b; }}
 </style></head>
 <body><div id="screen"></div><div id="status">Connecting…</div>
-<div id="bar"><span id="agent"></span><button id="toggle" type="button"></button></div>
 <script id="config" type="application/json">{config}</script>
 <script type="module">
 import RFB from "{NOVNC}";
 const {{ token, mode }} = JSON.parse(document.getElementById("config").textContent);
 const base = location.pathname.replace(/\\/$/, "");
 const status = document.getElementById("status");
-const bar = document.getElementById("bar");
-const label = document.getElementById("agent");
-const toggle = document.getElementById("toggle");
 const tell = (type, extra = {{}}) => parent !== window && parent.postMessage({{ source: "zoo", type, ...extra }}, "*");
-let agent = "idle";
 
 function connect() {{
   const url = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + base + "/ws";
@@ -295,30 +254,5 @@ function connect() {{
   }});
 }}
 
-async function act(kind) {{
-  const response = await fetch(base + "/" + kind, {{ method: "POST" }});
-  if (response.ok) tell(kind);
-  await refresh();
-}}
-
-async function refresh() {{
-  const response = await fetch(base + "/state");
-  if (!response.ok) {{ status.textContent = "This link was revoked or has expired."; return; }}
-  const state = await response.json();
-  if (state.agent !== agent) tell("agent", {{ state: state.agent }});
-  agent = state.agent;
-  if (mode !== "control" || agent === "idle") {{ bar.style.display = "none"; return; }}
-  bar.style.display = "flex";
-  label.textContent = agent === "paused" ? "You have control" : "The agent is working";
-  toggle.textContent = agent === "paused" ? "Hand back" : "Take over";
-}}
-
-toggle.addEventListener("click", () => act(agent === "paused" ? "release" : "takeover"));
-addEventListener("message", (event) => {{
-  if (event.source !== parent || event.data?.source !== "zoo" || mode !== "control") return;
-  if (event.data.type === "takeover" || event.data.type === "release") act(event.data.type);
-}});
 connect();
-refresh();
-setInterval(refresh, 3000);
 </script></body></html>"""

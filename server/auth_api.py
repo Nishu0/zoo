@@ -11,7 +11,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import jwt
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -34,7 +34,7 @@ ROLES = ("viewer", "member", "admin", "owner")
 # what a viewer (and a read-only API key) may still POST: looking, not touching
 # (a viewer link may only be a view link: server/viewer_api.py)
 VIEWER_WRITES = {"/sandboxes/{sandbox_id}/screenshot", "/sandboxes/{sandbox_id}/viewer-links"}
-# changes only admins make: hosts, shared secrets and profiles, keys, the warm pool and agent settings (route
+# changes only admins make: hosts, shared secrets and profiles, keys and the warm pool (route
 # templates; anything under them). A sandbox's own policies are its members' to set.
 ADMIN_WRITES = (
     "/servers",
@@ -43,7 +43,6 @@ ADMIN_WRITES = (
     "/profiles",
     "/api-keys",
     "/pool",
-    "/agent/settings",
     "/kubernetes",
     "/webhooks",
 )
@@ -187,7 +186,7 @@ class CreatedApiKeyResponse(ApiKeyResponse):
 
 
 class AuthApi:
-    def __init__(self, app: FastAPI):
+    def __init__(self, app: APIRouter):
         self.logger = logger
         self.app = app
         self.secret = os.environ.get("JWT_SECRET")

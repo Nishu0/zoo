@@ -23,6 +23,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, modes
 
 from logger.logger import logger
 from server import egress, objects
+from server.errors import ZooError
 from server.guest import guest_endpoint, guest_env, hub
 from server.ssh import alive, execute, open_client, output_of
 from server.vnc import VNC, Channel, authenticate
@@ -350,9 +351,10 @@ def connected(rid: str, service: str = "exec"):
     """This VM's zoo-guest, which every tool goes through. The guest has no other way in."""
     agent = hub.for_runtime(rid)
     if agent is None or not agent.has(service):
-        raise RuntimeError(
-            f"the Windows guest agent isn't connected{'' if agent is None else f' or has no {service} service'}; "
-            f"restart the sandbox (its log is {GUEST_DIR}\\guest.log in the VM)"
+        raise ZooError(
+            "guest_unavailable",
+            "the sandbox's guest agent is not connected",
+            f"restart the sandbox (its log is {GUEST_DIR}\\guest.log in the VM)",
         )
     return agent
 

@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from typing import Literal
 from urllib.parse import urlparse
 
-from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket
 from pydantic import BaseModel, Field
 
 from db.connection import db_manager
@@ -336,7 +336,7 @@ def kubernetes_status(probe: bool = False) -> KubernetesStatus:
 
 
 class ServersApi:
-    def __init__(self, app: FastAPI, auth: AuthApi, sandboxes: SandboxApi):
+    def __init__(self, app: APIRouter, auth: AuthApi, sandboxes: SandboxApi):
         self.app = app
         self.auth = auth
         self.sandboxes = sandboxes

@@ -65,8 +65,7 @@ export function ShareTab({ sandbox }: { sandbox: Sandbox }) {
           A link opens this sandbox&apos;s screen without signing in: for an end
           user, a support person, or an iframe in your own app (the API&apos;s
           ZOO_EMBED_ORIGINS must list its origin). View-only links can&apos;t
-          type or click. With control, acting while the agent runs takes the
-          screen over until it is handed back.
+          type or click.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">

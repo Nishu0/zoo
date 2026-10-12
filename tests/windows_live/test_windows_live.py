@@ -12,8 +12,8 @@ from urllib.parse import urlparse
 
 import pytest
 
+from server import a11y, windows, windows_tools
 from server import guest as guest_module
-from server import windows, windows_tools
 
 pytestmark = pytest.mark.skipif(
     os.name != "nt" or not os.environ.get("ZOO_GUEST_EXE"), reason="needs Windows and ZOO_GUEST_EXE"
@@ -107,7 +107,7 @@ def test_apps_and_windows_on_the_desktop(vm):
     windows_tools.WinWindows.window_minimize(vm, window["id"])
     windows_tools.WinWindows.window_restore(vm, window["id"])
     windows_tools.WinWindows.window_focus(vm, window["id"])
-    tree = windows_tools.accessibility_tree(vm, app="notepad")
+    tree = a11y.accessibility_tree(vm, app="notepad")
     assert tree["elements"] > 0 and "notepad" in tree["app"].lower()
     assert windows_tools.WinApps.close_app(vm, "notepad") is True
     wait_for(lambda: not any(w["app"].lower() == "notepad" for w in windows_tools.WinWindows.windows_list(vm)))

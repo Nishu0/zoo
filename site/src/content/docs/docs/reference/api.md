@@ -19,9 +19,7 @@ The Python SDK wraps these endpoints; see [SDK](/docs/reference/sdk/).
 | Endpoint | Purpose |
 | --- | --- |
 | [`GET /embed/{token}`](#get-embedtoken) | Embed |
-| [`POST /embed/{token}/release`](#post-embedtokenrelease) | Embed Release |
 | [`GET /embed/{token}/state`](#get-embedtokenstate) | Embed State |
-| [`POST /embed/{token}/takeover`](#post-embedtokentakeover) | Embed Takeover |
 
 ### `GET /embed/{token}`
 
@@ -34,20 +32,6 @@ Embed
 | Response | |
 | --- | --- |
 | `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /embed/{token}/release`
-
-Embed Release
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `token` | path | `string` | yes |  |
-
-| Response | |
-| --- | --- |
-| `204` | Successful Response |
 | `422` | Validation Error |
 
 
@@ -65,35 +49,6 @@ Embed State
 | `422` | Validation Error |
 
 
-### `POST /embed/{token}/takeover`
-
-Embed Takeover
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `token` | path | `string` | yes |  |
-
-| Response | |
-| --- | --- |
-| `204` | Successful Response |
-| `422` | Validation Error |
-
-
-## Other
-
-| Endpoint | Purpose |
-| --- | --- |
-| [`GET /`](#get-) | Home |
-
-### `GET /`
-
-Home
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-
-
 ## V1
 
 | Endpoint | Purpose |
@@ -106,15 +61,6 @@ Home
 | [`POST /v1/admin/domains/{domain_id}/verify`](#post-v1admindomainsdomain_idverify) | Verify Domain |
 | [`GET /v1/admin/sandboxes`](#get-v1adminsandboxes) | List Sandboxes |
 | [`GET /v1/admin/users`](#get-v1adminusers) | List Users |
-| [`GET /v1/agent/exports`](#get-v1agentexports) | List Exports |
-| [`POST /v1/agent/exports`](#post-v1agentexports) | Create Export |
-| [`GET /v1/agent/exports/{export_id}`](#get-v1agentexportsexport_id) | Get Export |
-| [`GET /v1/agent/exports/{export_id}/download`](#get-v1agentexportsexport_iddownload) | Download |
-| [`GET /v1/agent/integrations`](#get-v1agentintegrations) | Integrations |
-| [`GET /v1/agent/providers`](#get-v1agentproviders) | Providers |
-| [`GET /v1/agent/settings`](#get-v1agentsettings) | Get Settings |
-| [`PUT /v1/agent/settings`](#put-v1agentsettings) | Put Settings |
-| [`DELETE /v1/agent/settings`](#delete-v1agentsettings) | Reset Settings |
 | [`GET /v1/api-keys`](#get-v1api-keys) | List Keys |
 | [`POST /v1/api-keys`](#post-v1api-keys) | Create Key |
 | [`DELETE /v1/api-keys/{key_id}`](#delete-v1api-keyskey_id) | Revoke Key |
@@ -124,11 +70,6 @@ Home
 | [`GET /v1/auth/me`](#get-v1authme) | Me |
 | [`PUT /v1/auth/me/onboarded`](#put-v1authmeonboarded) | Onboarded |
 | [`POST /v1/auth/signup`](#post-v1authsignup) | Register |
-| [`GET /v1/benchmarks`](#get-v1benchmarks) | List Benchmarks |
-| [`POST /v1/benchmarks`](#post-v1benchmarks) | Create Benchmark |
-| [`GET /v1/benchmarks/{benchmark_id}`](#get-v1benchmarksbenchmark_id) | Get Benchmark |
-| [`POST /v1/benchmarks/{benchmark_id}/cancel`](#post-v1benchmarksbenchmark_idcancel) | Cancel Benchmark |
-| [`GET /v1/benchmarks/{benchmark_id}/export`](#get-v1benchmarksbenchmark_idexport) | Export Benchmark |
 | [`GET /v1/domains/check`](#get-v1domainscheck) | Check Domain |
 | [`GET /v1/events`](#get-v1events) | List Events |
 | [`GET /v1/events/stream`](#get-v1eventsstream) | Stream |
@@ -153,18 +94,6 @@ Home
 | [`GET /v1/sandboxes/{sandbox_id}`](#get-v1sandboxessandbox_id) | Get Sandbox |
 | [`PATCH /v1/sandboxes/{sandbox_id}`](#patch-v1sandboxessandbox_id) | Update Sandbox |
 | [`DELETE /v1/sandboxes/{sandbox_id}`](#delete-v1sandboxessandbox_id) | Delete Sandbox |
-| [`GET /v1/sandboxes/{sandbox_id}/agent`](#get-v1sandboxessandbox_idagent) | State |
-| [`POST /v1/sandboxes/{sandbox_id}/agent`](#post-v1sandboxessandbox_idagent) | Chat |
-| [`DELETE /v1/sandboxes/{sandbox_id}/agent`](#delete-v1sandboxessandbox_idagent) | Reset |
-| [`GET /v1/sandboxes/{sandbox_id}/agent/channels`](#get-v1sandboxessandbox_idagentchannels) | List Channels |
-| [`POST /v1/sandboxes/{sandbox_id}/agent/channels`](#post-v1sandboxessandbox_idagentchannels) | Add Channel |
-| [`PATCH /v1/sandboxes/{sandbox_id}/agent/channels/{channel_id}`](#patch-v1sandboxessandbox_idagentchannelschannel_id) | Update Channel |
-| [`DELETE /v1/sandboxes/{sandbox_id}/agent/channels/{channel_id}`](#delete-v1sandboxessandbox_idagentchannelschannel_id) | Remove Channel |
-| [`GET /v1/sandboxes/{sandbox_id}/agent/messages/{message_id}/screenshot`](#get-v1sandboxessandbox_idagentmessagesmessage_idscreenshot) | Screenshot |
-| [`POST /v1/sandboxes/{sandbox_id}/agent/release`](#post-v1sandboxessandbox_idagentrelease) | Release |
-| [`POST /v1/sandboxes/{sandbox_id}/agent/stop`](#post-v1sandboxessandbox_idagentstop) | Stop |
-| [`GET /v1/sandboxes/{sandbox_id}/agent/stream`](#get-v1sandboxessandbox_idagentstream) | Attach |
-| [`POST /v1/sandboxes/{sandbox_id}/agent/takeover`](#post-v1sandboxessandbox_idagenttakeover) | Takeover |
 | [`GET /v1/sandboxes/{sandbox_id}/apps`](#get-v1sandboxessandbox_idapps) | List Apps |
 | [`PUT /v1/sandboxes/{sandbox_id}/apps/{binary}`](#put-v1sandboxessandbox_idappsbinary) | Set App |
 | [`GET /v1/sandboxes/{sandbox_id}/backup`](#get-v1sandboxessandbox_idbackup) | Backup |
@@ -248,7 +177,6 @@ Home
 | [`DELETE /v1/workspaces/{workspace_id}/members/{user_id}`](#delete-v1workspacesworkspace_idmembersuser_id) | Remove Member |
 | [`GET /v1/workspaces/{workspace_id}/quota`](#get-v1workspacesworkspace_idquota) | Get Quota |
 | [`PUT /v1/workspaces/{workspace_id}/quota`](#put-v1workspacesworkspace_idquota) | Set Quota |
-| [`PUT /v1/workspaces/{workspace_id}/trajectories`](#put-v1workspacesworkspace_idtrajectories) | Set Trajectory Settings |
 
 ### `GET /v1/admin/backups`
 
@@ -360,157 +288,6 @@ List Sandboxes
 ### `GET /v1/admin/users`
 
 List Users
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /v1/agent/exports`
-
-List Exports
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /v1/agent/exports`
-
-Create Export
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `run_id` | `string or null` | no |  |
-| `sandbox_id` | `string or null` | no |  |
-| `labels` | `object or null` | no |  |
-| `from` | `string or null` | no |  |
-| `to` | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `202` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /v1/agent/exports/{export_id}`
-
-Get Export
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `export_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /v1/agent/exports/{export_id}/download`
-
-Download
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `export_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /v1/agent/integrations`
-
-Integrations
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /v1/agent/providers`
-
-What a run can be started with, and whether this workspace has a key for each.
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /v1/agent/settings`
-
-Get Settings
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `PUT /v1/agent/settings`
-
-Put Settings
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `provider` | `string` | yes |  |
-| `model` | `string` | yes |  |
-| `api_key` | `string or null` | no |  |
-| `api_key_secret_id` | `string or null` | no |  |
-| `api_base` | `string or null` | no |  |
-| `max_steps` | `integer or null` | no |  |
-| `max_seconds` | `integer or null` | no |  |
-| `max_tokens` | `integer or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `DELETE /v1/agent/settings`
-
-Reset Settings
 
 | Parameter | In | Type | Required | Description |
 | --- | --- | --- | --- | --- |
@@ -678,87 +455,6 @@ Register
 | Response | |
 | --- | --- |
 | `201` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /v1/benchmarks`
-
-List Benchmarks
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /v1/benchmarks`
-
-Create Benchmark
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `suite` | `string or object` | yes |  |
-| `models` | `ModelChoice[]` | yes |  |
-| `parallel` | `integer` | no |  |
-
-| Response | |
-| --- | --- |
-| `202` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /v1/benchmarks/{benchmark_id}`
-
-Get Benchmark
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `benchmark_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /v1/benchmarks/{benchmark_id}/cancel`
-
-Cancel Benchmark
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `benchmark_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `204` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /v1/benchmarks/{benchmark_id}/export`
-
-Export Benchmark
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `benchmark_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
 | `422` | Validation Error |
 
 
@@ -1162,213 +858,6 @@ Update Sandbox
 ### `DELETE /v1/sandboxes/{sandbox_id}`
 
 Delete Sandbox
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /v1/sandboxes/{sandbox_id}/agent`
-
-State
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /v1/sandboxes/{sandbox_id}/agent`
-
-Chat
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `message` | `string` | yes |  |
-| `model` | `string or null` | no |  |
-| `provider` | `string or null` | no |  |
-| `api_base` | `string or null` | no |  |
-| `stream` | `boolean` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `DELETE /v1/sandboxes/{sandbox_id}/agent`
-
-Reset
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `204` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /v1/sandboxes/{sandbox_id}/agent/channels`
-
-List Channels
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /v1/sandboxes/{sandbox_id}/agent/channels`
-
-Add Channel
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `platform` | `string` | yes |  |
-| `external_id` | `string` | yes |  |
-| `allowed_users` | `string[]` | no |  |
-
-| Response | |
-| --- | --- |
-| `201` | Successful Response |
-| `422` | Validation Error |
-
-
-### `PATCH /v1/sandboxes/{sandbox_id}/agent/channels/{channel_id}`
-
-Update Channel
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `channel_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `allowed_users` | `string[]` | yes |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `DELETE /v1/sandboxes/{sandbox_id}/agent/channels/{channel_id}`
-
-Remove Channel
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `channel_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `204` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /v1/sandboxes/{sandbox_id}/agent/messages/{message_id}/screenshot`
-
-Screenshot
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `message_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /v1/sandboxes/{sandbox_id}/agent/release`
-
-Hands the screen back to the agent, which carries on from the screen as the person left it.
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /v1/sandboxes/{sandbox_id}/agent/stop`
-
-Stop
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `204` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /v1/sandboxes/{sandbox_id}/agent/stream`
-
-Attach
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /v1/sandboxes/{sandbox_id}/agent/takeover`
-
-Pauses the running agent before its next action, so a person can use the screen.
 
 | Parameter | In | Type | Required | Description |
 | --- | --- | --- | --- | --- |
@@ -2827,27 +2316,6 @@ Set Quota
 | `422` | Validation Error |
 
 
-### `PUT /v1/workspaces/{workspace_id}/trajectories`
-
-Set Trajectory Settings
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `workspace_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `capture_a11y` | `boolean` | yes |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
 ## Schemas
 
 Request and response bodies, as the API defines them.
@@ -2864,94 +2332,6 @@ Request and response bodies, as the API defines them.
 | `sandbox_id` | `string or null` | yes |  |
 | `metadata` | `object` | yes |  |
 | `created_at` | `string` | yes |  |
-
-
-### `AgentMessageResponse`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `id` | `string` | yes |  |
-| `kind` | `string` | yes |  |
-| `content` | `string` | yes |  |
-| `source` | `string` | yes |  |
-| `run_id` | `string or null` | yes |  |
-| `has_screenshot` | `boolean` | yes |  |
-| `created_at` | `string` | yes |  |
-
-
-### `AgentRequest`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `message` | `string` | yes |  |
-| `model` | `string or null` | no |  |
-| `provider` | `string or null` | no |  |
-| `api_base` | `string or null` | no |  |
-| `stream` | `boolean` | no |  |
-
-
-### `AgentRunResponse`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `id` | `string` | yes |  |
-| `state` | `string` | yes |  |
-| `source` | `string` | yes |  |
-| `attempts` | `integer` | yes |  |
-| `steps` | `integer` | yes |  |
-| `tokens` | `integer` | yes |  |
-| `cost` | `number` | yes |  |
-| `max_steps` | `integer` | yes |  |
-| `max_seconds` | `integer` | yes |  |
-| `max_tokens` | `integer` | yes |  |
-| `elapsed_seconds` | `number` | yes |  |
-| `error` | `string or null` | yes |  |
-| `created_at` | `string` | yes |  |
-| `started_at` | `string or null` | yes |  |
-| `finished_at` | `string or null` | yes |  |
-| `paused_at` | `string or null` | no |  |
-| `paused_by` | `string or null` | no |  |
-| `provider` | `string or null` | no |  |
-| `model` | `string or null` | no |  |
-
-
-### `AgentSettingsRequest`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `provider` | `string` | yes |  |
-| `model` | `string` | yes |  |
-| `api_key` | `string or null` | no |  |
-| `api_key_secret_id` | `string or null` | no |  |
-| `api_base` | `string or null` | no |  |
-| `max_steps` | `integer or null` | no |  |
-| `max_seconds` | `integer or null` | no |  |
-| `max_tokens` | `integer or null` | no |  |
-
-
-### `AgentSettingsResponse`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `provider` | `string or null` | yes |  |
-| `model` | `string` | yes |  |
-| `has_api_key` | `boolean` | yes |  |
-| `api_key_secret` | `SecretRef or null` | yes |  |
-| `api_base` | `string or null` | yes |  |
-| `default_model` | `string` | yes |  |
-| `limits` | `LimitsResponse` | yes |  |
-| `caps` | `LimitsResponse` | yes |  |
-| `providers` | `ProviderResponse[]` | yes |  |
-
-
-### `AgentStateResponse`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `running` | `boolean` | yes |  |
-| `model` | `string` | yes |  |
-| `run` | `AgentRunResponse or null` | yes |  |
-| `messages` | `AgentMessageResponse[]` | yes |  |
 
 
 ### `ApiKeyRequest`
@@ -3062,76 +2442,6 @@ Request and response bodies, as the API defines them.
 | `progress` | `number or null` | no |  |
 | `message` | `string or null` | no |  |
 | `ready` | `boolean` | no |  |
-
-
-### `BenchmarkDetailResponse`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `id` | `string` | yes |  |
-| `name` | `string` | yes |  |
-| `state` | `string` | yes |  |
-| `parallel` | `integer` | yes |  |
-| `tasks` | `integer` | yes |  |
-| `models` | `string[]` | yes |  |
-| `error` | `string or null` | yes |  |
-| `created_at` | `string` | yes |  |
-| `started_at` | `string or null` | yes |  |
-| `finished_at` | `string or null` | yes |  |
-| `summary` | `ModelSummary[]` | yes |  |
-| `results` | `ResultResponse[]` | yes |  |
-
-
-### `BenchmarkRequest`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `suite` | `string or object` | yes |  |
-| `models` | `ModelChoice[]` | yes |  |
-| `parallel` | `integer` | no |  |
-
-
-### `BenchmarkResponse`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `id` | `string` | yes |  |
-| `name` | `string` | yes |  |
-| `state` | `string` | yes |  |
-| `parallel` | `integer` | yes |  |
-| `tasks` | `integer` | yes |  |
-| `models` | `string[]` | yes |  |
-| `error` | `string or null` | yes |  |
-| `created_at` | `string` | yes |  |
-| `started_at` | `string or null` | yes |  |
-| `finished_at` | `string or null` | yes |  |
-
-
-### `ChannelRequest`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `platform` | `string` | yes |  |
-| `external_id` | `string` | yes |  |
-| `allowed_users` | `string[]` | no |  |
-
-
-### `ChannelResponse`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `id` | `string` | yes |  |
-| `platform` | `string` | yes |  |
-| `external_id` | `string` | yes |  |
-| `allowed_users` | `string[]` | yes |  |
-| `created_at` | `string` | yes |  |
-
-
-### `ChannelUpdate`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `allowed_users` | `string[]` | yes |  |
 
 
 ### `CreateSandboxRequest`
@@ -3260,8 +2570,6 @@ Request and response bodies, as the API defines them.
 | --- | --- | --- | --- |
 | `mode` | `string` | yes |  |
 | `sandbox_status` | `string` | yes |  |
-| `agent` | `string` | yes |  |
-| `paused_by` | `string or null` | yes |  |
 
 
 ### `EventPage`
@@ -3280,7 +2588,6 @@ Request and response bodies, as the API defines them.
 | `seq` | `integer` | yes |  |
 | `type` | `string` | yes |  |
 | `sandbox_id` | `string or null` | yes |  |
-| `run_id` | `string or null` | yes |  |
 | `data` | `object` | yes |  |
 | `created_at` | `string` | yes |  |
 
@@ -3302,31 +2609,6 @@ Request and response bodies, as the API defines them.
 | `stdout` | `string` | yes |  |
 | `stderr` | `string` | yes |  |
 | `timed_out` | `boolean` | no |  |
-
-
-### `ExportRequest`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `run_id` | `string or null` | no |  |
-| `sandbox_id` | `string or null` | no |  |
-| `labels` | `object or null` | no |  |
-| `from` | `string or null` | no |  |
-| `to` | `string or null` | no |  |
-
-
-### `ExportResponse`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `id` | `string` | yes |  |
-| `state` | `string` | yes |  |
-| `runs` | `integer` | yes |  |
-| `steps` | `integer` | yes |  |
-| `size_bytes` | `integer` | yes |  |
-| `error` | `string or null` | yes |  |
-| `created_at` | `string` | yes |  |
-| `finished_at` | `string or null` | yes |  |
 
 
 ### `HTTPValidationError`
@@ -3358,15 +2640,6 @@ Request and response bodies, as the API defines them.
 | `command` | `string` | yes |  |
 | `public_key` | `string` | yes |  |
 | `requirements` | `string` | yes |  |
-
-
-### `IntegrationResponse`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `platform` | `string` | yes |  |
-| `configured` | `boolean` | yes |  |
-| `webhook_path` | `string or null` | yes |  |
 
 
 ### `InvitationRequest`
@@ -3488,15 +2761,6 @@ Request and response bodies, as the API defines them.
 | `max_lifetime_minutes` | `integer or null` | no |  |
 
 
-### `LimitsResponse`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `max_steps` | `integer` | yes |  |
-| `max_seconds` | `integer` | yes |  |
-| `max_tokens` | `integer` | yes |  |
-
-
 ### `MemberResponse`
 
 | Field | Type | Required | Description |
@@ -3507,27 +2771,6 @@ Request and response bodies, as the API defines them.
 | `role` | `string` | yes |  |
 | `status` | `string` | yes |  |
 | `joined_at` | `string or null` | yes |  |
-
-
-### `ModelChoice`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `provider` | `string` | yes |  |
-| `model` | `string or null` | no |  |
-
-
-### `ModelSummary`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `model` | `string` | yes |  |
-| `tasks` | `integer` | yes |  |
-| `passed` | `integer` | yes |  |
-| `pass_rate` | `number` | yes |  |
-| `mean_steps` | `number` | yes |  |
-| `mean_cost` | `number` | yes |  |
-| `mean_seconds` | `number` | yes |  |
 
 
 ### `MonitoringResponse`
@@ -3749,32 +2992,6 @@ The server's zoo-node and what it last reported.
 | `created_at` | `string` | yes |  |
 
 
-### `ProviderResponse`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `id` | `string` | yes |  |
-| `label` | `string` | yes |  |
-| `default_model` | `string` | yes |  |
-| `default_base` | `string or null` | yes |  |
-| `needs_key` | `boolean` | yes |  |
-| `server_key` | `boolean` | yes |  |
-
-
-### `ProviderStatusResponse`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `id` | `string` | yes |  |
-| `label` | `string` | yes |  |
-| `default_model` | `string` | yes |  |
-| `default_base` | `string or null` | yes |  |
-| `needs_key` | `boolean` | yes |  |
-| `server_key` | `boolean` | yes |  |
-| `has_key` | `boolean` | yes |  |
-| `key_secret` | `string or null` | yes |  |
-
-
 ### `QuotaRequest`
 
 | Field | Type | Required | Description |
@@ -3808,22 +3025,6 @@ The server's zoo-node and what it last reported.
 | `status` | `string` | yes |  |
 | `due_at` | `string` | yes |  |
 | `message` | `string` | yes |  |
-
-
-### `ResultResponse`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `task_id` | `string` | yes |  |
-| `model` | `string` | yes |  |
-| `passed` | `boolean or null` | yes |  |
-| `score` | `number or null` | yes |  |
-| `steps` | `integer` | yes |  |
-| `tokens` | `integer` | yes |  |
-| `cost` | `number` | yes |  |
-| `seconds` | `number` | yes |  |
-| `run_id` | `string or null` | yes |  |
-| `error` | `string or null` | yes |  |
 
 
 ### `RoleRequest`
@@ -3885,14 +3086,6 @@ The server's zoo-node and what it last reported.
 | `network_rx` | `integer` | yes |  |
 | `network_tx` | `integer` | yes |  |
 | `pids` | `integer` | yes |  |
-
-
-### `SecretRef`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `id` | `string` | yes |  |
-| `name` | `string` | yes |  |
 
 
 ### `SecretRequest`
@@ -3993,13 +3186,6 @@ The server's zoo-node and what it last reported.
 | `completed_at` | `string or null` | yes |  |
 
 
-### `TrajectorySettingsRequest`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `capture_a11y` | `boolean` | yes |  |
-
-
 ### `UpdateSandboxRequest`
 
 | Field | Type | Required | Description |
@@ -4075,7 +3261,6 @@ The server's zoo-node and what it last reported.
 | `rotated_at` | `string or null` | yes |  |
 | `rotation_due_at` | `string or null` | yes |  |
 | `status` | `string` | yes |  |
-| `used_by_agent` | `boolean` | yes |  |
 | `sandboxes` | `SandboxRef[]` | yes |  |
 
 
@@ -4160,7 +3345,6 @@ The server's zoo-node and what it last reported.
 | `created_at` | `string` | yes |  |
 | `default_idle_timeout_minutes` | `integer or null` | yes |  |
 | `default_max_lifetime_minutes` | `integer or null` | yes |  |
-| `capture_a11y` | `boolean` | no |  |
 
 
 ### `server__auth_api__TokenResponse`

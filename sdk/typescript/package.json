@@ -11,11 +11,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
-    },
-    "./ai": {
-      "types": "./dist/ai.d.ts",
-      "import": "./dist/ai.js",
-      "default": "./dist/ai.js"
     }
   },
   "files": [
@@ -30,22 +25,8 @@
   "engines": {
     "node": ">=20.19"
   },
-  "peerDependencies": {
-    "ai": ">=5",
-    "zod": ">=3.25"
-  },
-  "peerDependenciesMeta": {
-    "ai": {
-      "optional": true
-    },
-    "zod": {
-      "optional": true
-    }
-  },
   "devDependencies": {
-    "ai": "^5.0.0",
     "openapi-typescript": "^7.8.0",
-    "typescript": "^5.8.3",
-    "zod": "^3.25.0"
+    "typescript": "^5.8.3"
   }
 }

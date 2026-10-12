@@ -5,16 +5,13 @@ description: Versions, errors, idempotency keys, pagination and events — how e
 
 ## Versions
 
-The API is served under `/v1`: `https://zoo.example.com/v1/sandboxes`. The same routes without the prefix still work
-but are deprecated; they answer with `Deprecation: true` and `Link: </v1/...>; rel="successor-version"`.
+The API is served under `/v1`: `https://zoo.example.com/v1/sandboxes`.
 
 Within a version, changes only add: new endpoints, new optional fields, new error codes. Anything else ships as a new
-version. A version stays supported for **12 months** after its successor ships; removals are announced in the
-changelog and with `Deprecation` and `Sunset` headers before they happen. Clients should ignore fields they don't
-know.
+version. Clients should ignore fields they don't know.
 
-Health checks (`/healthz`, `/readyz`), the embed page (`/embed/...`) and MCP (`/mcp/`, also at `/v1/mcp/`) aren't
-versioned.
+Health checks (`/healthz`, `/readyz`), the embed page (`/embed/...`), the guest connection (`/guest/connect`) and MCP
+(`/mcp/`) aren't versioned.
 
 ## Errors
 
@@ -36,7 +33,7 @@ second sandbox.
 
 Keys belong to the caller (its credentials and workspace). Responses with a 5xx status, streams and binary responses
 aren't kept, so retrying those runs the request again. The SDKs add a key to every create
-(`POST /v1/sandboxes`, snapshots, viewer links, webhooks, API keys, exports, benchmarks) automatically.
+(`POST /v1/sandboxes`, snapshots, viewer links, webhooks, API keys) automatically.
 
 ## Pagination
 

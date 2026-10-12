@@ -449,19 +449,13 @@ DESCRIPTIONS = {
     "ZOO_KUBERNETES_CONTEXT": "Kubeconfig context to use in-cluster-less setups.",
     "ZOO_KUBERNETES_START_TIMEOUT": "Seconds to wait for a sandbox pod to start.",
     "ZOO_KUBERNETES_HELPER_IMAGE": "Helper image for snapshot and move jobs.",
-    "ZOO_AGENT_MODEL": "The agent's model for workspaces that haven't picked one (CUA model string).",
-    "ZOO_AGENT_MAX_STEPS": "Cap on each agent task's actions. Workspaces can set lower limits.",
-    "ZOO_AGENT_MAX_SECONDS": "Cap on each agent task's wall-clock seconds.",
-    "ZOO_AGENT_MAX_TOKENS": "Cap on each agent task's model tokens.",
     "ZOO_EMBED_ORIGINS": "Origins (space-separated) that may put a viewer link's page in an iframe; none when unset.",
     "ZOO_DOCS_URL": "Base of the errors page that error responses link to as `docs_url` (`<url>#<code>`).",
     "ZOO_URL": "The API URL the Python SDK and the zoo CLI use; http://localhost:8000 by default.",
     "ZOO_MAX_VIEWER_LINK_HOURS": "Longest a viewer link may last.",
     "ZOO_EVENT_RETENTION_DAYS": "How long events (`GET /events`, webhooks) and their deliveries are kept.",
-    "ZOO_EXPORT_RETENTION_DAYS": "How long trajectory exports are kept.",
     "ZOO_WEBHOOK_ALLOW_PRIVATE": "`1` lets webhooks reach private addresses.",
     "ZOO_WEBHOOK_BACKOFF_SECONDS": "Seconds between a failed webhook delivery's retries, comma-separated; it fails after the last.",
-    "ZOO_AGENT_PARALLEL": "Agent tasks one worker process runs at once.",
     "ZOO_NETWORK": "Docker network shared by the API and sandboxes. Compose sets it to `zoo`.",
     "ZOO_RUNTIME": "Docker runtime for sandboxes: `kata` (default) or `runc`.",
     "ZOO_GUEST_URL": "Websocket URL Linux sandboxes on the API's docker host dial to reach the API.",
@@ -493,14 +487,6 @@ DESCRIPTIONS = {
     "HOST": "API server bind address. The API image sets `0.0.0.0`.",
     "PORT": "API server port.",
     "RELOAD": "Dev autoreload. The API image sets `0`.",
-    "SLACK_BOT_TOKEN": "Slack bot token for chat channels.",
-    "SLACK_SIGNING_SECRET": "Verifies Slack webhook signatures.",
-    "DISCORD_BOT_TOKEN": "Discord bot token for chat channels.",
-    "WHATSAPP_TOKEN": "WhatsApp Cloud API token.",
-    "WHATSAPP_PHONE_NUMBER_ID": "WhatsApp phone number id.",
-    "WHATSAPP_VERIFY_TOKEN": "WhatsApp webhook verification token.",
-    "WHATSAPP_APP_SECRET": "Verifies WhatsApp webhook signatures.",
-    "ANTHROPIC_API_KEY": "Model key the built-in agent uses when a workspace hasn't set its own.",
     "VAULT_ADDR": "HashiCorp Vault address, for the `vault:` KMS.",
     "VAULT_TOKEN": "HashiCorp Vault token, for the `vault:` KMS.",
     "VAULT_NAMESPACE": "HashiCorp Vault namespace, for the `vault:` KMS.",
@@ -561,16 +547,6 @@ def gen_config() -> None:
         if default.startswith("os."):  # computed default
             default = "computed"
         out.append(f"| `{name}` | `{esc(default)}` | {esc(DESCRIPTIONS.get(name, 'Internal setting.'))} |")
-    out += [
-        "",
-        "## Also on the compose stack",
-        "",
-        "`ZOO_AGENT_MODEL` and `ANTHROPIC_API_KEY` feed the built-in agent; `SLACK_BOT_TOKEN`,",
-        "`SLACK_SIGNING_SECRET`, `DISCORD_BOT_TOKEN`, `WHATSAPP_TOKEN`,",
-        "`WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN` and `WHATSAPP_APP_SECRET` enable",
-        "the chat channels. See the [chat channels guide](/docs/guides/chat-channels/) and",
-        "[observability](/docs/guides/domain-https-backups/#observability).",
-    ]
     if missing_desc:
         out += ["", f"Undocumented in this table: {', '.join(f'`{m}`' for m in missing_desc)}.", ""]
     write("configuration.md", "\n".join(out) + "\n")

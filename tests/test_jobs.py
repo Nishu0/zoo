@@ -5,7 +5,7 @@ import pytest
 
 from db.connection import db_manager
 from server import docker, health
-from tests.conftest import member, present, runtime_of, sql
+from tests.conftest import runtime_of, sql
 
 
 @pytest.fixture
@@ -206,8 +206,19 @@ def test_health_probes(client, alice, monkeypatch):
     monkeypatch.setattr(health.docker, "docker_client", SimpleNamespace(ping=lambda: True))
     assert client.get("/healthz").json() == {"status": "ok"}
     ready = client.get("/readyz")
+    assert ready.status_code == 503 and ready.json()["checks"]["api_url"].startswith("ZOO_API_URL is not set")
+    monkeypatch.setenv("ZOO_API_URL", "http://zoo.test")
+    ready = client.get("/readyz")
     assert ready.status_code == 200
-    assert ready.json()["checks"] == {"database": "ok", "object_store": "ok", "docker": "ok"}
+    assert set(ready.json()["checks"].values()) == {"ok"}
+    assert set(ready.json()["checks"]) == {
+        "database",
+        "object_store",
+        "jwt_secret",
+        "secrets_key",
+        "api_url",
+        "docker",
+    }
 
     from tests.test_sandboxes import add_server
 
@@ -220,37 +231,6 @@ def test_health_probes(client, alice, monkeypatch):
     ready = client.get("/readyz")
     assert ready.status_code == 503
     assert ready.json()["checks"]["server:box"] == "No route to host"
-
-
-def test_agent_runs_are_handed_back_on_shutdown(client, alice, sandbox, zoo, monkeypatch):
-    class Hanging:
-        def __init__(self, **kwargs):
-            pass
-
-        async def run(self, messages):
-            await asyncio.Event().wait()
-            yield {}
-
-    monkeypatch.setattr("server.agent_api.ComputerAgent", Hanging)
-    monkeypatch.setattr(zoo.agent_api, "closing", False)
-    user = member()
-
-    async def scenario():
-        zoo.agent_api.start(user, sandbox["id"], "open firefox", "web")
-        await asyncio.sleep(0)
-        await zoo.agent_api.shutdown(timeout=0.05)
-
-    asyncio.run(scenario())
-    with db_manager.session() as db:
-        messages = [(m.kind, m.content) for m in db.list_agent_messages(sandbox_id=sandbox["id"])]
-        run = present(db.get_latest_agent_run(sandbox_id=sandbox["id"]))
-    assert messages == [
-        ("user", "open firefox"),
-        ("status", "Paused for a server restart; it picks up again when the server is back."),
-    ]
-    # queued again, without using up an attempt, for the next worker to resume
-    assert run.state == "queued" and run.attempts == 0 and run.worker is None
-    assert zoo.agent_api.runs == {}
 
 
 def test_the_worker_loop_runs_queued_jobs(client, alice, queued):

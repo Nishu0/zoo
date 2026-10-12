@@ -15,6 +15,7 @@ WORK = Path(tempfile.mkdtemp(prefix="zoo-tests-"))
 ADMIN_EMAIL = "admin@example.com"
 os.environ.update(
     JWT_SECRET="test-jwt-secret-that-is-at-least-32-bytes",
+    ZOO_SECRETS_KEY="test-secrets-key",
     # object storage is faked in memory (STORE below); presigning still needs a bucket to sign for
     ZOO_OBJECT_STORE="s3://zoo-test",
     AWS_ACCESS_KEY_ID="test",
@@ -28,12 +29,8 @@ os.environ.update(
     ZOO_NODE_DIST=str(WORK / "node-dist"),
 )
 UNSET = (
-    "ZOO_SECRETS_KEY",
     "ZOO_SECRETS_KEY_PREVIOUS",
     "OTEL_EXPORTER_OTLP_ENDPOINT",
-    "SLACK_BOT_TOKEN",
-    "DISCORD_BOT_TOKEN",
-    "WHATSAPP_TOKEN",
     "ZOO_DOMAIN",
     "ZOO_PUBLIC_IP",
     "ZOO_GUEST_URL",

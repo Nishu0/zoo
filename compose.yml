@@ -56,26 +56,11 @@ x-zoo: &zoo
     ZOO_MACOS_USER: ${ZOO_MACOS_USER:-admin}
     ZOO_WINDOWS_BASE: ${ZOO_WINDOWS_BASE:-zoo-windows-base}
     ZOO_WINDOWS_MAX_VMS: ${ZOO_WINDOWS_MAX_VMS:-4}
-    ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-    OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-    ZOO_AGENT_MODEL: ${ZOO_AGENT_MODEL:-anthropic/claude-sonnet-5-5}
-    ZOO_AGENT_MAX_STEPS: ${ZOO_AGENT_MAX_STEPS:-100}
-    ZOO_AGENT_MAX_SECONDS: ${ZOO_AGENT_MAX_SECONDS:-1800}
-    ZOO_AGENT_MAX_TOKENS: ${ZOO_AGENT_MAX_TOKENS:-2000000}
-    XAI_API_KEY: ${XAI_API_KEY:-}
     # origins allowed to put a sandbox's viewer link in an iframe (server/viewer_api.py); empty: none
     ZOO_EMBED_ORIGINS: ${ZOO_EMBED_ORIGINS:-}
     ZOO_MAX_VIEWER_LINK_HOURS: ${ZOO_MAX_VIEWER_LINK_HOURS:-24}
     ZOO_EVENT_RETENTION_DAYS: ${ZOO_EVENT_RETENTION_DAYS:-7}
     ZOO_WEBHOOK_ALLOW_PRIVATE: ${ZOO_WEBHOOK_ALLOW_PRIVATE:-}
-    ZOO_EXPORT_RETENTION_DAYS: ${ZOO_EXPORT_RETENTION_DAYS:-7}
-    SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
-    SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
-    DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
-    WHATSAPP_TOKEN: ${WHATSAPP_TOKEN:-}
-    WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
-    WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-}
-    WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
   healthcheck:
     test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
     interval: 10s
@@ -169,7 +154,7 @@ services:
     ports:
       - "8000:8000"
 
-  # lifecycle jobs, agent runs, the warm pool and the Discord bot; scale with `--scale worker=N`
+  # lifecycle jobs and the warm pool; scale with `--scale worker=N`
   worker:
     <<: *zoo
     environment:

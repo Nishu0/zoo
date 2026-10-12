@@ -19,5 +19,3 @@ Every call has a timeout (30 s unless it passes its own) and is retried with bac
 failures and 429 always; 5xx and timeouts for reads and for creates, which carry an `Idempotency-Key`. Errors are
 `ZooError` subclasses with the API's `code`, `hint` and `docsUrl`. Request and response types for every endpoint are
 exported as `paths` and `components`, generated from the API's OpenAPI schema (`bun run generate`).
-
-Vercel AI SDK tools: `import { zooTools } from "@zoo/sdk/ai"`.

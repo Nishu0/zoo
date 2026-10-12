@@ -1,6 +1,7 @@
 import pytest
 
 from server import guest, windows, windows_tools
+from server.errors import ZooError
 
 
 class Agent:
@@ -37,10 +38,10 @@ def test_everything_goes_through_the_guest_admin_changes_too(monkeypatch):
 
 def test_without_a_guest_tools_fail_clearly(monkeypatch):
     routed(monkeypatch, None)
-    with pytest.raises(RuntimeError, match="guest agent isn't connected"):
+    with pytest.raises(ZooError, match="guest agent is not connected"):
         windows.guest("windows:srv:zoo-sb", "Get-Date")
     routed(monkeypatch, Agent(services=("exec",)))
-    with pytest.raises(RuntimeError, match="no windows service"):
+    with pytest.raises(ZooError, match="guest agent is not connected"):
         windows_tools.WinWindows.windows_list("windows:srv:zoo-sb")
 
 

@@ -4,7 +4,6 @@ is gone and grouped by its labels (a copy of them stays in usage_labels).
 - cpu_minutes, memory_mb_minutes: what running sandboxes are allocated (their size, server/sizes.py), not what they
   use; sampled once a minute by the worker that holds the metering lease, so a minute no worker was up isn't counted
 - storage_gb_hours: each sandbox's disk and snapshots, and the workspace's profiles (under sandbox ''), once an hour
-- agent_steps, agent_tokens, agent_cost: added as agent runs record them (server/agent_api.py)
 
 GET /usage reports them by sandbox, day or a label's value; /usage/export as CSV. Admins see the workspace's; an
 API key with a label selector sees its own sandboxes'."""
@@ -15,7 +14,7 @@ import io
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -28,7 +27,7 @@ from server.jobs import stamp
 from utils.time import to_stamp
 
 METER_SECONDS = 60
-METRICS = ("cpu_minutes", "memory_mb_minutes", "storage_gb_hours", "agent_steps", "agent_tokens", "agent_cost")
+METRICS = ("cpu_minutes", "memory_mb_minutes", "storage_gb_hours")
 # a report spans at most this
 MAX_DAYS = 366
 
@@ -40,13 +39,6 @@ def add(db: Querier, workspace_id: str, sandbox_id: str, metric: str, quantity: 
                 workspace_id=workspace_id, sandbox_id=sandbox_id, metric=metric, quantity=quantity, at=at or stamp()
             )
         )
-
-
-def agent(db: Querier, workspace_id: str, sandbox_id: str, steps: int, tokens: int, cost: float):
-    """What an agent run used since it last recorded its usage."""
-    add(db, workspace_id, sandbox_id, "agent_steps", steps)
-    add(db, workspace_id, sandbox_id, "agent_tokens", tokens)
-    add(db, workspace_id, sandbox_id, "agent_cost", cost)
 
 
 def meter():
@@ -117,7 +109,7 @@ def report(
 
 
 class UsageApi:
-    def __init__(self, app: FastAPI, auth: AuthApi):
+    def __init__(self, app: APIRouter, auth: AuthApi):
         self.app = app
         self.auth = auth
         self._register_routes()

@@ -62,7 +62,7 @@ const PREFIX = "/v1"
 const IDEMPOTENT = new Set(["GET", "HEAD", "PUT", "DELETE", "OPTIONS"])
 // POSTs that create something get an Idempotency-Key, so retrying one never creates two
 const CREATES =
-  /^\/(sandboxes|sandboxes\/[^/]+\/snapshots|sandboxes\/[^/]+\/viewer-links|webhooks|api-keys|agent\/exports|benchmarks)$/
+  /^\/(sandboxes|sandboxes\/[^/]+\/snapshots|sandboxes\/[^/]+\/viewer-links|webhooks|api-keys)$/
 const SETTLING = new Set(["pending", "provisioning"])
 
 // Node, Bun and Deno have process.env; browsers don't
@@ -404,30 +404,6 @@ export class Sandbox implements AsyncDisposable {
       body: typeof data === "string" ? data : new Blob([new Uint8Array(data)]),
       timeout: 300000,
     })
-  }
-
-  /** Runs the server-side computer-use agent and yields its events until it finishes. */
-  async *ask(
-    message: string,
-    options: { model?: string; provider?: string; signal?: AbortSignal } = {}
-  ): AsyncGenerator<Record<string, unknown>> {
-    for await (const [, data] of this.client.stream("POST", this.path("/agent"), {
-      json: { message, model: options.model, provider: options.provider, stream: true },
-      signal: options.signal,
-    }))
-      yield data as Record<string, unknown>
-  }
-
-  async stopAgent() {
-    await this.client.request("POST", this.path("/agent/stop"))
-  }
-
-  async takeover() {
-    return this.client.json("POST", this.path("/agent/takeover"))
-  }
-
-  async release() {
-    return this.client.json("POST", this.path("/agent/release"))
   }
 
   /** A link to the live screen for someone without a Zoo account; `expiresIn` is in minutes. */

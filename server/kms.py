@@ -38,10 +38,9 @@ def _key(material: str) -> Fernet:
 
 
 def local_fernet() -> MultiFernet:
-    """ZOO_SECRETS_KEY encrypts; older keys (and the JWT_SECRET fallback) only decrypt until rotate() rewraps."""
-    keys = [os.environ.get("ZOO_SECRETS_KEY") or os.environ["JWT_SECRET"]]
+    """ZOO_SECRETS_KEY encrypts; older keys only decrypt until rotate() rewraps."""
+    keys = [os.environ["ZOO_SECRETS_KEY"]]
     keys += [k for k in os.environ.get("ZOO_SECRETS_KEY_PREVIOUS", "").split(",") if k]
-    keys.append(os.environ["JWT_SECRET"])
     return MultiFernet([_key(k) for k in dict.fromkeys(keys)])
 
 

@@ -7,7 +7,7 @@ import uuid
 from typing import Literal
 from urllib.parse import urlparse
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -161,7 +161,7 @@ def migrate(server: Server, user: Member, url: str) -> bool:
 
 
 class NodesApi:
-    def __init__(self, app: FastAPI, auth: AuthApi):
+    def __init__(self, app: APIRouter, auth: AuthApi):
         self.app = app
         self.auth = auth
         self._register_routes()

@@ -44,12 +44,9 @@ func dropTo(name string) error {
 
 func hideWindow(cmd *exec.Cmd) {}
 
-// secretsFile holds the sandbox's secrets when it was claimed from the warm pool (pooled containers boot before they
-// have an owner, so their secrets aren't in the container's environment) and every secret change made while it runs.
+// secretsFile holds the sandbox's secrets, written by the API at boot and on every change made while it runs; the
+// container's own environment has none.
 var secretsFile = "/run/zoo/env.json"
-
-// unsetFile lists secrets removed while the sandbox runs that are still in the container's environment from boot.
-var unsetFile = "/run/zoo/unset.json"
 
 // readJSON reads a file the API may be rewriting this moment: a read that catches it half-written is retried.
 func readJSON(path string, into any) bool {
@@ -77,13 +74,4 @@ func secretEnv() []string {
 		env = append(env, k+"="+v)
 	}
 	return env
-}
-
-// baseEnv is the guest's own environment without the secrets that were removed since the sandbox booted.
-func baseEnv() []string {
-	var unset []string
-	if !readJSON(unsetFile, &unset) || len(unset) == 0 {
-		return os.Environ()
-	}
-	return withoutNames(os.Environ(), unset)
 }

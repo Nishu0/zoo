@@ -4,8 +4,6 @@ Database triggers (db/migrations, zoo_event) write each event in the transaction
 the zoo_event channel with the workspace's id:
 
 - sandbox.state: a sandbox's status changed ({status, previous, error})
-- run.started, run.step ({message_id, action}), run.finished ({state, error, steps, tokens, cost})
-- takeover.started, takeover.ended ({by}: a user id, or link:<viewer link id>)
 
 GET /events pages through them; GET /events/stream follows them as server-sent events, each with its seq as the
 event id, so a client that reconnects with Last-Event-ID gets what it missed. Webhooks (server/webhooks.py) get the
@@ -19,7 +17,7 @@ from collections.abc import AsyncIterator
 from datetime import datetime, timedelta
 
 import psycopg
-from fastapi import Depends, FastAPI, Header, Query
+from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -46,7 +44,6 @@ class EventResponse(BaseModel):
     seq: int
     type: str
     sandbox_id: str | None
-    run_id: str | None
     data: dict
     created_at: str
 
@@ -63,7 +60,6 @@ def event_response(event: Event) -> EventResponse:
         seq=event.seq,
         type=event.type,
         sandbox_id=event.sandbox_id,
-        run_id=event.run_id,
         data=json.loads(event.data),
         created_at=to_stamp(event.created_at),
     )
@@ -160,7 +156,7 @@ async def follow(user: Member, after: int, sandbox_id: str | None, type: str | N
 
 
 class EventsApi:
-    def __init__(self, app: FastAPI, auth: AuthApi):
+    def __init__(self, app: APIRouter, auth: AuthApi):
         self.logger = logger
         self.app = app
         self.auth = auth

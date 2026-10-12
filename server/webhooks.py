@@ -26,7 +26,7 @@ import uuid
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from db.connection import db_manager
@@ -51,11 +51,6 @@ POLL_SECONDS = 2
 SECRET_PREFIX = "whsec_"
 EVENT_TYPES = {
     "sandbox.state",
-    "run.started",
-    "run.step",
-    "run.finished",
-    "takeover.started",
-    "takeover.ended",
 }
 
 
@@ -142,7 +137,7 @@ def webhook_response(row: Webhook) -> WebhookResponse:
 
 
 class WebhooksApi:
-    def __init__(self, app: FastAPI, auth: AuthApi):
+    def __init__(self, app: APIRouter, auth: AuthApi):
         self.logger = logger
         self.app = app
         self.auth = auth

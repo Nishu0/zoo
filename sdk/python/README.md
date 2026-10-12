@@ -32,5 +32,3 @@ Every call has a timeout (30 s unless the call passes `timeout=`) and is retried
 safe: connection failures and 429 always; 5xx and timeouts for reads and for creates, which the SDK sends with an
 `Idempotency-Key`. Errors are `ZooError` subclasses (`NotFoundError`, `ConflictError`, `RateLimitError`, …) with the
 API's `code`, `message`, `hint` and `docs_url`.
-
-Agent frameworks: `zoo_sdk.adapters.claude`, `zoo_sdk.adapters.openai_agents`, `zoo_sdk.adapters.langgraph`.

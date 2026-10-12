@@ -11,6 +11,7 @@ from typing import Any, Literal
 
 import websockets
 from fastapi import (
+    APIRouter,
     Depends,
     FastAPI,
     HTTPException,
@@ -25,7 +26,6 @@ from pydantic import BaseModel, Field, field_validator
 from db.connection import db_manager
 from db.generated.models import Job, Sandbox, SandboxImageVersion
 from db.generated.query import (
-    CreateAgentSessionParams,
     CreateSandboxImageParams,
     CreateSandboxImageVersionParams,
     CreateSandboxParams,
@@ -77,7 +77,9 @@ from server.runtime import (
 )
 from server.schema import ExecRequest, ExecResponse
 from server.security import (
+    VNC_PASSWORD,
     audit,
+    decrypt,
     decrypt_bytes,
     enforce,
     ensure_vnc_password,
@@ -90,7 +92,6 @@ from server.security import (
 )
 from server.telemetry import tracer
 from server.tools import FileSystem, ShellTools
-from server.vault_sync import remember_booted
 from server.vnc import NO_AUTH, VERSION, Buffered, Gate, authenticate_async
 from utils.time import to_stamp
 
@@ -378,9 +379,11 @@ def to_response(
 
 
 class SandboxApi:
-    def __init__(self, app: FastAPI, auth: AuthApi):
+    def __init__(self, app: APIRouter, auth: AuthApi, unversioned: FastAPI):
         self.logger = logger
         self.app = app
+        # routes that are not part of the versioned API (/guest/connect)
+        self.unversioned = unversioned
         self.auth = auth
         self.jobs = Jobs()
         # macOS sandbox id -> when it was first found hung, and when its screen was last checked
@@ -763,7 +766,7 @@ class SandboxApi:
             return VncTicketResponse(ticket=tickets.issue(user.id, f"sandbox:{sandbox.id}"))
 
         self.app.websocket("/sandboxes/{sandbox_id}/ws")(self.proxy)
-        self.app.websocket("/guest/connect")(hub.serve)
+        self.unversioned.websocket("/guest/connect")(hub.serve)
 
         @self.app.post("/sandboxes/{sandbox_id}/terminal-ticket", response_model=VncTicketResponse)
         def terminal_ticket(
@@ -1022,7 +1025,9 @@ class SandboxApi:
             if version is None:
                 raise RuntimeError("the sandbox's image version is missing")
             default = version.version == IMAGE_VERSION and db.get_sandbox_image(id=version.image_id).slug == IMAGE_SLUG
-            env = secrets = secret_env(sandbox, db)
+            secrets = secret_env(sandbox, db)
+            # VMs source their secrets from ~/.zoo/env; containers read them from env.json, written once up
+            env = secrets if sandbox.kind in VMS else {}
             server = self.server_of(sandbox, db)
             desktop = sandbox.kind != "code"
             if desktop and sandbox.kind not in VMS:
@@ -1036,9 +1041,9 @@ class SandboxApi:
             else:
                 image = version.image_uri
             profiles = [db.get_profile(id=p) for p in json.loads(sandbox.config or "{}").get("profiles", [])]
-            remember_secrets(sandbox_id, [*env.values(), vnc_password(sandbox)])
-            if sandbox.kind not in VMS:
-                remember_booted(db, sandbox_id, secrets)
+            stored = json.loads(sandbox.config or "{}").get(VNC_PASSWORD)
+            known = [*{**secrets, **env}.values()]
+            remember_secrets(sandbox_id, [*known, decrypt(stored)] if stored else known)
         if sandbox.kind in VMS:
             admin = bool(json.loads(sandbox.config or "{}").get("admin"))
             return self.boot_vm(job, sandbox.kind, server, env, profiles, admin)
@@ -1054,6 +1059,8 @@ class SandboxApi:
         access_url = TUNNEL_URL if tunneled else f"ws://{host}:{port}/websockify" if desktop else None
         if not self.record_runtime(job, container_id, host, access_url):
             return
+        if secrets:
+            write_secrets(container_id, secrets)
         for profile in profiles:
             if profile is not None:
                 self.apply_profile(container_id, profile)
@@ -1364,19 +1371,14 @@ class SandboxApi:
         self.viewers.add(task)
         task.add_done_callback(self.viewers.discard)
 
-    def watch_gate(
-        self, websocket: WebSocket, sandbox_id: str, gate: Gate, actor: str, live: Callable[[], bool] | None
-    ):
-        """Every second: a viewer that may act and did takes the screen over from a running agent. Every
-        LINK_CHECK_SECONDS: a viewer whose link was revoked or ran out is disconnected."""
+    def watch_gate(self, websocket: WebSocket, sandbox_id: str, live: Callable[[], bool] | None):
+        """Every LINK_CHECK_SECONDS: a viewer whose link was revoked or ran out is disconnected."""
 
         async def watch():
             checked = time.monotonic()
             while websocket.client_state.name == "CONNECTED":
                 await asyncio.sleep(1)
                 with contextlib.suppress(Exception):
-                    if not gate.view_only and gate.take_action():
-                        await asyncio.to_thread(self.take_over, sandbox_id, actor)
                     if live is not None and time.monotonic() - checked >= LINK_CHECK_SECONDS:
                         checked = time.monotonic()
                         if not await asyncio.to_thread(live):
@@ -1386,14 +1388,6 @@ class SandboxApi:
         task = asyncio.create_task(watch())
         self.viewers.add(task)
         task.add_done_callback(self.viewers.discard)
-
-    def take_over(self, sandbox_id: str, actor: str):
-        """Pauses the sandbox's running agent for the person at the screen, if it isn't paused already."""
-        with db_manager.session() as db:
-            run = db.get_active_agent_run(sandbox_id=sandbox_id)
-            if run is not None and run.state == "running" and run.paused_at is None:
-                db.pause_agent_run(paused_by=actor, id=run.id)
-                self.logger.info("agent taken over", extra={"sandbox_id": sandbox_id, "run_id": run.id, "by": actor})
 
     def touch(self, sandbox_id: str):
         with db_manager.session() as db:
@@ -1428,18 +1422,6 @@ class SandboxApi:
             await asyncio.sleep(interval)
             await asyncio.to_thread(self.reconcile)
 
-    def _session(self, sandbox: Sandbox, user: Member, channel: str, db: Querier) -> str:
-        session = next(
-            (s for s in db.list_active_agent_sessions(sandbox_id=sandbox.id) if s.agent_type == channel), None
-        )
-        if session is None:
-            session = db.create_agent_session(
-                CreateAgentSessionParams(
-                    id=str(uuid.uuid4()), sandbox_id=sandbox.id, created_by=user.id, agent_type=channel, config="{}"
-                )
-            )
-        return session.id
-
     async def run_tool(self, user: Member, sandbox_id: str, name: str, args: dict, channel: str) -> Any:
         tool = TOOLS.get(name)
         if tool is None:
@@ -1464,7 +1446,7 @@ class SandboxApi:
             db.touch_sandbox(id=sandbox.id)
             db.create_tool_execution(
                 id=execution_id,
-                session_id=self._session(sandbox, user, channel, db),
+                sandbox_id=sandbox.id,
                 tool_name=name,
                 input=json.dumps(args)[:4000],
             )
@@ -1526,7 +1508,7 @@ class SandboxApi:
             db.touch_sandbox(id=sandbox.id)
             db.create_tool_execution(
                 id=execution_id,
-                session_id=self._session(sandbox, user, "api", db),
+                sandbox_id=sandbox.id,
                 tool_name="execute_command",
                 input=json.dumps({**exec_req.model_dump(), "stream": True})[:4000],
             )
@@ -1564,20 +1546,17 @@ class SandboxApi:
         if sandbox is None or not usable or sandbox.status != "running" or not sandbox.access_url:
             await websocket.close(code=1008, reason="sandbox not available")
             return
-        await self.screen(websocket, sandbox, Gate(view_only=False), user_id)
+        await self.screen(websocket, sandbox, Gate(view_only=False))
 
-    async def screen(
-        self, websocket: WebSocket, sandbox: Sandbox, gate: Gate, actor: str, live: Callable[[], bool] | None = None
-    ):
-        """Serves a running sandbox's screen to a viewer that is allowed it, through `gate`. When the viewer acts
-        while an agent runs, the agent waits for it (a takeover by `actor`, a user id or link:<viewer link id>); when
-        `live` stops returning True (a revoked or expired link), the viewer is disconnected."""
+    async def screen(self, websocket: WebSocket, sandbox: Sandbox, gate: Gate, live: Callable[[], bool] | None = None):
+        """Serves a running sandbox's screen to a viewer that is allowed it, through `gate`. When `live` stops
+        returning True (a revoked or expired link), the viewer is disconnected."""
         sandbox_id, access_url = sandbox.id, sandbox.access_url
         if not access_url:
             raise RuntimeError("the sandbox has no screen")
         await websocket.accept()
         self.watch_viewer(websocket, sandbox_id)
-        self.watch_gate(websocket, sandbox_id, gate, actor, live)
+        self.watch_gate(websocket, sandbox_id, live)
         if is_vm(sandbox.runtime_id):
             await self.proxy_vnc(websocket, sandbox.runtime_id, gate)
             return
