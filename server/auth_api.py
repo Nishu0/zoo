@@ -4,6 +4,7 @@
 # 3. Logger
 # 4. DB
 import hashlib
+import json
 import os
 import secrets
 import uuid
@@ -12,13 +13,13 @@ from datetime import UTC, datetime, timedelta
 import jwt
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from db.connection import IntegrityError, db_manager
 from db.generated.models import User
 from db.generated.query import CreateAPIKeyParams, CreateUserParams, Querier
 from logger.logger import logger
-from server import quotas
+from server import labels, quotas
 from server.limits import API_KEY, LOGIN_PER_EMAIL, LOGIN_PER_IP, SIGNUP_PER_IP, client_ip
 from utils.hash import PaswwordUtils
 from utils.time import to_stamp
@@ -31,7 +32,8 @@ API_KEY_PREFIX = "zoo_"
 # a role can do what the roles before it can
 ROLES = ("viewer", "member", "admin", "owner")
 # what a viewer (and a read-only API key) may still POST: looking, not touching
-VIEWER_WRITES = {"/sandboxes/{sandbox_id}/screenshot"}
+# (a viewer link may only be a view link: server/viewer_api.py)
+VIEWER_WRITES = {"/sandboxes/{sandbox_id}/screenshot", "/sandboxes/{sandbox_id}/viewer-links"}
 # changes only admins make: hosts, shared secrets and profiles, keys, the warm pool and agent settings (route
 # templates; anything under them). A sandbox's own policies are its members' to set.
 ADMIN_WRITES = (
@@ -43,11 +45,21 @@ ADMIN_WRITES = (
     "/pool",
     "/agent/settings",
     "/kubernetes",
+    "/webhooks",
 )
 # routes that check the caller's role in the workspace they name themselves (server/workspaces_api.py)
 SELF_CHECKED = ("/workspaces", "/invitations")
 # what a key for one sandbox may reach besides that sandbox's own routes
 SANDBOX_KEY_ROUTES = {("GET", "/sandboxes"), ("GET", "/tools"), ("GET", "/auth/me")}
+# and a key for the sandboxes with some labels (an end user's): those, making more of them, and their usage and
+# events
+LABEL_KEY_ROUTES = SANDBOX_KEY_ROUTES | {
+    ("POST", "/sandboxes"),
+    ("GET", "/usage"),
+    ("GET", "/usage/export"),
+    ("GET", "/events"),
+    ("GET", "/events/stream"),
+}
 
 
 class Member(User):
@@ -59,6 +71,8 @@ class Member(User):
     role: str
     key_id: str | None = None
     key_sandbox_id: str | None = None
+    # an API key's label selector: it only reaches sandboxes with these labels (server/labels.py)
+    key_labels: dict[str, str] | None = None
 
     def can(self, role: str) -> bool:
         return ROLES.index(self.role) >= ROLES.index(role)
@@ -125,8 +139,17 @@ class ApiKeyRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     # null: every sandbox in the workspace
     sandbox_id: str | None = None
+    # or only the sandboxes with these labels, e.g. {"end_user": "alice"}; sandboxes the key makes get them
+    label_selector: dict[str, str] | None = None
     read_only: bool = False
     expires_at: datetime | None = None
+
+    @field_validator("label_selector")
+    @classmethod
+    def check_selector(cls, value: dict[str, str] | None) -> dict[str, str] | None:
+        if value is not None and not value:
+            raise ValueError("a label selector needs at least one label; leave it out for the whole workspace")
+        return labels.validate(value) if value else value
 
 
 class ApiKeyResponse(BaseModel):
@@ -134,6 +157,7 @@ class ApiKeyResponse(BaseModel):
     name: str
     key_prefix: str
     sandbox_id: str | None
+    label_selector: dict[str, str] | None = None
     read_only: bool
     expires_at: str | None
     last_used_at: str | None
@@ -147,6 +171,7 @@ def key_response(row) -> ApiKeyResponse:
         name=row.name,
         key_prefix=row.key_prefix,
         sandbox_id=row.sandbox_id,
+        label_selector=labels.parse_selector(row.label_selector),
         read_only=row.read_only,
         expires_at=to_stamp(row.expires_at),
         last_used_at=to_stamp(row.last_used_at),
@@ -188,6 +213,8 @@ class AuthApi:
             user: Member = Depends(self.current_user),
             db: Querier = Depends(db_manager.get_client),
         ) -> CreatedApiKeyResponse:
+            if payload.sandbox_id is not None and payload.label_selector is not None:
+                raise HTTPException(status_code=422, detail="a key is for one sandbox or for labels, not both")
             if payload.sandbox_id is not None:
                 sandbox = db.get_sandbox(id=payload.sandbox_id)
                 if sandbox is None or sandbox.workspace_id != user.workspace_id or sandbox.status == "deleted":
@@ -207,6 +234,7 @@ class AuthApi:
                     expires_at=payload.expires_at,
                     sandbox_id=payload.sandbox_id,
                     read_only=payload.read_only,
+                    label_selector=json.dumps(payload.label_selector) if payload.label_selector else None,
                 )
             )
             assert row is not None
@@ -291,6 +319,7 @@ class AuthApi:
                 role=role,
                 key_id=key.id,
                 key_sandbox_id=key.sandbox_id,
+                key_labels=labels.parse_selector(key.label_selector),
             )
         try:
             claims = jwt.decode(token, self.secret, algorithms=[JWT_ALGORITHM])
@@ -333,6 +362,14 @@ class AuthApi:
                 require_sandbox(user, sandbox_id)
             elif (method, route) not in SANDBOX_KEY_ROUTES:
                 raise HTTPException(status_code=403, detail="this API key only reaches its own sandbox")
+        if user.key_labels is not None:
+            sandbox_id = request.path_params.get("sandbox_id")
+            if sandbox_id is not None:
+                # as if it weren't there, like a sandbox in another workspace
+                if not labels.matches(labels.of(db, sandbox_id), user.key_labels):
+                    raise HTTPException(status_code=404, detail="sandbox not found")
+            elif (method, route) not in LABEL_KEY_ROUTES:
+                raise HTTPException(status_code=403, detail="this API key only reaches its labelled sandboxes")
         # for the audit log (server/audit_api.py), which records the request once it has succeeded
         request.state.member = user
         return user

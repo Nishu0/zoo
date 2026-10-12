@@ -540,9 +540,9 @@ DELETE FROM sandbox_artifacts WHERE id = $1;
 -- name: CreateAPIKey :one
 INSERT INTO api_keys (
     id, workspace_id, created_by, name,
-    key_hash, key_prefix, scopes, expires_at, sandbox_id, read_only
+    key_hash, key_prefix, scopes, expires_at, sandbox_id, read_only, label_selector
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 RETURNING *;
 
 -- name: GetAPIKeyByHash :one
@@ -710,8 +710,8 @@ SELECT * FROM domains ORDER BY created_at;
 DELETE FROM domains WHERE id = $1;
 
 -- name: CreateAgentMessage :one
-INSERT INTO agent_messages (id, sandbox_id, run_id, kind, content, source, screenshot)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO agent_messages (id, sandbox_id, run_id, kind, content, source, screenshot, a11y)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: GetAgentMessage :one
@@ -1007,8 +1007,10 @@ DELETE FROM workspace_agent_settings WHERE workspace_id = $1;
 SELECT api_key_secret_id FROM workspace_agent_settings WHERE api_key_secret_id IS NOT NULL;
 
 -- name: CreateAgentRun :one
-INSERT INTO agent_runs (id, sandbox_id, user_id, source, model, max_steps, max_seconds, max_tokens, max_attempts)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO agent_runs (
+    id, sandbox_id, user_id, source, model, max_steps, max_seconds, max_tokens, max_attempts, provider, api_base
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 RETURNING *;
 
 -- name: GetAgentRun :one
@@ -1036,7 +1038,7 @@ RETURNING *;
 -- name: HeartbeatAgentRun :one
 UPDATE agent_runs SET heartbeat_at = CURRENT_TIMESTAMP
 WHERE id = $1 AND state = 'running' AND worker = $2
-RETURNING cancel_requested;
+RETURNING cancel_requested, paused_at;
 
 -- name: RecordAgentRunUsage :exec
 UPDATE agent_runs SET steps = $1, tokens = $2, cost = $3 WHERE id = $4;
@@ -1051,7 +1053,7 @@ WHERE id = $3 AND state = 'running';
 
 -- name: FinishAgentRun :exec
 UPDATE agent_runs
-SET state = $1, error = $2, finished_at = CURRENT_TIMESTAMP, worker = NULL
+SET state = $1, error = $2, finished_at = CURRENT_TIMESTAMP, worker = NULL, paused_at = NULL, paused_by = NULL
 WHERE id = $3 AND state IN ('queued', 'running');
 
 -- name: ListAgentRunIds :many
@@ -1260,3 +1262,349 @@ AND (
         AND GREATEST(s.last_activity_at, s.started_at) < CURRENT_TIMESTAMP
             - make_interval(mins => COALESCE(s.idle_timeout_minutes, w.default_idle_timeout_minutes)::int))
 );
+
+-- Viewer links (server/viewer_api.py)
+
+-- name: CreateViewerLink :one
+INSERT INTO viewer_links (id, workspace_id, sandbox_id, token_hash, mode, end_user, created_by, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING *;
+
+-- name: GetLiveViewerLink :one
+-- a link that is neither revoked nor expired
+SELECT * FROM viewer_links
+WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP
+LIMIT 1;
+
+-- name: ViewerLinkLive :one
+SELECT EXISTS (
+    SELECT 1 FROM viewer_links WHERE id = $1 AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP
+)::bool AS live;
+
+-- name: GetViewerLink :one
+SELECT * FROM viewer_links WHERE id = $1 LIMIT 1;
+
+-- name: ListViewerLinks :many
+SELECT * FROM viewer_links WHERE sandbox_id = $1 ORDER BY created_at DESC LIMIT 200;
+
+-- name: RevokeViewerLink :exec
+UPDATE viewer_links SET revoked_at = CURRENT_TIMESTAMP WHERE id = $1 AND revoked_at IS NULL;
+
+-- Takeover (server/agent_api.py)
+
+-- name: PauseAgentRun :one
+UPDATE agent_runs SET paused_at = CURRENT_TIMESTAMP, paused_by = $1
+WHERE id = $2 AND state = 'running' AND paused_at IS NULL
+RETURNING *;
+
+-- name: ResumeAgentRun :one
+UPDATE agent_runs SET paused_at = NULL, paused_by = NULL
+WHERE id = $1 AND paused_at IS NOT NULL
+RETURNING *;
+
+-- Labels (server/labels.py)
+
+-- name: SetSandboxLabel :exec
+INSERT INTO sandbox_labels (sandbox_id, key, value) VALUES ($1, $2, $3)
+ON CONFLICT (sandbox_id, key) DO UPDATE SET value = EXCLUDED.value;
+
+-- name: DeleteSandboxLabels :exec
+DELETE FROM sandbox_labels WHERE sandbox_id = $1;
+
+-- name: ListSandboxLabels :many
+SELECT * FROM sandbox_labels WHERE sandbox_id = $1 ORDER BY key;
+
+-- name: ListWorkspaceSandboxLabels :many
+SELECT l.* FROM sandbox_labels l
+JOIN sandboxes s ON s.id = l.sandbox_id
+WHERE s.workspace_id = $1 AND s.deleted_at IS NULL;
+
+-- name: SetUsageLabel :exec
+INSERT INTO usage_labels (sandbox_id, key, value) VALUES ($1, $2, $3)
+ON CONFLICT (sandbox_id, key) DO UPDATE SET value = EXCLUDED.value;
+
+-- name: DeleteUsageLabels :exec
+DELETE FROM usage_labels WHERE sandbox_id = $1;
+
+-- Label quotas (server/quotas.py)
+
+-- name: UpsertLabelQuota :one
+INSERT INTO label_quotas (
+    workspace_id, key, value, max_running_sandboxes, max_cpus, max_memory_mb, max_storage_gb
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (workspace_id, key, value) DO UPDATE SET
+    max_running_sandboxes = EXCLUDED.max_running_sandboxes,
+    max_cpus = EXCLUDED.max_cpus,
+    max_memory_mb = EXCLUDED.max_memory_mb,
+    max_storage_gb = EXCLUDED.max_storage_gb,
+    updated_at = CURRENT_TIMESTAMP
+RETURNING *;
+
+-- name: ListLabelQuotas :many
+SELECT * FROM label_quotas WHERE workspace_id = $1 ORDER BY key, value;
+
+-- name: DeleteLabelQuota :exec
+DELETE FROM label_quotas WHERE workspace_id = $1 AND key = $2 AND value = $3;
+
+-- name: GetLabelQuota :one
+-- the value's own limits, else the key's default ('*')
+SELECT * FROM label_quotas
+WHERE workspace_id = $1 AND key = $2 AND value IN ($3, '*')
+ORDER BY (value = '*') ASC
+LIMIT 1;
+
+-- name: LabelUsage :one
+-- WorkspaceUsage for the sandboxes carrying one label value; profiles belong to the workspace, not a label
+SELECT
+    COUNT(*) FILTER (WHERE s.status IN ('pending', 'provisioning', 'running'))::bigint AS running,
+    COALESCE(SUM(s.cpus) FILTER (WHERE s.status IN ('pending', 'provisioning', 'running')), 0)::float8 AS cpus,
+    COALESCE(SUM(s.memory_mb) FILTER (WHERE s.status IN ('pending', 'provisioning', 'running')), 0)::bigint AS memory_mb,
+    COALESCE(SUM(COALESCE(s.disk_gb, sqlc.arg(unsized_gb)::bigint)), 0)::bigint AS disk_gb,
+    (SELECT COALESCE(SUM(sn.size_bytes), 0) FROM snapshots sn
+     JOIN sandboxes x ON x.id = sn.sandbox_id
+     JOIN sandbox_labels xl ON xl.sandbox_id = x.id AND xl.key = sqlc.arg(key) AND xl.value = sqlc.arg(value)
+     WHERE x.workspace_id = sqlc.arg(workspace_id))::bigint AS snapshot_bytes
+FROM sandboxes s
+JOIN sandbox_labels l ON l.sandbox_id = s.id AND l.key = sqlc.arg(key) AND l.value = sqlc.arg(value)
+WHERE s.workspace_id = sqlc.arg(workspace_id) AND s.status NOT IN ('deleting', 'deleted');
+
+-- Events (server/events.py)
+
+-- name: ListEvents :many
+-- after `after_seq`, oldest first
+SELECT * FROM events
+WHERE workspace_id = sqlc.arg(workspace_id)
+  AND seq > sqlc.arg(after_seq)
+  AND (sqlc.narg(sandbox_id)::text IS NULL OR sandbox_id = sqlc.narg(sandbox_id))
+  AND (sqlc.narg(type)::text IS NULL OR type = sqlc.narg(type))
+ORDER BY seq ASC
+LIMIT sqlc.arg(row_limit);
+
+-- name: ListLateEvents :many
+-- written since `since` with a seq at most `upto_seq`: rows that committed after ones with a higher seq
+SELECT * FROM events
+WHERE workspace_id = sqlc.arg(workspace_id)
+  AND seq <= sqlc.arg(upto_seq)
+  AND created_at >= sqlc.arg(since)
+  AND (sqlc.narg(sandbox_id)::text IS NULL OR sandbox_id = sqlc.narg(sandbox_id))
+  AND (sqlc.narg(type)::text IS NULL OR type = sqlc.narg(type))
+ORDER BY seq ASC
+LIMIT sqlc.arg(row_limit);
+
+-- name: LatestEventSeq :one
+SELECT COALESCE(MAX(seq), 0)::bigint AS seq FROM events WHERE workspace_id = $1;
+
+-- name: PurgeEvents :exec
+DELETE FROM events WHERE created_at < $1;
+
+-- name: EmitEvent :exec
+SELECT zoo_event(sqlc.arg(workspace_id)::text, sqlc.narg(sandbox_id)::text, NULL::text, sqlc.arg(type)::text,
+    sqlc.arg(data)::jsonb);
+
+-- name: GetEvent :one
+SELECT * FROM events WHERE id = $1 LIMIT 1;
+
+-- name: LatestWorkspaceEvent :one
+SELECT * FROM events WHERE workspace_id = $1 AND type = $2 ORDER BY seq DESC LIMIT 1;
+
+-- Webhooks (server/webhooks.py)
+
+-- name: CreateWebhook :one
+INSERT INTO webhooks (id, workspace_id, url, secret_ciphertext, types, label_selector, enabled, created_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING *;
+
+-- name: GetWebhook :one
+SELECT * FROM webhooks WHERE id = $1 LIMIT 1;
+
+-- name: ListWebhooks :many
+SELECT * FROM webhooks WHERE workspace_id = $1 ORDER BY created_at;
+
+-- name: UpdateWebhook :one
+UPDATE webhooks SET url = $1, types = $2, label_selector = $3, enabled = $4
+WHERE id = $5
+RETURNING *;
+
+-- name: DeleteWebhook :exec
+DELETE FROM webhooks WHERE id = $1;
+
+-- name: CreateWebhookDelivery :exec
+INSERT INTO webhook_deliveries (webhook_id, event_id) VALUES ($1, $2);
+
+-- name: ClaimWebhookDeliveries :many
+-- due deliveries, leased for lease_seconds so a worker that dies mid-send leaves them to another
+UPDATE webhook_deliveries
+SET next_attempt_at = CURRENT_TIMESTAMP + make_interval(secs => sqlc.arg(lease_seconds)::int)
+WHERE id IN (
+    SELECT d.id FROM webhook_deliveries d
+    WHERE d.status = 'pending' AND d.next_attempt_at <= CURRENT_TIMESTAMP
+    ORDER BY d.seq
+    LIMIT sqlc.arg(row_limit)
+    FOR UPDATE SKIP LOCKED
+)
+RETURNING *;
+
+-- name: FinishWebhookDelivery :exec
+UPDATE webhook_deliveries
+SET status = $1, attempts = $2, next_attempt_at = $3, last_error = $4, response_status = $5,
+    delivered_at = CASE WHEN $1 = 'delivered' THEN CURRENT_TIMESTAMP ELSE NULL END
+WHERE id = $6;
+
+-- name: ListWebhookDeliveries :many
+SELECT d.*, e.type AS event_type
+FROM webhook_deliveries d
+JOIN events e ON e.id = d.event_id
+WHERE d.webhook_id = $1
+ORDER BY d.created_at DESC
+LIMIT $2;
+
+-- name: PurgeWebhookDeliveries :exec
+DELETE FROM webhook_deliveries WHERE status <> 'pending' AND created_at < $1;
+
+-- Usage (server/metering.py)
+
+-- name: AddUsage :exec
+INSERT INTO usage (workspace_id, sandbox_id, metric, period_start, quantity)
+VALUES ($1, $2, $3, date_trunc('hour', sqlc.arg(at)::timestamptz), $4)
+ON CONFLICT (workspace_id, sandbox_id, metric, period_start)
+DO UPDATE SET quantity = usage.quantity + EXCLUDED.quantity;
+
+-- name: ClaimStorageMetering :many
+-- workspaces whose storage hasn't been metered this hour, marked as metered
+UPDATE workspaces SET storage_metered_at = date_trunc('hour', CURRENT_TIMESTAMP)
+WHERE storage_metered_at IS NULL OR storage_metered_at < date_trunc('hour', CURRENT_TIMESTAMP)
+RETURNING id;
+
+-- name: SandboxStorage :many
+-- each live sandbox's disk (unsized_gb without a size) plus its snapshots, in GB
+SELECT s.id,
+    (COALESCE(s.disk_gb, sqlc.arg(unsized_gb)::bigint)
+     + COALESCE((SELECT SUM(sn.size_bytes) FROM snapshots sn WHERE sn.sandbox_id = s.id), 0) / 1073741824.0
+    )::float8 AS gb
+FROM sandboxes s
+WHERE s.workspace_id = sqlc.arg(workspace_id) AND s.status NOT IN ('deleting', 'deleted');
+
+-- name: ProfileStorage :one
+SELECT (COALESCE(SUM(pv.size_bytes), 0) / 1073741824.0)::float8 AS gb
+FROM profile_versions pv JOIN profiles p ON p.id = pv.profile_id
+WHERE p.workspace_id = $1;
+
+-- name: UsageReport :many
+-- per sandbox, metric and day
+SELECT u.sandbox_id, u.metric, date_trunc('day', u.period_start)::timestamptz AS day,
+    SUM(u.quantity)::float8 AS quantity
+FROM usage u
+WHERE u.workspace_id = sqlc.arg(workspace_id)
+  AND u.period_start >= sqlc.arg(since)
+  AND u.period_start < sqlc.arg(until)
+  AND (sqlc.narg(metric)::text IS NULL OR u.metric = sqlc.narg(metric))
+GROUP BY u.sandbox_id, u.metric, day
+ORDER BY day, u.sandbox_id, u.metric;
+
+-- name: ListUsageLabels :many
+SELECT ul.* FROM usage_labels ul
+WHERE ul.sandbox_id IN (SELECT DISTINCT u.sandbox_id FROM usage u WHERE u.workspace_id = $1);
+
+-- Trajectory exports (server/exports.py)
+
+-- name: SetWorkspaceCaptureA11y :one
+UPDATE workspaces SET capture_a11y = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *;
+
+-- name: ListExportableRuns :many
+-- finished runs in the workspace, oldest first
+SELECT r.* FROM agent_runs r
+JOIN sandboxes s ON s.id = r.sandbox_id
+WHERE s.workspace_id = sqlc.arg(workspace_id)
+  AND r.state IN ('succeeded', 'failed', 'cancelled')
+  AND (sqlc.narg(sandbox_id)::text IS NULL OR r.sandbox_id = sqlc.narg(sandbox_id))
+  AND (sqlc.narg(since)::timestamptz IS NULL OR r.created_at >= sqlc.narg(since))
+  AND (sqlc.narg(until)::timestamptz IS NULL OR r.created_at < sqlc.narg(until))
+ORDER BY r.created_at ASC
+LIMIT sqlc.arg(row_limit);
+
+-- name: CreateExport :one
+INSERT INTO exports (id, workspace_id, created_by, run_ids) VALUES ($1, $2, $3, $4) RETURNING *;
+
+-- name: GetExport :one
+SELECT * FROM exports WHERE id = $1 LIMIT 1;
+
+-- name: ListExports :many
+SELECT * FROM exports WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT 100;
+
+-- name: ClaimExport :one
+-- the oldest queued export, or one whose worker went quiet for stale_seconds
+UPDATE exports SET state = 'running', worker = sqlc.arg(worker), claimed_at = CURRENT_TIMESTAMP
+WHERE id = (
+    SELECT e.id FROM exports e
+    WHERE e.state = 'queued'
+       OR (e.state = 'running'
+           AND e.claimed_at < CURRENT_TIMESTAMP - make_interval(secs => sqlc.arg(stale_seconds)::int))
+    ORDER BY e.seq
+    LIMIT 1
+    FOR UPDATE SKIP LOCKED
+)
+RETURNING *;
+
+-- name: FinishExport :exec
+UPDATE exports SET state = $1, error = $2, steps = $3, size_bytes = $4, finished_at = CURRENT_TIMESTAMP, worker = NULL
+WHERE id = $5;
+
+-- name: PurgeExports :many
+DELETE FROM exports WHERE created_at < $1 RETURNING id;
+
+-- Benchmarks (server/bench.py)
+
+-- name: CreateBenchmark :one
+INSERT INTO benchmarks (id, workspace_id, created_by, name, suite, models, parallel)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING *;
+
+-- name: GetBenchmark :one
+SELECT * FROM benchmarks WHERE id = $1 LIMIT 1;
+
+-- name: ListBenchmarks :many
+SELECT * FROM benchmarks WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT 100;
+
+-- name: ClaimBenchmark :one
+UPDATE benchmarks
+SET state = 'running', worker = $1, heartbeat_at = CURRENT_TIMESTAMP, started_at = CURRENT_TIMESTAMP
+WHERE id = (
+    SELECT b.id FROM benchmarks b WHERE b.state = 'queued' ORDER BY b.seq LIMIT 1 FOR UPDATE SKIP LOCKED
+)
+RETURNING *;
+
+-- name: HeartbeatBenchmark :one
+UPDATE benchmarks SET heartbeat_at = CURRENT_TIMESTAMP
+WHERE id = $1 AND state = 'running' AND worker = $2
+RETURNING cancel_requested;
+
+-- name: RequestBenchmarkCancel :exec
+UPDATE benchmarks SET cancel_requested = true WHERE id = $1 AND state IN ('queued', 'running');
+
+-- name: FinishBenchmark :exec
+UPDATE benchmarks SET state = $1, error = $2, finished_at = CURRENT_TIMESTAMP, worker = NULL
+WHERE id = $3 AND state IN ('queued', 'running');
+
+-- name: FailStaleBenchmarks :many
+-- a benchmark whose worker stopped heartbeating isn't resumed: its sandboxes and runs were that worker's
+UPDATE benchmarks
+SET state = 'failed', error = 'its worker stopped', finished_at = CURRENT_TIMESTAMP, worker = NULL
+WHERE state = 'running' AND heartbeat_at < $1
+RETURNING id;
+
+-- name: UpsertBenchmarkResult :exec
+INSERT INTO benchmark_results (
+    benchmark_id, task_id, model, run_id, sandbox_id, passed, score, steps, tokens, cost, seconds, error
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+ON CONFLICT (benchmark_id, task_id, model) DO UPDATE SET
+    run_id = EXCLUDED.run_id, sandbox_id = EXCLUDED.sandbox_id, passed = EXCLUDED.passed, score = EXCLUDED.score,
+    steps = EXCLUDED.steps, tokens = EXCLUDED.tokens, cost = EXCLUDED.cost, seconds = EXCLUDED.seconds,
+    error = EXCLUDED.error, finished_at = CURRENT_TIMESTAMP;
+
+-- name: ListBenchmarkResults :many
+SELECT * FROM benchmark_results WHERE benchmark_id = $1 ORDER BY task_id, model;
+
+-- name: RenameSandbox :one
+UPDATE sandboxes SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *;

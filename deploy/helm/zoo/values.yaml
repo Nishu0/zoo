@@ -151,6 +151,21 @@ backups:
   intervalHours: 24
   keep: 7
 
+# viewer links to embed or share a sandbox's screen (server/viewer_api.py); embedOrigins may frame them (none when
+# empty), space-separated
+viewer:
+  embedOrigins: ""
+  maxLinkHours: 24
+
+# events (GET /events, webhooks) and trajectory exports are kept this long
+retention:
+  eventDays: 7
+  exportDays: 7
+
+webhooks:
+  # let webhooks reach private addresses (a receiver inside the cluster)
+  allowPrivate: false
+
 # Object storage, required: app profiles, agent screenshots, home snapshots, backups and moves between hosts live
 # there (any S3 API: S3, R2, MinIO, SeaweedFS, GCS's S3 interoperability)
 objectStorage:

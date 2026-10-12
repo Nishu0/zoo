@@ -27,8 +27,10 @@ class Zoo:
             raise ZooError(f"{res.status_code}: {detail}")
         return res
 
-    def sandboxes(self) -> list["Sandbox"]:
-        return [Sandbox(self, s) for s in self.request("GET", "/sandboxes").json()]
+    def sandboxes(self, labels: dict[str, str] | None = None) -> list["Sandbox"]:
+        """The workspace's sandboxes, only those with all of `labels` when given."""
+        params = [("label", f"{k}={v}") for k, v in (labels or {}).items()]
+        return [Sandbox(self, s) for s in self.request("GET", "/sandboxes", params=params).json()]
 
     def sandbox(self, sandbox_id: str) -> "Sandbox":
         return Sandbox(self, self.request("GET", f"/sandboxes/{sandbox_id}").json())
@@ -41,8 +43,15 @@ class Zoo:
         profile_ids: list[str] | None = None,
         wait: bool = True,
         timeout: int = 180,
+        labels: dict[str, str] | None = None,
     ) -> "Sandbox":
-        body = {"name": name, "kind": kind, "server_id": server_id, "profile_ids": profile_ids or []}
+        body = {
+            "name": name,
+            "kind": kind,
+            "server_id": server_id,
+            "profile_ids": profile_ids or [],
+            "labels": labels or {},
+        }
         sandbox = Sandbox(self, self.request("POST", "/sandboxes", json=body).json())
         return sandbox.wait(timeout) if wait else sandbox
 
@@ -58,6 +67,52 @@ class Zoo:
 
     def tools(self) -> list[dict]:
         return self.request("GET", "/tools").json()
+
+    def events(self, after: int | None = None, sandbox_id: str | None = None, type: str | None = None):
+        """Follows the workspace's events (sandbox.state, run.started, run.step, run.finished, takeover.started,
+        takeover.ended) as they happen, from after `after` (a seq) or from now. Pass the last event's seq back to
+        resume after a disconnect."""
+        params = {k: v for k, v in {"after": after, "sandbox_id": sandbox_id, "type": type}.items() if v is not None}
+        res = self.request("GET", "/events/stream", params=params, stream=True, timeout=None)
+        for raw in res.iter_lines():
+            line = raw.decode()
+            if line.startswith("data: "):
+                yield json.loads(line[6:])
+
+    def usage(self, since: str, until: str, group_by: str = "sandbox", metric: str | None = None) -> list[dict]:
+        """Metered usage between two ISO times, by sandbox, day or a label (group_by="label:end_user")."""
+        params = {"from": since, "to": until, "group_by": group_by, "metric": metric}
+        return self.request("GET", "/usage", params={k: v for k, v in params.items() if v}).json()["rows"]
+
+    def export_trajectories(self, path: str, wait: bool = True, timeout: int = 3600, **filters) -> dict:
+        """Exports finished agent runs (run_id=, or sandbox_id=, labels=, from_=, to=) as a .tar.gz of JSONL and
+        frames, and saves it to `path` once the server has built it."""
+        body = {("from" if k == "from_" else k): v for k, v in filters.items()}
+        export = self.request("POST", "/agent/exports", json=body).json()
+        deadline = time.monotonic() + timeout
+        while wait and export["state"] in ("queued", "running"):
+            if time.monotonic() > deadline:
+                raise ZooError(f"export {export['id']} wasn't ready within {timeout}s")
+            time.sleep(2)
+            export = self.request("GET", f"/agent/exports/{export['id']}").json()
+        if export["state"] == "failed":
+            raise ZooError(f"export failed: {export['error']}")
+        if wait:
+            res = self.request("GET", f"/agent/exports/{export['id']}/download", stream=True, timeout=None)
+            with open(path, "wb") as f:
+                f.writelines(res.iter_content(1 << 20))
+        return export
+
+    def benchmark(self, suite: str | dict, models: list[dict], parallel: int = 2, wait: bool = True) -> dict:
+        """Runs a task suite (YAML/JSON text, or parsed) against models ([{"provider", "model"}]) in parallel
+        sandboxes; returns the benchmark with its per-model summary and per-task results."""
+        body = {"suite": suite, "models": models, "parallel": parallel}
+        benchmark = self.request("POST", "/benchmarks", json=body).json()
+        while True:
+            detail = self.request("GET", f"/benchmarks/{benchmark['id']}").json()
+            if not wait or detail["state"] not in ("queued", "running"):
+                return detail
+            time.sleep(10)
 
 
 class Sandbox:
@@ -111,13 +166,13 @@ class Sandbox:
     def screenshot(self) -> bytes:
         return base64.b64decode(self.tool("screenshot"))
 
-    def ask(self, message: str, model: str | None = None):
+    def ask(self, message: str, model: str | None = None, provider: str | None = None):
         """Runs the server-side CUA agent on this sandbox and yields its events as they stream in:
         {"type": "user" | "reasoning" | "action" | "text" | "status" | "error", "text": ...}, then
         {"type": "usage", "steps", "tokens", "cost", "elapsed", "max_steps", ...} after each model call and
         {"type": "done", "state": "succeeded" | "failed" | "cancelled"} at the end. An action event's "id" fetches the
         screenshot it was decided on with step_screenshot()."""
-        body = {"message": message, "model": model, "stream": True}
+        body = {"message": message, "model": model, "provider": provider, "stream": True}
         res = self.client.request("POST", f"/sandboxes/{self.id}/agent", json=body, stream=True, timeout=None)
         for line in res.iter_lines(decode_unicode=True):
             if line and line.startswith("data: "):
@@ -125,6 +180,26 @@ class Sandbox:
 
     def stop_agent(self):
         self.client.request("POST", f"/sandboxes/{self.id}/agent/stop")
+
+    def takeover(self) -> dict:
+        """Pauses the running agent before its next action, so a person can use the screen."""
+        return self.client.request("POST", f"/sandboxes/{self.id}/agent/takeover").json()
+
+    def release(self) -> dict:
+        """Hands the screen back; the agent carries on from it as it is now."""
+        return self.client.request("POST", f"/sandboxes/{self.id}/agent/release").json()
+
+    def viewer_link(self, mode: str = "view", expires_in: int = 60, end_user: str | None = None) -> dict:
+        """A link to this sandbox's screen for someone without a Zoo account: "view" only watches, "control" can
+        type and click (and take over from the agent). Its "url" opens in a browser or an iframe; expires_in is in
+        minutes."""
+        body = {"mode": mode, "expires_in_minutes": expires_in, "end_user": end_user}
+        return self.client.request("POST", f"/sandboxes/{self.id}/viewer-links", json=body).json()
+
+    def set_labels(self, labels: dict[str, str]) -> "Sandbox":
+        """Replaces the sandbox's labels."""
+        self.data = self.client.request("PATCH", f"/sandboxes/{self.id}", json={"labels": labels}).json()
+        return self
 
     def agent_state(self) -> dict:
         """The conversation, and the latest run with its usage and limits."""

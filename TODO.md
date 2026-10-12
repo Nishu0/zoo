@@ -124,3 +124,13 @@ State, teams, limits (PLAN.md)
 - [x] Scoped API keys (sandbox, read-only, expiry) and an audit log of every write with CSV export
 - [x] Sandbox sizes, workspace quotas, idle auto-stop and maximum lifetime
 - [x] Scheduled backups to object storage, restore command, restore tested in CI
+
+Building on Zoo (PLAN.md)
+- [x] Embeddable viewer: signed view/control links, an iframe page and @zoo/react
+- [x] Share links with expiry; taking over from the agent and handing back
+- [x] Labels on sandboxes, label-scoped API keys, quotas per label
+- [x] Events (SSE, resumable) and signed webhooks with retries: run steps, completion, takeover
+- [x] Usage metering per sandbox and label: CPU and memory minutes, storage, agent steps, tokens and cost
+- [x] Trajectory export: JSONL with screenshots and accessibility trees
+- [x] Provider per run, xAI Grok added
+- [x] Benchmark harness: suites in parallel sandboxes, command or judge checks, per-model scores

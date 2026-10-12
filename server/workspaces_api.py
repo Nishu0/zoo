@@ -20,8 +20,13 @@ from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
 from db.connection import db_manager
-from db.generated.query import CreateWorkspaceInvitationParams, Querier, SetWorkspaceQuotaParams
-from server import quotas
+from db.generated.query import (
+    CreateWorkspaceInvitationParams,
+    Querier,
+    SetWorkspaceQuotaParams,
+    UpsertLabelQuotaParams,
+)
+from server import labels, quotas, sizes
 from server.auth_api import ROLES, AuthApi, Member
 from utils.time import to_stamp
 
@@ -43,6 +48,12 @@ class WorkspaceResponse(BaseModel):
     # what a sandbox without settings of its own gets (null: never)
     default_idle_timeout_minutes: int | None
     default_max_lifetime_minutes: int | None
+    # agent steps store the accessibility tree next to the screenshot, for trajectory exports (server/exports.py)
+    capture_a11y: bool = True
+
+
+class TrajectorySettingsRequest(BaseModel):
+    capture_a11y: bool
 
 
 class LifecycleDefaultsRequest(BaseModel):
@@ -60,6 +71,7 @@ def workspace_response(workspace, role: str) -> WorkspaceResponse:
         created_at=to_stamp(workspace.created_at),
         default_idle_timeout_minutes=workspace.default_idle_timeout_minutes,
         default_max_lifetime_minutes=workspace.default_max_lifetime_minutes,
+        capture_a11y=workspace.capture_a11y,
     )
 
 
@@ -107,6 +119,35 @@ class QuotaResponse(QuotaRequest):
     cpus: float
     memory_mb: int
     storage_gb: float
+
+
+class LabelQuotaRequest(QuotaRequest):
+    key: str = Field(pattern=labels.KEY.pattern)
+    # one value, or '*' for every value of the key without limits of its own
+    value: str = Field(min_length=1, max_length=labels.MAX_VALUE)
+
+
+class LabelQuotaResponse(LabelQuotaRequest):
+    # what the value's sandboxes use now; null for '*'
+    running_sandboxes: int | None
+    cpus: float | None
+    memory_mb: int | None
+    storage_gb: float | None
+
+
+def label_quota_response(db: Querier, workspace_id: str, row) -> LabelQuotaResponse:
+    limits = LabelQuotaRequest.model_validate(row, from_attributes=True).model_dump()
+    if row.value == labels.ANY:
+        return LabelQuotaResponse(**limits, running_sandboxes=None, cpus=None, memory_mb=None, storage_gb=None)
+    used = db.label_usage(unsized_gb=sizes.UNSIZED_DISK_GB, key=row.key, value=row.value, workspace_id=workspace_id)
+    assert used is not None
+    return LabelQuotaResponse(
+        **limits,
+        running_sandboxes=used.running,
+        cpus=used.cpus,
+        memory_mb=used.memory_mb,
+        storage_gb=round(used.disk_gb + used.snapshot_bytes / (1 << 30), 2),
+    )
 
 
 def quota_response(db: Querier, workspace_id: str) -> QuotaResponse:
@@ -317,6 +358,49 @@ class WorkspacesApi:
                 raise HTTPException(status_code=404, detail="workspace not found")
             db.set_workspace_quota(SetWorkspaceQuotaParams(workspace_id=workspace_id, **payload.model_dump()))
             return quota_response(db, workspace_id)
+
+        @self.app.get("/workspaces/{workspace_id}/label-quotas", response_model=list[LabelQuotaResponse])
+        def list_label_quotas(
+            workspace_id: str, user: Member = Depends(current_user), db: Querier = Depends(db_manager.get_client)
+        ) -> list[LabelQuotaResponse]:
+            self.role_in(workspace_id, user, db)
+            return [label_quota_response(db, workspace_id, r) for r in db.list_label_quotas(workspace_id=workspace_id)]
+
+        @self.app.put("/workspaces/{workspace_id}/label-quotas", response_model=LabelQuotaResponse)
+        def set_label_quota(
+            workspace_id: str,
+            payload: LabelQuotaRequest,
+            user: Member = Depends(current_user),
+            db: Querier = Depends(db_manager.get_client),
+        ) -> LabelQuotaResponse:
+            # how a workspace shares out what it has among its end users is its admins' call
+            self.role_in(workspace_id, user, db, "admin")
+            row = db.upsert_label_quota(UpsertLabelQuotaParams(workspace_id=workspace_id, **payload.model_dump()))
+            assert row is not None
+            return label_quota_response(db, workspace_id, row)
+
+        @self.app.delete("/workspaces/{workspace_id}/label-quotas", status_code=204)
+        def remove_label_quota(
+            workspace_id: str,
+            key: str,
+            value: str,
+            user: Member = Depends(current_user),
+            db: Querier = Depends(db_manager.get_client),
+        ):
+            self.role_in(workspace_id, user, db, "admin")
+            db.delete_label_quota(workspace_id=workspace_id, key=key, value=value)
+
+        @self.app.put("/workspaces/{workspace_id}/trajectories", response_model=WorkspaceResponse)
+        def set_trajectory_settings(
+            workspace_id: str,
+            payload: TrajectorySettingsRequest,
+            user: Member = Depends(current_user),
+            db: Querier = Depends(db_manager.get_client),
+        ) -> WorkspaceResponse:
+            role = self.role_in(workspace_id, user, db, "admin")
+            workspace = db.set_workspace_capture_a11y(capture_a11y=payload.capture_a11y, id=workspace_id)
+            assert workspace is not None
+            return workspace_response(workspace, role)
 
         @self.app.get("/workspaces/{workspace_id}/invitations", response_model=list[InvitationResponse])
         def list_invitations(

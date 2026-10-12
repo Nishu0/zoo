@@ -51,9 +51,14 @@ chart's `env` map on Kubernetes.
 | `ZOO_AGENT_MODEL` | `anthropic/claude-sonnet-5-5` | The agent's model for workspaces that haven't picked one (CUA model string). |
 | `ZOO_AGENT_PARALLEL` | `4` | Agent tasks one worker process runs at once. |
 | `ZOO_API_URL` | `—` | API URL the dashboard calls, read at container start. Also baked into installer commands and join tokens. |
+| `ZOO_BACKUP_INTERVAL_HOURS` | `24` | Internal setting. |
+| `ZOO_BACKUP_KEEP` | `7` | Internal setting. |
 | `ZOO_BROWSER_HOME` | `https://duckduckgo.com` | Start page for `browser` sandboxes. |
 | `ZOO_CODE_IMAGE` | `zoo-code:latest` | Image for `code` sandboxes. |
 | `ZOO_DOMAIN` | `—` | Always-allowed domain for Caddy. |
+| `ZOO_EMBED_ORIGINS` | `—` | Origins (space-separated) that may put a viewer link's page in an iframe; none when unset. |
+| `ZOO_EVENT_RETENTION_DAYS` | `7` | How long events (`GET /events`, webhooks) and their deliveries are kept. |
+| `ZOO_EXPORT_RETENTION_DAYS` | `7` | How long trajectory exports are kept. |
 | `ZOO_GATEWAY` | `—` | The gateway's internal URL, when this process should reach guests and nodes through it. |
 | `ZOO_GUEST_DARWIN_BINARY` | `computed` | Path of the darwin zoo-guest build to install into macOS VMs. |
 | `ZOO_GUEST_REMOTE_URL` | `—` | The same for sandboxes on remote servers. Required for Windows sandboxes. |
@@ -78,7 +83,11 @@ chart's `env` map on Kubernetes.
 | `ZOO_MACOS_CPUS` | `4` | CPUs of each macOS sandbox. |
 | `ZOO_MACOS_MEMORY_MB` | `8192` | Memory of each macOS sandbox. |
 | `ZOO_MACOS_USER` | `admin` | Guest user for macOS sandboxes. |
+| `ZOO_MAX_SANDBOX_CPUS` | `8` | Internal setting. |
+| `ZOO_MAX_SANDBOX_DISK_GB` | `200` | Internal setting. |
+| `ZOO_MAX_SANDBOX_MEMORY_MB` | `16384` | Internal setting. |
 | `ZOO_MAX_SNAPSHOTS` | `10` | Snapshots kept per sandbox. |
+| `ZOO_MAX_VIEWER_LINK_HOURS` | `24` | Longest a viewer link may last. |
 | `ZOO_METRICS_PORT` | `—` | Serves Prometheus metrics on this port at `/metrics`. |
 | `ZOO_NETWORK` | `—` | Docker network shared by the API and sandboxes. Compose sets it to `zoo`. |
 | `ZOO_NODE_BIND` | `[::]` | Internal setting. |
@@ -86,15 +95,19 @@ chart's `env` map on Kubernetes.
 | `ZOO_NODE_ENDPOINTS` | `—` | Comma-separated `host:port` addresses nodes dial, one per API process. |
 | `ZOO_NODE_MAX` | `256` | Internal setting. |
 | `ZOO_NODE_PORT` | `—` | Where each API process listens for zoo-node streams (gRPC with mTLS); `off` turns it off. |
-| `ZOO_OBJECT_STORE` | `—` | `s3://<bucket>[/<prefix>]` for moving sandboxes between servers; used by macOS and Windows moves. |
+| `ZOO_OBJECT_STORE` | `—` | Required. `s3://<bucket>[/<prefix>]`: profiles, agent screenshots, snapshots, exports, backups and moves between servers. |
 | `ZOO_PUBLIC_IP` | `—` | This server's public address(es), used to check that a domain's DNS points here. |
 | `ZOO_ROLE` | `all` | `all`, `api`, `worker` or `gateway`: which part of Zoo this process runs. |
 | `ZOO_RUNTIME` | `kata` | Docker runtime for sandboxes: `kata` (default) or `runc`. |
-| `ZOO_S3_ENDPOINT` | `—` | S3-compatible endpoint for `ZOO_OBJECT_STORE` (SeaweedFS, MinIO, R2). |
+| `ZOO_S3_ENDPOINT` | `—` | S3-compatible endpoint for `ZOO_OBJECT_STORE` (MinIO, R2). |
 | `ZOO_S3_REGION` | `—` | Region for `ZOO_OBJECT_STORE`. |
+| `ZOO_SANDBOX_DISK_GB` | `20` | Internal setting. |
 | `ZOO_SANDBOX_IMAGE` | `zoo-sandbox:latest` | Image for `desktop` and `browser` sandboxes. |
 | `ZOO_SECRETS_KEY` | `—` | Encrypts stored secrets, agent keys, app profiles and VNC passwords. Back it up. |
 | `ZOO_SECRETS_KEY_PREVIOUS` | `—` | Old keys, comma-separated, kept only until `make rotate-secrets` has run. |
+| `ZOO_URL` | `http://localhost:8000` | Internal setting. |
+| `ZOO_WEBHOOK_ALLOW_PRIVATE` | `—` | `1` lets webhooks reach private addresses. |
+| `ZOO_WEBHOOK_BACKOFF_SECONDS` | `60,300,1800,7200,21600` | Seconds between a failed webhook delivery's retries, comma-separated; it fails after the last. |
 | `ZOO_WINDOWS_BASE` | `zoo-windows-base` | Hyper-V VM that Windows sandboxes are cloned from. |
 | `ZOO_WINDOWS_CPUS` | `4` | CPUs of each Windows sandbox. |
 | `ZOO_WINDOWS_MAX_VMS` | `4` | Windows sandboxes running at once on each server. |
@@ -108,5 +121,5 @@ chart's `env` map on Kubernetes.
 the chat channels. See the [chat channels guide](/docs/guides/chat-channels/) and
 [observability](/docs/guides/domain-https-backups/#observability).
 
-Undocumented in this table: `KUBERNETES_SERVICE_HOST`, `KUBERNETES_SERVICE_PORT`, `WHATSAPP_GRAPH_URL`, `ZOO_GUEST_WINDOWS_BINARY`, `ZOO_NODE_BIND`, `ZOO_NODE_MAX`.
+Undocumented in this table: `KUBERNETES_SERVICE_HOST`, `KUBERNETES_SERVICE_PORT`, `WHATSAPP_GRAPH_URL`, `ZOO_BACKUP_INTERVAL_HOURS`, `ZOO_BACKUP_KEEP`, `ZOO_GUEST_WINDOWS_BINARY`, `ZOO_MAX_SANDBOX_CPUS`, `ZOO_MAX_SANDBOX_DISK_GB`, `ZOO_MAX_SANDBOX_MEMORY_MB`, `ZOO_NODE_BIND`, `ZOO_NODE_MAX`, `ZOO_SANDBOX_DISK_GB`, `ZOO_URL`.
 

@@ -10,11 +10,15 @@ from db.connection import db_manager
 from integrations import discord, relay, slack, whatsapp
 from logger.logger import logger
 from mcp_tools.server import build_mcp
-from server import backups, gateway, health, nodes, objects, workers
+from server import backups, events, exports, gateway, health, metering, nodes, objects, webhooks, workers
 from server.admin_api import AdminApi
 from server.agent_api import AgentApi
 from server.audit_api import AuditApi
 from server.auth_api import AuthApi
+from server.bench import Bench, BenchmarksApi
+from server.events import EventsApi
+from server.exports import ExportsApi
+from server.metering import UsageApi
 from server.monitor import MonitoringApi
 from server.nodes_api import NodesApi
 from server.policy_api import SandboxPolicyApi
@@ -24,6 +28,8 @@ from server.security import require_secrets_key
 from server.servers_api import ServersApi, prepull_images
 from server.telemetry import setup_telemetry
 from server.vault_api import VaultApi, remind
+from server.viewer_api import ViewerApi
+from server.webhooks import WebhooksApi
 from server.workspaces_api import WorkspacesApi
 
 
@@ -60,6 +66,11 @@ class Server:
                     asyncio.create_task(backups.loop(self.sandbox_api)),
                     asyncio.create_task(self.agent_api.work()),
                     asyncio.create_task(housekeeping()),
+                    asyncio.create_task(events.purge_loop()),
+                    asyncio.create_task(webhooks.loop()),
+                    asyncio.create_task(metering.loop()),
+                    asyncio.create_task(exports.loop()),
+                    asyncio.create_task(self.bench.loop()),
                 ]
                 if discord.configured():
                     background.append(asyncio.create_task(discord.supervise(self.agent_api)))
@@ -72,6 +83,7 @@ class Server:
             for task in background:
                 task.cancel()
             await asyncio.gather(*background, return_exceptions=True)
+            await self.bench.shutdown()
             await asyncio.gather(self.sandbox_api.jobs.shutdown(), self.agent_api.shutdown())
             if jobs is not None:
                 jobs.cancel()
@@ -110,6 +122,13 @@ class Server:
         self.vault_api = VaultApi(self.app, self.auth_api, self.sandbox_api)
         self.workspaces_api = WorkspacesApi(self.app, self.auth_api)
         self.audit_api = AuditApi(self.app, self.auth_api)
+        self.viewer_api = ViewerApi(self.app, self.auth_api, self.sandbox_api)
+        self.events_api = EventsApi(self.app, self.auth_api)
+        self.webhooks_api = WebhooksApi(self.app, self.auth_api)
+        self.usage_api = UsageApi(self.app, self.auth_api)
+        self.exports_api = ExportsApi(self.app, self.auth_api)
+        self.benchmarks_api = BenchmarksApi(self.app, self.auth_api)
+        self.bench = Bench(self.sandbox_api, self.agent_api)
         self.mcp = build_mcp(self.auth_api, self.sandbox_api)
         self.app.mount("/mcp", self.mcp.streamable_http_app(streamable_http_path="/"))
 

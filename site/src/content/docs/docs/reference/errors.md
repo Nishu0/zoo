@@ -13,16 +13,16 @@ raises `zoo_sdk.ZooError` with `"<status>: <detail>"` for any of them.
 
 | Status | Where it comes from |
 | --- | --- |
-| `200` | `GET /`, `POST /auth/login`, `GET /auth/me`, +77 more |
-| `201` | `POST /auth/signup`, `POST /api-keys`, `POST /sandboxes`, +8 more |
-| `202` | `POST /sandboxes/{sandbox_id}/snapshots` |
-| `204` | `DELETE /sandboxes/{sandbox_id}/snapshots/{snapshot_id}`, `DELETE /sandboxes/{sandbox_id}/agent`, `POST /sandboxes/{sandbox_id}/agent/stop`, +6 more |
+| `200` | `GET /`, `POST /auth/login`, `GET /auth/me`, +112 more |
+| `201` | `POST /auth/signup`, `POST /api-keys`, `POST /sandboxes`, +12 more |
+| `202` | `POST /sandboxes/{sandbox_id}/snapshots`, `POST /webhooks/{webhook_id}/test`, `POST /agent/exports`, +1 more |
+| `204` | `DELETE /sandboxes/{sandbox_id}/snapshots/{snapshot_id}`, `DELETE /sandboxes/{sandbox_id}/agent`, `POST /sandboxes/{sandbox_id}/agent/stop`, +15 more |
 | `400` | raised by the handlers |
 | `401` | raised by the handlers |
 | `403` | raised by the handlers |
 | `404` | raised by the handlers |
 | `409` | raised by the handlers |
-| `422` | `POST /auth/signup`, `POST /auth/login`, `POST /api-keys`, +76 more |
+| `422` | `POST /auth/signup`, `POST /auth/login`, `GET /auth/me`, +148 more |
 | `429` | raised by the handlers |
 | `500` | raised by the handlers |
 | `502` | raised by the handlers |

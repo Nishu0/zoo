@@ -32,13 +32,17 @@ Zoo(self, api_key: str | None=None, base_url: str | None=None)
 | Method | |
 | --- | --- |
 | [`request()`](#zoorequest) |  |
-| [`sandboxes()`](#zoosandboxes) |  |
+| [`sandboxes()`](#zoosandboxes) | The workspace's sandboxes, only those with all of `labels` when given. |
 | [`sandbox()`](#zoosandbox) |  |
 | [`create()`](#zoocreate) |  |
 | [`servers()`](#zooservers) |  |
 | [`add_server()`](#zooadd_server) |  |
 | [`profiles()`](#zooprofiles) |  |
 | [`tools()`](#zootools) |  |
+| [`events()`](#zooevents) | Follows the workspace's events (sandbox.state, run.started, run.step, run.finished, takeover.started, takeover.ended) as they happen, from after `after` (a seq) or from now. Pass the last event's seq back to resume after a disconnect. |
+| [`usage()`](#zoousage) | Metered usage between two ISO times, by sandbox, day or a label (group_by="label:end_user"). |
+| [`export_trajectories()`](#zooexport_trajectories) | Exports finished agent runs (run_id=, or sandbox_id=, labels=, from_=, to=) as a .tar.gz of JSONL and frames, and saves it to `path` once the server has built it. |
+| [`benchmark()`](#zoobenchmark) | Runs a task suite (YAML/JSON text, or parsed) against models ([{"provider", "model"}]) in parallel sandboxes; returns the benchmark with its per-model summary and per-task results. |
 
 ### `Zoo.request` {#zoorequest}
 
@@ -49,8 +53,10 @@ request(self, method: str, path: str, **kwargs)
 
 ### `Zoo.sandboxes` {#zoosandboxes}
 
+The workspace's sandboxes, only those with all of `labels` when given.
+
 ```python
-sandboxes(self) -> list['Sandbox']
+sandboxes(self, labels: dict[str, str] | None=None) -> list['Sandbox']
 ```
 
 
@@ -64,7 +70,7 @@ sandbox(self, sandbox_id: str) -> 'Sandbox'
 ### `Zoo.create` {#zoocreate}
 
 ```python
-create(self, name: str | None=None, kind: str='desktop', server_id: str | None=None, profile_ids: list[str] | None=None, wait: bool=True, timeout: int=180) -> 'Sandbox'
+create(self, name: str | None=None, kind: str='desktop', server_id: str | None=None, profile_ids: list[str] | None=None, wait: bool=True, timeout: int=180, labels: dict[str, str] | None=None) -> 'Sandbox'
 ```
 
 
@@ -96,6 +102,46 @@ tools(self) -> list[dict]
 ```
 
 
+### `Zoo.events` {#zooevents}
+
+Follows the workspace's events (sandbox.state, run.started, run.step, run.finished, takeover.started,
+takeover.ended) as they happen, from after `after` (a seq) or from now. Pass the last event's seq back to
+resume after a disconnect.
+
+```python
+events(self, after: int | None=None, sandbox_id: str | None=None, type: str | None=None)
+```
+
+
+### `Zoo.usage` {#zoousage}
+
+Metered usage between two ISO times, by sandbox, day or a label (group_by="label:end_user").
+
+```python
+usage(self, since: str, until: str, group_by: str='sandbox', metric: str | None=None) -> list[dict]
+```
+
+
+### `Zoo.export_trajectories` {#zooexport_trajectories}
+
+Exports finished agent runs (run_id=, or sandbox_id=, labels=, from_=, to=) as a .tar.gz of JSONL and
+frames, and saves it to `path` once the server has built it.
+
+```python
+export_trajectories(self, path: str, wait: bool=True, timeout: int=3600, **filters) -> dict
+```
+
+
+### `Zoo.benchmark` {#zoobenchmark}
+
+Runs a task suite (YAML/JSON text, or parsed) against models ([{"provider", "model"}]) in parallel
+sandboxes; returns the benchmark with its per-model summary and per-task results.
+
+```python
+benchmark(self, suite: str | dict, models: list[dict], parallel: int=2, wait: bool=True) -> dict
+```
+
+
 ## `zoo_sdk.Sandbox`
 
 ### `Sandbox.__init__`
@@ -114,6 +160,10 @@ Sandbox(self, client: Zoo, data: dict)
 | [`screenshot()`](#sandboxscreenshot) |  |
 | [`ask()`](#sandboxask) | Runs the server-side CUA agent on this sandbox and yields its events as they stream in: {"type": "user" \| "reasoning" \| "action" \| "text" \| "status" \| "error", "text": ...}, then {"type": "usage", "steps", "tokens", "cost", "elapsed", "max_steps", ...} after each model call and {"type": "done", "state": "succeeded" \| "failed" \| "cancelled"} at the end. An action event's "id" fetches the screenshot it was decided on with step_screenshot(). |
 | [`stop_agent()`](#sandboxstop_agent) |  |
+| [`takeover()`](#sandboxtakeover) | Pauses the running agent before its next action, so a person can use the screen. |
+| [`release()`](#sandboxrelease) | Hands the screen back; the agent carries on from it as it is now. |
+| [`viewer_link()`](#sandboxviewer_link) | A link to this sandbox's screen for someone without a Zoo account: "view" only watches, "control" can type and click (and take over from the agent). Its "url" opens in a browser or an iframe; expires_in is in minutes. |
+| [`set_labels()`](#sandboxset_labels) | Replaces the sandbox's labels. |
 | [`agent_state()`](#sandboxagent_state) | The conversation, and the latest run with its usage and limits. |
 | [`step_screenshot()`](#sandboxstep_screenshot) | The screen the agent saw before an action (an action message's or event's id). |
 | [`hotkey()`](#sandboxhotkey) |  |
@@ -185,7 +235,7 @@ Runs the server-side CUA agent on this sandbox and yields its events as they str
 screenshot it was decided on with step_screenshot().
 
 ```python
-ask(self, message: str, model: str | None=None)
+ask(self, message: str, model: str | None=None, provider: str | None=None)
 ```
 
 
@@ -193,6 +243,44 @@ ask(self, message: str, model: str | None=None)
 
 ```python
 stop_agent(self)
+```
+
+
+### `Sandbox.takeover` {#sandboxtakeover}
+
+Pauses the running agent before its next action, so a person can use the screen.
+
+```python
+takeover(self) -> dict
+```
+
+
+### `Sandbox.release` {#sandboxrelease}
+
+Hands the screen back; the agent carries on from it as it is now.
+
+```python
+release(self) -> dict
+```
+
+
+### `Sandbox.viewer_link` {#sandboxviewer_link}
+
+A link to this sandbox's screen for someone without a Zoo account: "view" only watches, "control" can
+type and click (and take over from the agent). Its "url" opens in a browser or an iframe; expires_in is in
+minutes.
+
+```python
+viewer_link(self, mode: str='view', expires_in: int=60, end_user: str | None=None) -> dict
+```
+
+
+### `Sandbox.set_labels` {#sandboxset_labels}
+
+Replaces the sandbox's labels.
+
+```python
+set_labels(self, labels: dict[str, str]) -> 'Sandbox'
 ```
 
 

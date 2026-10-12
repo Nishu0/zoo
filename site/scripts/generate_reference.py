@@ -166,6 +166,9 @@ def gen_api() -> None:
 
     os.environ.setdefault("JWT_SECRET", "docs")
     os.environ.setdefault("ZOO_SECRETS_KEY", "docs")
+    # required at startup; the pool connects lazily, so nothing is reached
+    os.environ.setdefault("DATABASE_URL", "postgresql://docs:docs@127.0.0.1:1/docs")
+    os.environ.setdefault("ZOO_OBJECT_STORE", "s3://docs")
     from main import app  # no server starts; FastAPI object only
 
     spec = app.openapi()
@@ -404,7 +407,7 @@ DESCRIPTIONS = {
     "ZOO_SECRETS_KEY": "Encrypts stored secrets, agent keys, app profiles and VNC passwords. Back it up.",
     "ZOO_SECRETS_KEY_PREVIOUS": "Old keys, comma-separated, kept only until `make rotate-secrets` has run.",
     "ZOO_KMS": "Wrap workspace data keys with an external KMS: `aws:<key ARN>`, `gcp:…` or `vault:<mount>/<key>`.",
-    "ZOO_OBJECT_STORE": "`s3://<bucket>[/<prefix>]` for moving sandboxes between servers; used by macOS and Windows moves.",
+    "ZOO_OBJECT_STORE": "Required. `s3://<bucket>[/<prefix>]`: profiles, agent screenshots, snapshots, exports, backups and moves between servers.",
     "ZOO_S3_ENDPOINT": "S3-compatible endpoint for `ZOO_OBJECT_STORE` (MinIO, R2).",
     "ZOO_S3_REGION": "Region for `ZOO_OBJECT_STORE`.",
     "AWS_ACCESS_KEY_ID": "Credentials for `ZOO_OBJECT_STORE` (with `AWS_SECRET_ACCESS_KEY`).",
@@ -439,6 +442,12 @@ DESCRIPTIONS = {
     "ZOO_AGENT_MAX_STEPS": "Cap on each agent task's actions. Workspaces can set lower limits.",
     "ZOO_AGENT_MAX_SECONDS": "Cap on each agent task's wall-clock seconds.",
     "ZOO_AGENT_MAX_TOKENS": "Cap on each agent task's model tokens.",
+    "ZOO_EMBED_ORIGINS": "Origins (space-separated) that may put a viewer link's page in an iframe; none when unset.",
+    "ZOO_MAX_VIEWER_LINK_HOURS": "Longest a viewer link may last.",
+    "ZOO_EVENT_RETENTION_DAYS": "How long events (`GET /events`, webhooks) and their deliveries are kept.",
+    "ZOO_EXPORT_RETENTION_DAYS": "How long trajectory exports are kept.",
+    "ZOO_WEBHOOK_ALLOW_PRIVATE": "`1` lets webhooks reach private addresses.",
+    "ZOO_WEBHOOK_BACKOFF_SECONDS": "Seconds between a failed webhook delivery's retries, comma-separated; it fails after the last.",
     "ZOO_AGENT_PARALLEL": "Agent tasks one worker process runs at once.",
     "ZOO_NETWORK": "Docker network shared by the API and sandboxes. Compose sets it to `zoo`.",
     "ZOO_RUNTIME": "Docker runtime for sandboxes: `kata` (default) or `runc`.",

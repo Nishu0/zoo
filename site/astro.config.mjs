@@ -31,6 +31,7 @@ const sidebar = [
             "docs/guides/domain-https-backups",
             "docs/guides/upgrading",
             "docs/guides/kubernetes",
+            "docs/guides/building-on-zoo",
         ],
     },
     {

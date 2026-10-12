@@ -6,6 +6,7 @@ import json
 import os
 import time
 import uuid
+from collections.abc import Callable
 from typing import Any, Literal
 
 import websockets
@@ -13,12 +14,13 @@ from fastapi import (
     Depends,
     FastAPI,
     HTTPException,
+    Query,
     Request,
     Response,
     WebSocket,
 )
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from db.connection import db_manager
 from db.generated.models import Job, Sandbox, SandboxImageVersion
@@ -31,7 +33,21 @@ from db.generated.query import (
     Querier,
 )
 from logger.logger import logger
-from server import audit_api, docker, kube, macos, metrics, nodes, objects, quotas, sizes, tickets, windows, workers
+from server import (
+    audit_api,
+    docker,
+    kube,
+    labels,
+    macos,
+    metrics,
+    nodes,
+    objects,
+    quotas,
+    sizes,
+    tickets,
+    windows,
+    workers,
+)
 from server.auth_api import AuthApi, Member, require, require_sandbox
 from server.docker import IMAGE, copy_volume, default_image, run_container, wait_for_vnc, write_secrets
 from server.executions import ExecutionLog
@@ -72,7 +88,7 @@ from server.security import (
 )
 from server.telemetry import tracer
 from server.vault_sync import remember_booted
-from server.vnc import NO_AUTH, VERSION, Buffered, authenticate_async
+from server.vnc import NO_AUTH, VERSION, Buffered, Gate, authenticate_async
 from utils.time import to_stamp
 
 IMAGE_SLUG = "zoo-sandbox"
@@ -174,10 +190,28 @@ class CreateSandboxRequest(BaseModel):
     # all; null: the workspace's default
     idle_timeout_minutes: int | None = Field(default=None, gt=0)
     max_lifetime_minutes: int | None = Field(default=None, gt=0)
+    # e.g. {"end_user": "alice"} (server/labels.py)
+    labels: dict[str, str] = {}
+
+    @field_validator("labels")
+    @classmethod
+    def check_labels(cls, value: dict[str, str]) -> dict[str, str]:
+        return labels.validate(value)
 
     @property
     def size(self) -> sizes.Size:
         return sizes.Size(self.cpus, self.memory_mb, self.disk_gb)
+
+
+class UpdateSandboxRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    # replaces every label; null leaves them as they are
+    labels: dict[str, str] | None = None
+
+    @field_validator("labels")
+    @classmethod
+    def check_labels(cls, value: dict[str, str] | None) -> dict[str, str] | None:
+        return labels.validate(value) if value is not None else value
 
 
 class LifecycleRequest(BaseModel):
@@ -227,6 +261,7 @@ class SandboxResponse(BaseModel):
     idle_timeout_minutes: int | None = None
     max_lifetime_minutes: int | None = None
     last_activity_at: str | None = None
+    labels: dict[str, str] = {}
 
 
 class ToolExecutionResponse(BaseModel):
@@ -258,6 +293,8 @@ MAX_SNAPSHOTS = int(os.environ.get("ZOO_MAX_SNAPSHOTS", "10"))
 # how often an open viewer counts as activity, and how often idle and old sandboxes are stopped
 VIEWER_TOUCH_SECONDS = 60
 EXPIRE_SECONDS = 60
+# how soon a viewer on a revoked or expired link is disconnected
+LINK_CHECK_SECONDS = 15
 
 
 def local_memory() -> int | None:
@@ -295,8 +332,13 @@ def snapshot_response(row) -> SnapshotResponse:
     )
 
 
-def to_response(sandbox: Sandbox, db: Querier | None = None) -> SandboxResponse:
+def to_response(
+    sandbox: Sandbox, db: Querier | None = None, sandbox_labels: dict[str, str] | None = None
+) -> SandboxResponse:
+    """The API's view of a sandbox; with db, its job in progress, and its labels unless given."""
     job = db.get_active_job(sandbox_id=sandbox.id) if db is not None else None
+    if sandbox_labels is None and db is not None:
+        sandbox_labels = labels.of(db, sandbox.id)
     image = pinned_image(sandbox)
     return SandboxResponse(
         id=sandbox.id,
@@ -326,6 +368,7 @@ def to_response(sandbox: Sandbox, db: Querier | None = None) -> SandboxResponse:
         idle_timeout_minutes=sandbox.idle_timeout_minutes,
         max_lifetime_minutes=sandbox.max_lifetime_minutes,
         last_activity_at=to_stamp(sandbox.last_activity_at),
+        labels=sandbox_labels or {},
     )
 
 
@@ -359,10 +402,20 @@ class SandboxApi:
 
         @self.app.get("/sandboxes", response_model=list[SandboxResponse])
         def list_sandboxes(
-            user: Member = Depends(current_user), db: Querier = Depends(db_manager.get_client)
+            label: list[str] = Query(default=[], description="key=value; repeat to match all of them"),
+            user: Member = Depends(current_user),
+            db: Querier = Depends(db_manager.get_client),
         ) -> list[SandboxResponse]:
+            wanted = labels.parse_filters(label)
             sandboxes = db.list_sandboxes_by_workspace(workspace_id=user.workspace_id)
-            return [to_response(s, db) for s in sandboxes if user.key_sandbox_id in (None, s.id)]
+            labelled = labels.of_workspace(db, user.workspace_id)
+            return [
+                to_response(s, db, labelled.get(s.id, {}))
+                for s in sandboxes
+                if user.key_sandbox_id in (None, s.id)
+                and labels.matches(labelled.get(s.id, {}), wanted)
+                and labels.matches(labelled.get(s.id, {}), user.key_labels)
+            ]
 
         @self.app.post("/sandboxes", response_model=SandboxResponse, status_code=201)
         def create_sandbox(payload: CreateSandboxRequest, user: Member = Depends(current_user)) -> SandboxResponse:
@@ -378,13 +431,34 @@ class SandboxApi:
         ) -> SandboxResponse:
             return to_response(self.owned(sandbox_id, user, db), db)
 
+        @self.app.patch("/sandboxes/{sandbox_id}", response_model=SandboxResponse)
+        def update_sandbox(
+            sandbox_id: str,
+            payload: UpdateSandboxRequest,
+            user: Member = Depends(current_user),
+            db: Querier = Depends(db_manager.get_client),
+        ) -> SandboxResponse:
+            sandbox = self.owned(sandbox_id, user, db)
+            if payload.name is not None:
+                sandbox = db.rename_sandbox(name=payload.name, id=sandbox.id)
+                assert sandbox is not None
+            if payload.labels is not None:
+                wanted = labels.scoped(payload.labels, user.key_labels)
+                current = labels.of(db, sandbox.id)
+                if sandbox.status in ("pending", "provisioning", "running"):
+                    # what changes holds to the new values' quotas, as a start would
+                    added = {k: v for k, v in wanted.items() if current.get(k) != v}
+                    quotas.check(db, sandbox.workspace_id, sizes.of(sandbox), new=False, labels=added)
+                labels.put(db, sandbox.id, wanted)
+            return to_response(sandbox, db)
+
         @self.app.post("/sandboxes/{sandbox_id}/start", response_model=SandboxResponse)
         def start_sandbox(sandbox_id: str, user: Member = Depends(current_user)) -> SandboxResponse:
             with db_manager.session() as db:
                 sandbox = self.idle(sandbox_id, user, db)
                 if sandbox.status in ("running", "provisioning"):
                     raise HTTPException(status_code=409, detail=f"sandbox is {sandbox.status}")
-                quotas.check(db, sandbox.workspace_id, sizes.of(sandbox), new=False)
+                quotas.check(db, sandbox.workspace_id, sizes.of(sandbox), new=False, labels=labels.of(db, sandbox.id))
                 sandbox = db.update_sandbox_status(status="provisioning", id=sandbox.id)
                 self.jobs.enqueue(db, sandbox.id, "boot", boot_deadline(sandbox.kind))
                 response = to_response(sandbox, db)
@@ -645,9 +719,11 @@ class SandboxApi:
         self.app.websocket("/sandboxes/{sandbox_id}/terminal")(self.terminal)
 
     def owned(self, sandbox_id: str, user: Member, db: Querier) -> Sandbox:
-        """The sandbox, when it is in the user's workspace (and their API key's sandbox, if it is for one)."""
+        """The sandbox, when it is in the user's workspace (and their API key's sandbox, or has its key's labels)."""
         sandbox = db.get_sandbox(id=sandbox_id)
         if sandbox is None or sandbox.workspace_id != user.workspace_id or sandbox.status == "deleted":
+            raise HTTPException(status_code=404, detail="sandbox not found")
+        if user.key_labels is not None and not labels.matches(labels.of(db, sandbox.id), user.key_labels):
             raise HTTPException(status_code=404, detail="sandbox not found")
         require_sandbox(user, sandbox.id)
         return sandbox
@@ -802,7 +878,8 @@ class SandboxApi:
             raise HTTPException(status_code=400, detail="admin sandboxes are for macOS")
         if payload.kind in VMS and payload.size != sizes.DEFAULT:
             raise HTTPException(status_code=400, detail="sizing is supported on Linux sandboxes only")
-        quotas.check(db, user.workspace_id, payload.size, new=True)
+        sandbox_labels = labels.scoped(payload.labels, user.key_labels)
+        quotas.check(db, user.workspace_id, payload.size, new=True, labels=sandbox_labels)
         server_id = self.place(payload.server_id, user, db, payload.kind, payload.queue, payload.size)
         for profile_id in payload.profile_ids:
             profile = db.get_profile(id=profile_id)
@@ -854,6 +931,7 @@ class SandboxApi:
             max_lifetime_minutes=payload.max_lifetime_minutes,
             id=sandbox.id,
         )
+        labels.put(db, sandbox.id, sandbox_labels)
         for secret_id in dict.fromkeys(payload.secret_ids):
             db.attach_vault_secret(sandbox_id=sandbox.id, secret_id=secret_id)
             name = db.get_vault_secret(id=secret_id).name
@@ -1225,6 +1303,37 @@ class SandboxApi:
         self.viewers.add(task)
         task.add_done_callback(self.viewers.discard)
 
+    def watch_gate(
+        self, websocket: WebSocket, sandbox_id: str, gate: Gate, actor: str, live: Callable[[], bool] | None
+    ):
+        """Every second: a viewer that may act and did takes the screen over from a running agent. Every
+        LINK_CHECK_SECONDS: a viewer whose link was revoked or ran out is disconnected."""
+
+        async def watch():
+            checked = time.monotonic()
+            while websocket.client_state.name == "CONNECTED":
+                await asyncio.sleep(1)
+                with contextlib.suppress(Exception):
+                    if not gate.view_only and gate.take_action():
+                        await asyncio.to_thread(self.take_over, sandbox_id, actor)
+                    if live is not None and time.monotonic() - checked >= LINK_CHECK_SECONDS:
+                        checked = time.monotonic()
+                        if not await asyncio.to_thread(live):
+                            await websocket.close(code=1008, reason="the link was revoked or has expired")
+                            return
+
+        task = asyncio.create_task(watch())
+        self.viewers.add(task)
+        task.add_done_callback(self.viewers.discard)
+
+    def take_over(self, sandbox_id: str, actor: str):
+        """Pauses the sandbox's running agent for the person at the screen, if it isn't paused already."""
+        with db_manager.session() as db:
+            run = db.get_active_agent_run(sandbox_id=sandbox_id)
+            if run is not None and run.state == "running" and run.paused_at is None:
+                db.pause_agent_run(paused_by=actor, id=run.id)
+                self.logger.info("agent taken over", extra={"sandbox_id": sandbox_id, "run_id": run.id, "by": actor})
+
     def touch(self, sandbox_id: str):
         with db_manager.session() as db:
             db.touch_sandbox(id=sandbox_id)
@@ -1342,21 +1451,32 @@ class SandboxApi:
         if sandbox is None or not usable or sandbox.status != "running" or not sandbox.access_url:
             await websocket.close(code=1008, reason="sandbox not available")
             return
+        await self.screen(websocket, sandbox, Gate(view_only=False), user_id)
 
+    async def screen(
+        self, websocket: WebSocket, sandbox: Sandbox, gate: Gate, actor: str, live: Callable[[], bool] | None = None
+    ):
+        """Serves a running sandbox's screen to a viewer that is allowed it, through `gate`. When the viewer acts
+        while an agent runs, the agent waits for it (a takeover by `actor`, a user id or link:<viewer link id>); when
+        `live` stops returning True (a revoked or expired link), the viewer is disconnected."""
+        sandbox_id, access_url = sandbox.id, sandbox.access_url
+        if not access_url:
+            raise RuntimeError("the sandbox has no screen")
         await websocket.accept()
         self.watch_viewer(websocket, sandbox_id)
+        self.watch_gate(websocket, sandbox_id, gate, actor, live)
         if is_vm(sandbox.runtime_id):
-            await self.proxy_vnc(websocket, sandbox.runtime_id)
+            await self.proxy_vnc(websocket, sandbox.runtime_id, gate)
             return
         # through the gateway this asks it over the network, so off the event loop
         guest = await asyncio.to_thread(hub.for_sandbox, sandbox_id)
         try:
             if guest is not None and guest.has("tunnel"):
-                await self.proxy_tunnel(websocket, Tunnel(guest), sandbox)
+                await self.proxy_tunnel(websocket, Tunnel(guest), sandbox, gate)
                 return
             if sandbox.access_url == TUNNEL_URL:
                 raise ConnectionError("the sandbox's guest agent is not connected")
-            async with websockets.connect(sandbox.access_url, max_size=None) as target:
+            async with websockets.connect(access_url, max_size=None) as target:
                 # log in to x11vnc here and offer the browser no-auth, so the password never leaves the API
                 async def receive() -> bytes:
                     message = await target.recv()
@@ -1364,11 +1484,11 @@ class SandboxApi:
 
                 upstream = Buffered(receive)
                 await authenticate_async(upstream, target.send, vnc_password(sandbox))
-                init = await offer_no_auth(websocket)
+                init = gate.feed(await offer_no_auth(websocket))
                 if init:
                     await target.send(init)
                 tasks = [
-                    asyncio.create_task(forward_client_to_target(websocket, target)),
+                    asyncio.create_task(forward_client_to_target(websocket, target, gate)),
                     asyncio.create_task(forward_target_to_client(target, websocket)),
                 ]
                 _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
@@ -1381,7 +1501,7 @@ class SandboxApi:
             if websocket.client_state.name != "DISCONNECTED":
                 await websocket.close()
 
-    async def proxy_tunnel(self, websocket: WebSocket, tunnel: Tunnel, sandbox: Sandbox):
+    async def proxy_tunnel(self, websocket: WebSocket, tunnel: Tunnel, sandbox: Sandbox, gate: Gate):
         """Bridges an accepted noVNC websocket to x11vnc through a guest tunnel, logging in as proxy() does."""
         await tunnel.open(VNC_PORT)
         try:
@@ -1394,7 +1514,7 @@ class SandboxApi:
 
             upstream = Buffered(receive)
             await authenticate_async(upstream, tunnel.write, vnc_password(sandbox))
-            init = await offer_no_auth(websocket)
+            init = gate.feed(await offer_no_auth(websocket))
             if init:
                 await tunnel.write(init)
 
@@ -1403,7 +1523,9 @@ class SandboxApi:
                     message = await websocket.receive()
                     if message["type"] == "websocket.disconnect":
                         return
-                    await tunnel.write(message.get("bytes") or (message.get("text") or "").encode())
+                    data = gate.feed(message.get("bytes") or (message.get("text") or "").encode())
+                    if data:
+                        await tunnel.write(data)
 
             async def vnc_to_client():
                 if upstream.data:
@@ -1482,18 +1604,24 @@ class SandboxApi:
             if websocket.client_state.name != "DISCONNECTED":
                 await websocket.close()
 
-    async def proxy_vnc(self, websocket: WebSocket, runtime_id: str):
+    async def proxy_vnc(self, websocket: WebSocket, runtime_id: str, gate: Gate | None = None):
         """Bridges an accepted noVNC websocket to a macOS or Windows VM's VNC server over SSH. The proxy authenticates with the VM's
         password itself and offers the browser no-auth, so the password never leaves the API."""
         channel = None
+        gate = gate or Gate(view_only=False)
+
+        def send(data: bytes):
+            assert channel is not None
+            channel.sendall(data)
 
         async def client_to_vm():
             while True:
                 message = await websocket.receive()
                 if message["type"] == "websocket.disconnect":
                     return
-                data = message.get("bytes") or (message.get("text") or "").encode()
-                await asyncio.to_thread(channel.sendall, data)
+                data = gate.feed(message.get("bytes") or (message.get("text") or "").encode())
+                if data:
+                    await asyncio.to_thread(send, data)
 
         async def vm_to_client():
             while True:
@@ -1504,7 +1632,7 @@ class SandboxApi:
 
         try:
             channel = await asyncio.to_thread(authenticated_channel, runtime_id)
-            init = await offer_no_auth(websocket)
+            init = gate.feed(await offer_no_auth(websocket))
             if init:
                 await asyncio.to_thread(channel.sendall, init)
             tasks = [asyncio.create_task(client_to_vm()), asyncio.create_task(vm_to_client())]

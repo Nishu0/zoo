@@ -184,6 +184,8 @@ def test_an_interrupted_run_resumes_where_it_left_off(client, alice, sandbox, zo
                     max_seconds=600,
                     max_tokens=10**6,
                     max_attempts=3,
+                    provider=None,
+                    api_base=None,
                 )
             )
         )
@@ -231,6 +233,8 @@ def test_a_run_that_keeps_getting_interrupted_fails(client, alice, sandbox, zoo)
                     max_seconds=600,
                     max_tokens=10**6,
                     max_attempts=1,
+                    provider=None,
+                    api_base=None,
                 )
             )
         )
@@ -278,6 +282,8 @@ def test_stop_reaches_a_run_on_another_worker(client, alice, sandbox, zoo):
                     max_seconds=60,
                     max_tokens=1000,
                     max_attempts=3,
+                    provider=None,
+                    api_base=None,
                 )
             )
         )
@@ -301,6 +307,8 @@ def test_stopping_a_queued_run(client, alice, sandbox, zoo):
                 max_seconds=60,
                 max_tokens=1000,
                 max_attempts=3,
+                provider=None,
+                api_base=None,
             )
         )
     assert zoo.agent_api.stop(sandbox["id"]) is True

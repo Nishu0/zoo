@@ -43,7 +43,7 @@ tells you.
 **[docs](site/src/content/docs/docs/index.mdx)** — built with the site at `/docs`:
 
 - **Get started**: [Install](site/src/content/docs/docs/get-started/install.md) · [Your first sandbox](site/src/content/docs/docs/get-started/first-sandbox.md) · [Connect Claude Code or Claude Desktop](site/src/content/docs/docs/get-started/mcp.md) · [A computer-use agent in 5 minutes](site/src/content/docs/docs/get-started/cua-agent.md) · [Run Claude Code in a sandbox](site/src/content/docs/docs/get-started/claude-code.md)
-- **Guides**: remote servers, macOS and Windows sandboxes, [policies](site/src/content/docs/docs/guides/policies.md), vault, chat channels, HTTPS and backups, upgrading, Kubernetes
+- **Guides**: remote servers, macOS and Windows sandboxes, [policies](site/src/content/docs/docs/guides/policies.md), vault, chat channels, HTTPS and backups, upgrading, Kubernetes, [building on Zoo](site/src/content/docs/docs/guides/building-on-zoo.md) (embedding, end users, events and webhooks, metering, trajectories, benchmarks)
 - **Concepts**: architecture, security model, runtimes
 - **Reference** (generated from the code): REST API, tools, SDK, configuration, errors
 

@@ -104,6 +104,8 @@ export const sandboxSchema = z.object({
   idle_timeout_minutes: z.number().nullable().default(null),
   max_lifetime_minutes: z.number().nullable().default(null),
   last_activity_at: z.string().nullable().default(null),
+  // e.g. end_user: alice, for builders' own customers
+  labels: z.record(z.string(), z.string()).default({}),
 })
 
 export const createSandboxSchema = z.object({
@@ -518,6 +520,8 @@ export const apiKeySchema = z.object({
   key_prefix: z.string(),
   // the one sandbox the key reaches, or every sandbox in the workspace
   sandbox_id: z.string().nullable(),
+  // or only the sandboxes with these labels
+  label_selector: z.record(z.string(), z.string()).nullable().default(null),
   read_only: z.boolean(),
   expires_at: z.string().nullable(),
   last_used_at: z.string().nullable(),
@@ -530,6 +534,7 @@ export const createdApiKeySchema = apiKeySchema.extend({ key: z.string() })
 export type CreateApiKeyInput = {
   name: string
   sandbox_id?: string | null
+  label_selector?: Record<string, string> | null
   read_only?: boolean
   // ISO time; the key stops working then
   expires_at?: string | null
@@ -553,6 +558,8 @@ export const workspaceSchema = z.object({
   // what a sandbox without its own settings gets; null: never
   default_idle_timeout_minutes: z.number().nullable(),
   default_max_lifetime_minutes: z.number().nullable(),
+  // agent steps store the accessibility tree too, for trajectory exports
+  capture_a11y: z.boolean().default(true),
 })
 
 export const quotaSchema = z.object({
@@ -657,6 +664,11 @@ export const agentRunSchema = z.object({
   created_at: z.string(),
   started_at: z.string().nullable(),
   finished_at: z.string().nullable(),
+  // someone took the screen over: the agent waits until it is handed back
+  paused_at: z.string().nullable().default(null),
+  paused_by: z.string().nullable().default(null),
+  provider: z.string().nullable().default(null),
+  model: z.string().nullable().default(null),
 })
 
 export const agentStateSchema = z.object({
@@ -717,7 +729,74 @@ export const agentProviderIdSchema = z.enum([
   "gemini",
   "openrouter",
   "ollama",
+  "xai",
 ])
+
+export const viewerLinkModeSchema = z.enum(["view", "control"])
+
+export const viewerLinkSchema = z.object({
+  id: z.string(),
+  sandbox_id: z.string(),
+  mode: viewerLinkModeSchema,
+  end_user: z.string().nullable(),
+  expires_at: z.string(),
+  revoked_at: z.string().nullable(),
+  created_at: z.string(),
+})
+
+// the url (and token) are only shown once, when the link is made
+export const createdViewerLinkSchema = viewerLinkSchema.extend({
+  token: z.string(),
+  url: z.string(),
+})
+
+export type CreateViewerLinkInput = {
+  mode: ViewerLinkMode
+  expires_in_minutes: number
+  end_user?: string | null
+}
+
+export const WEBHOOK_EVENT_TYPES = [
+  "sandbox.state",
+  "run.started",
+  "run.step",
+  "run.finished",
+  "takeover.started",
+  "takeover.ended",
+] as const
+
+export const webhookSchema = z.object({
+  id: z.string(),
+  url: z.string(),
+  // empty: every event
+  types: z.array(z.string()),
+  label_selector: z.record(z.string(), z.string()).nullable(),
+  enabled: z.boolean(),
+  created_at: z.string(),
+})
+
+// the signing secret is only shown once, when the webhook is made
+export const createdWebhookSchema = webhookSchema.extend({ secret: z.string() })
+
+export type WebhookInput = {
+  url: string
+  types: string[]
+  label_selector?: Record<string, string> | null
+  enabled: boolean
+}
+
+export const webhookDeliverySchema = z.object({
+  id: z.string(),
+  event_id: z.string(),
+  event_type: z.string(),
+  status: z.enum(["pending", "delivered", "failed"]),
+  attempts: z.number(),
+  next_attempt_at: z.string(),
+  last_error: z.string().nullable(),
+  response_status: z.number().nullable(),
+  created_at: z.string(),
+  delivered_at: z.string().nullable(),
+})
 
 const agentLimitsSchema = z.object({
   max_steps: z.number(),
@@ -791,6 +870,10 @@ export type AgentChannel = z.infer<typeof agentChannelSchema>
 export type ChatPlatform = z.infer<typeof chatPlatformSchema>
 export type AgentChannelInput = z.infer<typeof agentChannelInputSchema>
 export type AgentProviderId = z.infer<typeof agentProviderIdSchema>
+export type ViewerLinkMode = z.infer<typeof viewerLinkModeSchema>
+export type ViewerLink = z.infer<typeof viewerLinkSchema>
+export type Webhook = z.infer<typeof webhookSchema>
+export type WebhookDelivery = z.infer<typeof webhookDeliverySchema>
 export type AgentSettingsInput = z.infer<typeof agentSettingsInputSchema>
 
 export function getToken(): string | null {
@@ -1063,6 +1146,46 @@ export const api = {
         body: JSON.stringify({ name }),
       }),
   },
+  viewerLinks: {
+    list: (sandboxId: string) =>
+      request(
+        `/sandboxes/${sandboxId}/viewer-links`,
+        z.array(viewerLinkSchema)
+      ),
+    create: ({
+      sandboxId,
+      ...input
+    }: CreateViewerLinkInput & { sandboxId: string }) =>
+      request(`/sandboxes/${sandboxId}/viewer-links`, createdViewerLinkSchema, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    revoke: ({ sandboxId, id }: { sandboxId: string; id: string }) =>
+      request(`/sandboxes/${sandboxId}/viewer-links/${id}`, z.null(), {
+        method: "DELETE",
+      }),
+  },
+  webhooks: {
+    list: () => request("/webhooks", z.array(webhookSchema)),
+    create: (input: WebhookInput) =>
+      request("/webhooks", createdWebhookSchema, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    update: ({ id, ...input }: WebhookInput & { id: string }) =>
+      request(`/webhooks/${id}`, webhookSchema, {
+        method: "PUT",
+        body: JSON.stringify(input),
+      }),
+    remove: (id: string) =>
+      request(`/webhooks/${id}`, z.null(), { method: "DELETE" }),
+    deliveries: (id: string) =>
+      request(`/webhooks/${id}/deliveries`, z.array(webhookDeliverySchema)),
+    test: (id: string) =>
+      request(`/webhooks/${id}/test`, z.object({ event_id: z.string() }), {
+        method: "POST",
+      }),
+  },
   snapshots: {
     list: (sandboxId: string) =>
       request(`/sandboxes/${sandboxId}/snapshots`, z.array(snapshotSchema)),
@@ -1212,6 +1335,14 @@ export const api = {
     ) => streamEvents(`/sandboxes/${id}/agent/stream`, { signal }, onEvent),
     stop: (id: string) =>
       request(`/sandboxes/${id}/agent/stop`, z.null(), { method: "POST" }),
+    takeover: (id: string) =>
+      request(`/sandboxes/${id}/agent/takeover`, agentRunSchema, {
+        method: "POST",
+      }),
+    release: (id: string) =>
+      request(`/sandboxes/${id}/agent/release`, agentRunSchema, {
+        method: "POST",
+      }),
     reset: (id: string) =>
       request(`/sandboxes/${id}/agent`, z.null(), { method: "DELETE" }),
     channels: (id: string) =>
@@ -1417,6 +1548,10 @@ export const queryKeys = {
   server: (id: string) => ["servers", id] as const,
   snapshots: (sandboxId: string) =>
     ["sandboxes", sandboxId, "snapshots"] as const,
+  viewerLinks: (sandboxId: string) =>
+    ["sandboxes", sandboxId, "viewer-links"] as const,
+  webhooks: ["webhooks"] as const,
+  webhookDeliveries: (id: string) => ["webhooks", id, "deliveries"] as const,
   base: (id: string) => ["servers", id, "base"] as const,
   profiles: ["profiles"] as const,
   vault: ["vault"] as const,
@@ -1665,6 +1800,68 @@ export function useAgent(id: string, poll: boolean) {
 
 export function useStopAgent(id: string) {
   return useMutation({ mutationFn: () => api.agent.stop(id) })
+}
+
+/** Takes the screen over from the running agent, or hands it back; either changes the run, so the agent refreshes. */
+export function useTakeover(id: string) {
+  return useInvalidatingMutation(queryKeys.agent(id), (take: boolean) =>
+    take ? api.agent.takeover(id) : api.agent.release(id)
+  )
+}
+
+export function useViewerLinks(sandboxId: string) {
+  return useQuery({
+    queryKey: queryKeys.viewerLinks(sandboxId),
+    queryFn: () => api.viewerLinks.list(sandboxId),
+  })
+}
+
+export function useCreateViewerLink(sandboxId: string) {
+  return useInvalidatingMutation(
+    queryKeys.viewerLinks(sandboxId),
+    (input: CreateViewerLinkInput) =>
+      api.viewerLinks.create({ sandboxId, ...input })
+  )
+}
+
+export function useRevokeViewerLink(sandboxId: string) {
+  return useInvalidatingMutation(
+    queryKeys.viewerLinks(sandboxId),
+    (id: string) => api.viewerLinks.revoke({ sandboxId, id })
+  )
+}
+
+export function useWebhooks(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.webhooks,
+    queryFn: api.webhooks.list,
+    enabled,
+  })
+}
+
+export function useCreateWebhook() {
+  return useInvalidatingMutation(queryKeys.webhooks, api.webhooks.create)
+}
+
+export function useUpdateWebhook() {
+  return useInvalidatingMutation(queryKeys.webhooks, api.webhooks.update)
+}
+
+export function useRemoveWebhook() {
+  return useInvalidatingMutation(queryKeys.webhooks, api.webhooks.remove)
+}
+
+export function useTestWebhook() {
+  return useInvalidatingMutation(queryKeys.webhooks, api.webhooks.test)
+}
+
+export function useWebhookDeliveries(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.webhookDeliveries(id),
+    queryFn: () => api.webhooks.deliveries(id),
+    enabled,
+    refetchInterval: enabled ? 5000 : false,
+  })
 }
 
 export function useResetAgent(id: string) {

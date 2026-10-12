@@ -271,3 +271,81 @@ class VNC:
             self.key(sym, True)
             self.key(sym, False)
             time.sleep(delay)
+
+
+# what a viewer sends that changes the screen: keys, pointer, clipboard, xvp (shutdown/reboot), desktop resize, GII
+# input devices and QEMU's extended key event
+INPUT_MESSAGES = {4, 5, 6, 250, 251, 253, 255}
+
+
+def client_message_size(data: bytes) -> int | None:
+    """The length of the RFB client-to-server message at the start of data, None until enough of it is there to
+    tell. Raises ValueError for a message this proxy doesn't know, so a gated viewer can't slip input past it."""
+    kind = data[0]
+    fixed = {0: 20, 3: 10, 4: 8, 5: 6, 150: 10, 250: 4}
+    if kind in fixed:
+        return fixed[kind]
+    if kind == 2:  # SetEncodings: a count of 4-byte encodings
+        return None if len(data) < 4 else 4 + 4 * struct.unpack(">H", data[2:4])[0]
+    if kind == 6:  # ClientCutText; a negative length is the extended clipboard's
+        return None if len(data) < 8 else 8 + abs(struct.unpack(">i", data[4:8])[0])
+    if kind == 248:  # ClientFence: a payload of up to 64 bytes
+        return None if len(data) < 9 else 9 + data[8]
+    if kind == 251:  # SetDesktopSize: 16 bytes per screen
+        return None if len(data) < 8 else 8 + 16 * data[6]
+    if kind == 253:  # GII: a length in the byte order its second byte's top bit names
+        return None if len(data) < 4 else 4 + int.from_bytes(data[2:4], "big" if data[1] & 0x80 else "little")
+    if kind == 255:  # QEMU: only the extended key event is used by noVNC
+        if len(data) < 2:
+            return None
+        if data[1] == 0:
+            return 12
+        raise ValueError(f"unknown QEMU client message {data[1]}")
+    raise ValueError(f"unknown RFB client message {kind}")
+
+
+class Gate:
+    """Sits between a viewer and the VNC server, after the security handshake, and reads what the viewer sends as
+    whole RFB messages. A view-only gate drops input, and ends the connection (ValueError) at a message it can't
+    read. Any other gate notes when the viewer acted (a key, or the pointer with a button down), which is what takes
+    the screen over from a running agent; at a message it can't read it stops reading and passes everything on."""
+
+    def __init__(self, view_only: bool):
+        self.view_only = view_only
+        self.buffer = b""
+        # the viewer's first byte is its ClientInit
+        self.initialised = False
+        self.acted = False
+        self.passthrough = False
+
+    def feed(self, data: bytes) -> bytes:
+        """What to pass on to the VNC server of what the viewer sent."""
+        out = b""
+        if self.passthrough:
+            return data
+        if not self.initialised and data:
+            out, data, self.initialised = data[:1], data[1:], True
+        self.buffer += data
+        while self.buffer:
+            try:
+                size = client_message_size(self.buffer)
+            except ValueError:
+                if self.view_only:
+                    raise
+                out, self.buffer, self.passthrough = out + self.buffer, b"", True
+                break
+            if size is None or len(self.buffer) < size:
+                break
+            message, self.buffer = self.buffer[:size], self.buffer[size:]
+            kind = message[0]
+            if kind == 4 or kind == 255 or (kind == 5 and message[1] != 0):
+                self.acted = True
+            if self.view_only and kind in INPUT_MESSAGES:
+                continue
+            out += message
+        return out
+
+    def take_action(self) -> bool:
+        """Whether the viewer acted since this was last asked."""
+        acted, self.acted = self.acted, False
+        return acted

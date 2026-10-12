@@ -15,6 +15,7 @@ stream: in the process running it from memory, in any other process by following
 
 import asyncio
 import base64
+import inspect
 import io
 import json
 import os
@@ -48,9 +49,10 @@ from db.generated.query import (
 )
 from integrations import discord, slack, whatsapp
 from logger.logger import logger
-from server import metrics, objects, workers
+from server import metering, metrics, objects, workers
 from server.auth_api import AuthApi, Member
 from server.jobs import stamp
+from server.registry import TOOLS
 from server.sandbox_api import SandboxApi
 from server.security import audit, decrypt, decrypt_bytes, encrypt, encrypt_bytes
 from utils.time import to_stamp
@@ -70,6 +72,8 @@ STALE_SECONDS = 30
 POLL_SECONDS = 1.0
 SWEEP_SECONDS = 3600
 HISTORY = 40
+# how often a taken-over run checks whether it has been handed back
+TAKEOVER_POLL_SECONDS = 1.0
 CHANNEL = "cua"
 PLATFORMS = ("slack", "discord", "whatsapp")
 SCREENS = {
@@ -104,7 +108,10 @@ PROVIDERS = {
     "gemini": Provider("Google Gemini", "", "gemini-2.5-computer-use-preview-10-2025", "GOOGLE_API_KEY"),
     "openrouter": Provider("OpenRouter", "openrouter/", "qwen/qwen3-vl-235b-a22b-instruct", "OPENROUTER_API_KEY"),
     "ollama": Provider("Ollama", "ollama_chat/", "qwen3-vl", None, "http://localhost:11434"),
+    # cua has no loop of its own for Grok; its generic vision loop drives it, as for other vision models
+    "xai": Provider("xAI Grok", "xai/", "grok-4", "XAI_API_KEY"),
 }
+ProviderId = Literal["anthropic", "openai", "gemini", "openrouter", "ollama", "xai"]
 
 
 @dataclass(frozen=True)
@@ -123,7 +130,11 @@ class Limits:
 
 class AgentRequest(BaseModel):
     message: str = Field(min_length=1, max_length=20000)
+    # with a provider: that provider's model name (its default when null). Without one: the workspace's provider,
+    # and a full model string (anthropic/claude-...) to use instead of the workspace's model.
     model: str | None = Field(default=None, max_length=200)
+    provider: ProviderId | None = None
+    api_base: str | None = Field(default=None, max_length=500)
     stream: bool = True
 
 
@@ -153,6 +164,11 @@ class AgentRunResponse(BaseModel):
     created_at: str
     started_at: str | None
     finished_at: str | None
+    # someone has taken the screen over (a user id, or link:<viewer link id>); the run waits for them
+    paused_at: str | None = None
+    paused_by: str | None = None
+    provider: str | None = None
+    model: str | None = None
 
 
 class AgentStateResponse(BaseModel):
@@ -171,6 +187,13 @@ class ProviderResponse(BaseModel):
     server_key: bool
 
 
+class ProviderStatusResponse(ProviderResponse):
+    # a run can use it now: a workspace key, a server key, or no key needed
+    has_key: bool
+    # the vault secret a workspace key goes in
+    key_secret: str | None
+
+
 class SecretRef(BaseModel):
     id: str
     name: str
@@ -183,7 +206,7 @@ class LimitsResponse(BaseModel):
 
 
 class AgentSettingsRequest(BaseModel):
-    provider: Literal["anthropic", "openai", "gemini", "openrouter", "ollama"]
+    provider: ProviderId
     model: str = Field(min_length=1, max_length=200)
     # a key typed in: saved to the vault as AGENT_<PROVIDER>_API_KEY and used from there. None keeps the current
     # key, "" removes it
@@ -345,6 +368,10 @@ def run_response(run: AgentRun) -> AgentRunResponse:
         created_at=to_stamp(run.created_at),
         started_at=to_stamp(run.started_at),
         finished_at=to_stamp(run.finished_at),
+        paused_at=to_stamp(run.paused_at),
+        paused_by=run.paused_by,
+        provider=run.provider,
+        model=run.model,
     )
 
 
@@ -387,20 +414,67 @@ class ZooComputer:
     """Implements cua_agent's AsyncComputerHandler protocol on top of the sandbox tool registry, so agent actions
     go through the same permission checks and Activity log as API and MCP calls, on Linux, macOS and Windows."""
 
-    def __init__(self, sandboxes: SandboxApi, user: Member, sandbox: Sandbox):
+    def __init__(
+        self,
+        sandboxes: SandboxApi,
+        user: Member,
+        sandbox: Sandbox,
+        run: "Run | None" = None,
+        deadline: asyncio.Timeout | None = None,
+    ):
         self.sandboxes = sandboxes
         self.user = user
         self.sandbox = sandbox
+        # the run this computer works for, which waits while someone has taken the screen over, and its time
+        # limit, which the wait doesn't count against
+        self.run = run
+        self.deadline = deadline
         self.size: tuple[int, int] | None = None
         # the latest screenshot the agent was given, and where it was stored once something referred to it
         self.last: bytes | None = None
         self.last_ref: str | None = None
 
     async def call(self, name: str, **args) -> Any:
+        if self.run is not None:
+            await self.wait_for_screen()
         try:
             return await self.sandboxes.run_tool(self.user, self.sandbox.id, name, args, CHANNEL)
         except HTTPException as e:
             raise ToolError(str(e.detail))
+
+    async def wait_for_screen(self):
+        """Waits while a person has the screen (a takeover), then takes a fresh look: they may have changed it."""
+        assert self.run is not None
+        run_id = self.run.id
+        paused = await asyncio.to_thread(paused_by, run_id)
+        if paused is None:
+            return
+        began = time.monotonic()
+        self.run.emit("status", f"Paused: {paused} took over the screen. Waiting for it to be handed back.")
+        while paused is not None:
+            await asyncio.sleep(TAKEOVER_POLL_SECONDS)
+            paused = await asyncio.to_thread(paused_by, run_id)
+        deadline = self.deadline
+        when = deadline.when() if deadline is not None else None
+        if deadline is not None and when is not None:
+            deadline.reschedule(when + time.monotonic() - began)
+        self.last, self.last_ref = None, None
+        self.run.emit("status", "Handed back. Carrying on from the screen as it is now.")
+
+    async def accessibility_tree(self) -> dict | None:
+        """The active window's UI elements, for the step's record (trajectory exports). Called directly, not as a
+        tool, so it doesn't show in the Activity log as something the agent did. None when the window exposes none."""
+        runtime_id = self.sandbox.runtime_id
+        if not runtime_id:
+            return None
+        fn = TOOLS["accessibility_tree"].impl(runtime_id)
+        try:
+            if inspect.iscoroutinefunction(fn):
+                return await fn(runtime_id)
+            return await asyncio.to_thread(fn, runtime_id)
+        except Exception as e:
+            logger.info("no accessibility tree for this step", extra={"sandbox_id": self.sandbox.id, "error": repr(e)})
+            return None
 
     async def get_environment(self) -> str:
         return ENVIRONMENTS.get(self.sandbox.kind, "linux")
@@ -475,6 +549,50 @@ class Run:
 
     def stream(self) -> AsyncIterator[dict]:
         return follow(self.id)
+
+    def emit(self, kind: str, content: str):
+        with db_manager.session() as db:
+            record(db, self.sandbox_id, self.id, kind, content, self.source)
+
+
+def paused_by(run_id: str) -> str | None:
+    """Who has taken the screen over from the run (a user's email, or a viewer link's end user), None if nobody."""
+    with db_manager.session() as db:
+        run = db.get_agent_run(id=run_id)
+        if run is None or run.paused_at is None:
+            return None
+        by = run.paused_by or ""
+        if by.startswith("link:"):
+            link = db.get_viewer_link(id=by.removeprefix("link:"))
+            return (link.end_user if link is not None else None) or "a viewer link"
+        user = db.get_user(id=by)
+        return user.email if user is not None else "someone"
+
+
+def record(
+    db: Querier,
+    sandbox_id: str,
+    run_id: str | None,
+    kind: str,
+    content: str,
+    source: str,
+    screenshot: str | None = None,
+    a11y: str | None = None,
+) -> AgentMessage:
+    message = db.create_agent_message(
+        CreateAgentMessageParams(
+            id=str(uuid.uuid4()),
+            sandbox_id=sandbox_id,
+            run_id=run_id,
+            kind=kind,
+            content=content,
+            source=source,
+            screenshot=screenshot,
+            a11y=a11y,
+        )
+    )
+    assert message is not None
+    return message
 
 
 async def follow(run_id: str) -> AsyncIterator[dict]:
@@ -569,7 +687,9 @@ class AgentApi:
 
         @self.app.post("/sandboxes/{sandbox_id}/agent")
         async def chat(sandbox_id: str, payload: AgentRequest, user: Member = Depends(current_user)):
-            run = self.start(user, sandbox_id, payload.message, "api", payload.model)
+            run = self.start(
+                user, sandbox_id, payload.message, "api", payload.model, payload.provider, payload.api_base
+            )
             if payload.stream:
                 return sse(run.stream())
             return {"run_id": run.id, "events": [e async for e in run.stream()]}
@@ -585,6 +705,32 @@ class AgentApi:
         @self.app.post("/sandboxes/{sandbox_id}/agent/stop", status_code=204)
         def stop(sandbox_id: str, user: Member = Depends(current_user), db: Querier = Depends(db_manager.get_client)):
             self.stop(self.sandboxes.owned(sandbox_id, user, db).id)
+
+        @self.app.post("/sandboxes/{sandbox_id}/agent/takeover", response_model=AgentRunResponse)
+        def takeover(
+            sandbox_id: str, user: Member = Depends(current_user), db: Querier = Depends(db_manager.get_client)
+        ) -> AgentRunResponse:
+            """Pauses the running agent before its next action, so a person can use the screen."""
+            sandbox = self.sandboxes.owned(sandbox_id, user, db)
+            run = db.get_active_agent_run(sandbox_id=sandbox.id)
+            if run is None or run.state != "running":
+                raise HTTPException(status_code=409, detail="the agent is not running")
+            paused = db.pause_agent_run(paused_by=user.id, id=run.id)
+            if paused is None:
+                raise HTTPException(status_code=409, detail="the screen is already taken over")
+            return run_response(paused)
+
+        @self.app.post("/sandboxes/{sandbox_id}/agent/release", response_model=AgentRunResponse)
+        def release(
+            sandbox_id: str, user: Member = Depends(current_user), db: Querier = Depends(db_manager.get_client)
+        ) -> AgentRunResponse:
+            """Hands the screen back to the agent, which carries on from the screen as the person left it."""
+            sandbox = self.sandboxes.owned(sandbox_id, user, db)
+            run = db.get_active_agent_run(sandbox_id=sandbox.id)
+            resumed = db.resume_agent_run(id=run.id) if run is not None else None
+            if resumed is None:
+                raise HTTPException(status_code=409, detail="the screen is not taken over")
+            return run_response(resumed)
 
         @self.app.delete("/sandboxes/{sandbox_id}/agent", status_code=204)
         def reset(sandbox_id: str, user: Member = Depends(current_user), db: Querier = Depends(db_manager.get_client)):
@@ -609,6 +755,25 @@ class AgentApi:
             except FileNotFoundError:
                 raise HTTPException(status_code=404, detail="the screenshot was removed")
             return Response(data, media_type=image_type(data), headers={"Cache-Control": "private, max-age=86400"})
+
+        @self.app.get("/agent/providers", response_model=list[ProviderStatusResponse])
+        def providers(
+            user: Member = Depends(current_user), db: Querier = Depends(db_manager.get_client)
+        ) -> list[ProviderStatusResponse]:
+            """What a run can be started with, and whether this workspace has a key for each."""
+            return [
+                ProviderStatusResponse(
+                    id=id,
+                    label=p.label,
+                    default_model=p.default_model,
+                    default_base=p.default_base,
+                    needs_key=p.env_key is not None,
+                    server_key=bool(p.env_key and os.environ.get(p.env_key)),
+                    has_key=self.has_key(id, user.workspace_id, db),
+                    key_secret=key_name(id) if p.env_key else None,
+                )
+                for id, p in PROVIDERS.items()
+            ]
 
         @self.app.get("/agent/settings", response_model=AgentSettingsResponse)
         def get_settings(
@@ -747,7 +912,7 @@ class AgentApi:
 
     def save_key(self, user: Member, provider: str, key: str, workspace_id: str, db: Querier) -> str:
         """Stores a provider key typed into the agent settings as a vault secret and returns its id."""
-        name = f"AGENT_{provider.upper()}_API_KEY"
+        name = key_name(provider)
         ciphertext = encrypt(key, db, workspace_id)
         secret = db.get_vault_secret_by_name(workspace_id=workspace_id, name=name)
         if secret is not None:
@@ -785,6 +950,37 @@ class AgentApi:
             api_base=settings.api_base or provider.default_base,
         )
 
+    def run_config(self, row: AgentRun, workspace_id: str, db: Querier) -> ModelConfig:
+        """The provider and model a run was started with, else the workspace's (with the run's model, if it has one)."""
+        if row.provider is None:
+            config = self.config(workspace_id, db)
+            if row.model:
+                return ModelConfig(model=row.model, api_key=config.api_key, api_base=config.api_base)
+            return config
+        provider = PROVIDERS[row.provider]
+        return ModelConfig(
+            model=provider.prefix + (row.model or provider.default_model),
+            api_key=self.vault_key(row.provider, workspace_id, db),
+            api_base=row.api_base or provider.default_base,
+        )
+
+    def vault_key(self, provider: str, workspace_id: str, db: Querier) -> str | None:
+        """The workspace's key for the provider: the one its agent settings use, else the vault secret
+        AGENT_<PROVIDER>_API_KEY. None leaves the provider to read its environment variable."""
+        settings = db.get_workspace_agent_settings(workspace_id=workspace_id)
+        if settings is not None and settings.provider == provider and settings.api_key_secret_id:
+            secret = db.get_vault_secret(id=settings.api_key_secret_id)
+            if secret is not None:
+                return decrypt(secret.ciphertext)
+        secret = db.get_vault_secret_by_name(workspace_id=workspace_id, name=key_name(provider))
+        return decrypt(secret.ciphertext) if secret is not None else None
+
+    def has_key(self, provider: str, workspace_id: str, db: Querier) -> bool:
+        env_key = PROVIDERS[provider].env_key
+        if env_key is None or os.environ.get(env_key):
+            return True
+        return self.vault_key(provider, workspace_id, db) is not None
+
     def limits(self, workspace_id: str, db: Querier) -> Limits:
         settings = db.get_workspace_agent_settings(workspace_id=workspace_id)
         return limits_of(settings)
@@ -816,11 +1012,27 @@ class AgentApi:
 
     # Runs
 
-    def start(self, user: Member, sandbox_id: str, text: str, source: str, model: str | None = None) -> Run:
-        """Records the user's message and queues a run. In a worker process the run starts here right away;
-        otherwise a worker picks it up. Must be called on the event loop."""
+    def start(
+        self,
+        user: Member,
+        sandbox_id: str,
+        text: str,
+        source: str,
+        model: str | None = None,
+        provider: str | None = None,
+        api_base: str | None = None,
+    ) -> Run:
+        """Records the user's message and queues a run, with the workspace's provider and model or the ones given.
+        In a worker process the run starts here right away; otherwise a worker picks it up. Must be called on the
+        event loop."""
         with db_manager.session() as db:
             sandbox = self.sandboxes.running(sandbox_id, user, db)
+            if provider is not None and not self.has_key(provider, sandbox.workspace_id, db):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"no key for {PROVIDERS[provider].label}: add the vault secret {key_name(provider)} "
+                    f"or set {PROVIDERS[provider].env_key} on the server",
+                )
             if sandbox.kind == "code":
                 raise HTTPException(
                     status_code=400, detail="the computer-use agent needs a desktop; code sandboxes have no screen"
@@ -840,6 +1052,8 @@ class AgentApi:
                         max_seconds=limits.seconds,
                         max_tokens=limits.tokens,
                         max_attempts=MAX_ATTEMPTS,
+                        provider=provider,
+                        api_base=api_base,
                     )
                 )
             except IntegrityError:
@@ -923,23 +1137,22 @@ class AgentApi:
         source: str,
         screenshot: str | None = None,
     ) -> AgentMessage:
-        message = db.create_agent_message(
-            CreateAgentMessageParams(
-                id=str(uuid.uuid4()),
-                sandbox_id=sandbox_id,
-                run_id=run_id,
-                kind=kind,
-                content=content,
-                source=source,
-                screenshot=screenshot,
-            )
-        )
-        assert message is not None
-        return message
+        return record(db, sandbox_id, run_id, kind, content, source, screenshot)
 
-    def emit(self, run: Run, kind: str, content: str, screenshot: str | None = None):
+    def emit(self, run: Run, kind: str, content: str, screenshot: str | None = None, a11y: str | None = None):
         with db_manager.session() as db:
-            self.record(db, run.sandbox_id, run.id, kind, content, run.source, screenshot)
+            record(db, run.sandbox_id, run.id, kind, content, run.source, screenshot, a11y)
+
+    async def save_a11y(self, run: Run, computer: ZooComputer, workspace_id: str) -> str | None:
+        """Stores the accessibility tree an action was decided on, next to its screenshot, and returns its reference."""
+        tree = await computer.accessibility_tree()
+        if tree is None:
+            return None
+        ref = f"{run.id}/{uuid.uuid4().hex}.a11y.enc"
+        with db_manager.session() as db:
+            token = encrypt_bytes(json.dumps(tree).encode(), db, workspace_id)
+        await asyncio.to_thread(objects.put, screen_key(ref), token)
+        return ref
 
     async def save_screen(self, run: Run, computer: ZooComputer, workspace_id: str) -> str | None:
         """Stores the screen an action was decided on, once, and returns its reference. cua runs the action after
@@ -969,6 +1182,8 @@ class AgentApi:
     async def execute(self, run: Run, row: AgentRun):
         state, error = "succeeded", None
         steps, tokens, cost = row.steps, row.tokens, row.cost
+        # what was already metered (server/metering.py): a resumed run picks up from its stored usage
+        metered = (steps, tokens, cost)
         try:
             with db_manager.session() as db:
                 sandbox = db.get_sandbox(id=row.sandbox_id)
@@ -981,9 +1196,9 @@ class AgentApi:
                 )
                 if sandbox is None or user is None or sandbox.status != "running" or not sandbox.runtime_id:
                     raise RuntimeError(f"the sandbox is {sandbox.status if sandbox else 'gone'}")
-                config = self.config(sandbox.workspace_id, db)
-                if row.model:
-                    config = ModelConfig(model=row.model, api_key=config.api_key, api_base=config.api_base)
+                config = self.run_config(row, sandbox.workspace_id, db)
+                workspace = db.get_workspace(id=sandbox.workspace_id)
+                capture_a11y = workspace is not None and workspace.capture_a11y
                 messages = self.history(sandbox.id, db)
             if row.attempts > 1:
                 self.emit(run, "status", "Resumed after a server restart.")
@@ -991,8 +1206,8 @@ class AgentApi:
             remaining = row.max_seconds - seconds_since(row.started_at)
             if remaining <= 0:
                 raise TimeoutError
-            computer = ZooComputer(self.sandboxes, user, sandbox)
-            async with asyncio.timeout(remaining):
+            async with asyncio.timeout(remaining) as deadline:
+                computer = ZooComputer(self.sandboxes, user, sandbox, run, deadline)
                 agent = ComputerAgent(
                     model=config.model,
                     api_key=config.api_key,
@@ -1012,15 +1227,24 @@ class AgentApi:
                     metrics.agent_tokens.add(used)
                     for item in result.get("output", []):
                         for kind, content in events_of(item):
-                            shot = (
-                                await self.save_screen(run, computer, sandbox.workspace_id)
-                                if kind == "action"
-                                else None
-                            )
-                            self.emit(run, kind, content, shot)
+                            shot = tree = None
+                            if kind == "action":
+                                shot = await self.save_screen(run, computer, sandbox.workspace_id)
+                                if capture_a11y:
+                                    tree = await self.save_a11y(run, computer, sandbox.workspace_id)
+                            self.emit(run, kind, content, shot, tree)
                             steps += kind == "action"
                     with db_manager.session() as db:
                         db.record_agent_run_usage(steps=steps, tokens=tokens, cost=cost, id=run.id)
+                        metering.agent(
+                            db,
+                            sandbox.workspace_id,
+                            sandbox.id,
+                            steps - metered[0],
+                            tokens - metered[1],
+                            cost - metered[2],
+                        )
+                    metered = (steps, tokens, cost)
                     if steps >= row.max_steps:
                         state, error = "failed", f"stopped after {row.max_steps} actions"
                         break
@@ -1139,6 +1363,11 @@ class AgentApi:
                 run.handed_back = "shutdown"
                 run.task.cancel()
         await asyncio.gather(*pending, return_exceptions=True)
+
+
+def key_name(provider: str) -> str:
+    """The vault secret that holds a workspace's key for a provider."""
+    return f"AGENT_{provider.upper()}_API_KEY"
 
 
 def limits_of(settings: WorkspaceAgentSetting | None) -> Limits:
