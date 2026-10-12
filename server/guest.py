@@ -1,4 +1,4 @@
-"""The API end of zoo-guest, the agent inside each Linux sandbox (see guest/ and docs/guest-agent-plan.md).
+"""The API end of zoo-guest, the agent inside each Linux sandbox (see guest/).
 
 The guest dials /guest/connect, proves which sandbox it is with a per-sandbox token, and then serves tool calls over
 that one websocket. Tools ask the hub for a sandbox's guest and fall back to docker exec when it has none, so
