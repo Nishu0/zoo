@@ -6,7 +6,7 @@ import json
 import os
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import Any, Literal
 
 import websockets
@@ -42,6 +42,7 @@ from server import (
     metrics,
     nodes,
     objects,
+    pages,
     quotas,
     sizes,
     tickets,
@@ -50,6 +51,7 @@ from server import (
 )
 from server.auth_api import AuthApi, Member, require, require_sandbox
 from server.docker import IMAGE, copy_volume, default_image, run_container, wait_for_vnc, write_secrets
+from server.errors import ZooError
 from server.executions import ExecutionLog
 from server.guest import TUNNEL_URL, VNC_PORT, Terminal, Tunnel, guest_env, hub
 from server.images import MEDIA_TYPES
@@ -87,6 +89,7 @@ from server.security import (
     vnc_password,
 )
 from server.telemetry import tracer
+from server.tools import FileSystem, ShellTools
 from server.vault_sync import remember_booted
 from server.vnc import NO_AUTH, VERSION, Buffered, Gate, authenticate_async
 from utils.time import to_stamp
@@ -94,6 +97,8 @@ from utils.time import to_stamp
 IMAGE_SLUG = "zoo-sandbox"
 IMAGE_VERSION = "latest"
 AUTO = "auto"
+# PUT /sandboxes/{id}/files/content holds the body in memory
+MAX_UPLOAD_BYTES = 100 << 20
 PLATFORM_NAMES = {"macos": "macOS", "windows": "Windows"}
 
 
@@ -400,22 +405,28 @@ class SandboxApi:
     def _register_routes(self):
         current_user = self.auth.current_user
 
-        @self.app.get("/sandboxes", response_model=list[SandboxResponse])
+        @self.app.get("/sandboxes", response_model=pages.Page[SandboxResponse])
         def list_sandboxes(
             label: list[str] = Query(default=[], description="key=value; repeat to match all of them"),
+            page: pages.Params = Depends(),
             user: Member = Depends(current_user),
             db: Querier = Depends(db_manager.get_client),
-        ) -> list[SandboxResponse]:
+        ) -> pages.Page[SandboxResponse]:
             wanted = labels.parse_filters(label)
-            sandboxes = db.list_sandboxes_by_workspace(workspace_id=user.workspace_id)
             labelled = labels.of_workspace(db, user.workspace_id)
-            return [
-                to_response(s, db, labelled.get(s.id, {}))
-                for s in sandboxes
-                if user.key_sandbox_id in (None, s.id)
-                and labels.matches(labelled.get(s.id, {}), wanted)
-                and labels.matches(labelled.get(s.id, {}), user.key_labels)
-            ]
+            rows, after = pages.collect(
+                lambda at, id, limit: db.page_sandboxes(
+                    workspace_id=user.workspace_id, before_at=at, before_id=id, row_limit=limit
+                ),
+                lambda s: (
+                    user.key_sandbox_id in (None, s.id)
+                    and labels.matches(labelled.get(s.id, {}), wanted)
+                    and labels.matches(labelled.get(s.id, {}), user.key_labels)
+                ),
+                lambda s: (s.created_at, s.id),
+                page,
+            )
+            return pages.Page(data=[to_response(s, db, labelled.get(s.id, {})) for s in rows], next_cursor=after)
 
         @self.app.post("/sandboxes", response_model=SandboxResponse, status_code=201)
         def create_sandbox(payload: CreateSandboxRequest, user: Member = Depends(current_user)) -> SandboxResponse:
@@ -578,30 +589,80 @@ class SandboxApi:
             result = await self.run_tool(user, sandbox_id, "execute_command", exec_req.model_dump(), "api")
             return ExecResponse(sandbox_id=sandbox_id, **result)
 
+        @self.app.post("/sandboxes/{sandbox_id}/exec/stream")
+        def execute_streamed(
+            sandbox_id: str, exec_req: ExecRequest, user: Member = Depends(current_user)
+        ) -> StreamingResponse:
+            """Runs a command and streams its output as server-sent events: `stdout` and `stderr` ({"data": text})
+            as it arrives, then `exit` ({"exit_code", "timed_out"}). Linux sandboxes only."""
+            return StreamingResponse(self.stream_exec(user, sandbox_id, exec_req), media_type="text/event-stream")
+
+        @self.app.get("/sandboxes/{sandbox_id}/files/content")
+        async def download_file(
+            sandbox_id: str,
+            path: str = Query(min_length=1, description="absolute, or relative to the home directory"),
+            user: Member = Depends(current_user),
+        ) -> Response:
+            """A file's bytes (Linux sandboxes)."""
+            runtime_id = self.linux_files(sandbox_id, user, "read")
+            try:
+                data = await asyncio.to_thread(FileSystem.read_bytes, runtime_id, path)
+            except FileNotFoundError as e:
+                raise ZooError("not_found", str(e))
+            return Response(content=data, media_type="application/octet-stream")
+
+        @self.app.put("/sandboxes/{sandbox_id}/files/content")
+        async def upload_file(
+            sandbox_id: str,
+            request: Request,
+            path: str = Query(min_length=1, description="absolute, or relative to the home directory"),
+            user: Member = Depends(current_user),
+        ) -> dict:
+            """Writes the request body to a file, making its folder (Linux sandboxes)."""
+            runtime_id = self.linux_files(sandbox_id, user, "write")
+            data = await request.body()
+            if len(data) > MAX_UPLOAD_BYTES:
+                raise ZooError("too_large", f"files are at most {MAX_UPLOAD_BYTES >> 20} MB")
+            return await asyncio.to_thread(FileSystem.write_bytes, runtime_id, path, data)
+
         @self.app.get("/sandboxes/{sandbox_id}/guest")
         def guest_status(
             sandbox_id: str, user: Member = Depends(current_user), db: Querier = Depends(db_manager.get_client)
         ) -> dict:
             return hub.status(self.owned(sandbox_id, user, db).id)
 
-        @self.app.get("/sandboxes/{sandbox_id}/executions", response_model=list[ToolExecutionResponse])
+        @self.app.get("/sandboxes/{sandbox_id}/executions", response_model=pages.Page[ToolExecutionResponse])
         def list_executions(
-            sandbox_id: str, user: Member = Depends(current_user), db: Querier = Depends(db_manager.get_client)
-        ) -> list[ToolExecutionResponse]:
+            sandbox_id: str,
+            page: pages.Params = Depends(),
+            user: Member = Depends(current_user),
+            db: Querier = Depends(db_manager.get_client),
+        ) -> pages.Page[ToolExecutionResponse]:
             sandbox = self.owned(sandbox_id, user, db)
             self.executions.flush()
-            return [
-                ToolExecutionResponse(
-                    **{
-                        k: getattr(e, k)
-                        for k in ToolExecutionResponse.model_fields
-                        if k not in ("created_at", "completed_at")
-                    },
-                    created_at=to_stamp(e.created_at),
-                    completed_at=to_stamp(e.completed_at),
-                )
-                for e in db.list_tool_executions_by_sandbox(sandbox_id=sandbox.id, limit=100)
-            ]
+            rows, after = pages.collect(
+                lambda at, id, limit: db.page_tool_executions(
+                    sandbox_id=sandbox.id, before_at=at, before_id=id, row_limit=limit
+                ),
+                lambda e: True,
+                lambda e: (e.created_at, e.id),
+                page,
+            )
+            return pages.Page(
+                data=[
+                    ToolExecutionResponse(
+                        **{
+                            k: getattr(e, k)
+                            for k in ToolExecutionResponse.model_fields
+                            if k not in ("created_at", "completed_at")
+                        },
+                        created_at=to_stamp(e.created_at),
+                        completed_at=to_stamp(e.completed_at),
+                    )
+                    for e in rows
+                ],
+                next_cursor=after,
+            )
 
         @self.app.get("/sandboxes/{sandbox_id}/backup")
         def backup(sandbox_id: str, user: Member = Depends(current_user), db: Querier = Depends(db_manager.get_client)):
@@ -1428,7 +1489,8 @@ class SandboxApi:
             metrics.error("tool", tool=name)
             error = redact(str(e), secrets)
             self.executions.write(lambda db: db.fail_tool_execution(error_message=error[:4000], id=execution_id))
-            raise HTTPException(status_code=500, detail=error)
+            # the sandbox failed it, not Zoo: its (redacted) error is the message
+            raise ZooError("upstream_error", error)
         metrics.tool_duration.record(time.monotonic() - began, {"tool": name, "channel": channel, "outcome": "ok"})
         result = redact(result, secrets)
         if name == "screenshot":
@@ -1439,6 +1501,57 @@ class SandboxApi:
             output = json.dumps(result, default=str)[:4000]
         self.executions.write(lambda db: db.complete_tool_execution(output=output, id=execution_id))
         return result
+
+    def linux_files(self, sandbox_id: str, user: Member, action: str) -> str:
+        require(user, "member")
+        with db_manager.session() as db:
+            sandbox = self.allowed(sandbox_id, user, db, "files", action)
+        if is_vm(sandbox.runtime_id) or sandbox.runtime_id is None:
+            raise ZooError("not_supported", f"file transfer isn't available in {sandbox.kind} sandboxes")
+        return sandbox.runtime_id
+
+    def stream_exec(self, user: Member, sandbox_id: str, exec_req: ExecRequest) -> Iterator[str]:
+        tool = TOOLS["execute_command"]
+        require(user, "member")
+        with db_manager.session() as db:
+            sandbox = self.allowed(sandbox_id, user, db, tool.permission, tool.action)
+            if is_vm(sandbox.runtime_id) or KINDS.get(sandbox.kind) is not None and "shell" not in KINDS[sandbox.kind]:
+                raise ZooError("not_supported", f"streamed exec isn't available in {sandbox.kind} sandboxes")
+            secrets = redaction_values(sandbox, db)
+            runtime_id = sandbox.runtime_id
+        assert runtime_id is not None
+        execution_id = str(uuid.uuid4())
+
+        def started(db: Querier):
+            db.touch_sandbox(id=sandbox.id)
+            db.create_tool_execution(
+                id=execution_id,
+                session_id=self._session(sandbox, user, "api", db),
+                tool_name="execute_command",
+                input=json.dumps({**exec_req.model_dump(), "stream": True})[:4000],
+            )
+            db.update_tool_execution_status(status="running", id=execution_id)
+
+        self.executions.write(started)
+        lines = ShellTools.stream_command(runtime_id, exec_req.command, exec_req.timeout)
+
+        def frames() -> Iterator[str]:
+            try:
+                for stream, value in lines:
+                    if stream == "exit":
+                        output = json.dumps({"exit_code": value, "timed_out": value == 124})
+                        self.executions.write(
+                            lambda db, output=output: db.complete_tool_execution(output=output, id=execution_id)
+                        )
+                        yield f"event: exit\ndata: {output}\n\n"
+                    else:
+                        yield f"event: {stream}\ndata: {json.dumps({'data': redact(value, secrets)})}\n\n"
+            except Exception as e:
+                error = redact(str(e), secrets)
+                self.executions.write(lambda db: db.fail_tool_execution(error_message=error[:4000], id=execution_id))
+                yield f"event: error\ndata: {json.dumps({'message': error})}\n\n"
+
+        return frames()
 
     async def proxy(self, websocket: WebSocket, sandbox_id: str, ticket: str = ""):
         user_id = tickets.redeem(ticket, f"sandbox:{sandbox_id}")

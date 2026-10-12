@@ -1,214 +1,154 @@
-# Zoo: embeddable viewer, end users, events, metering, trajectories, agents — execution plan
+# Zoo: first five minutes — execution plan
 
-Do the steps in order. Finish each step's "Done when" before starting the next. Do not skip ahead.
+Target: install, get a key and drive a desktop with an agent, reading nothing but the quickstart.
+
+Do the steps in order. Finish each step's "Done when" before starting the next.
 
 ## Rules (read before every step)
 
-1. **Postgres and object storage only.** New state goes in a migration in `db/migrations/` (goose format) and queries in
-   `db/query.sql` (`sqlc generate`, never hand-edit `db/generated/`). Frames and exports go to object
-   storage through `server/objects.py`. No local-disk paths.
-2. **No fallbacks.** Missing config or an unsupported runtime → fail at startup or return 400/409 with a clear message.
-3. **Workspace rules apply.** Every new route uses `current_workspace` + `require` (`server/auth_api.py`), every write is
-   covered by the audit middleware (`server/audit_api.py`), and scoped API keys keep working (sandbox scope, read-only).
-4. **No new unit tests.** Each step ends with an end-to-end check (compose + curl) added to `scripts/e2e.sh`.
-5. **Do not commit, push, or create branches.** Leave changes in the working tree. The user commits.
-6. **Do not test in a browser.** UI steps: `cd web && bun run build` and stop. The user checks UI.
-7. Match the existing code style: same naming, same comment density, docstrings like the surrounding files.
-8. After every step run: `uv run ruff check . && uv run ruff format --check . && uv run basedpyright`. Fix what you broke.
+1. **Postgres and object storage only.** New state goes in a goose migration in `db/migrations/` and queries in
+   `db/query.sql` (`sqlc generate`; never hand-edit `db/generated/`).
+2. **No fallbacks.** Missing config → fail at startup or a clear 4xx.
+3. **Workspace rules apply.** New routes use `current_user` + `require` (`server/auth_api.py`), writes are audited, and
+   scoped API keys (sandbox, labels, read-only) keep working.
+4. **No new unit tests yet.** Build first; tests come in the last part.
+5. **Do not commit, push or branch.** The user commits.
+6. **No browser testing.** UI steps end at `cd web && bun run lint && bun run build`.
+7. Match the surrounding code style.
+8. After every step: `uv run ruff check . && uv run ruff format --check . && uv run basedpyright`.
 
-## Map of the code you will touch
+## Already done (from the previous plan)
 
-| Area | Files |
-|---|---|
-| Viewer | `server/vnc.py`, `server/tickets.py` (30 s user tickets), `vnc-ticket` / `terminal-ticket` routes in `server/sandbox_api.py`, `web/src/components/vnc-screen.tsx`, `web/src/routes/view.$sandboxId.tsx` |
-| Agent runs | `server/agent_api.py` (`PROVIDERS`, `AgentSettingsRequest`, `Run.emit()`, `follow()`, `/agent/stream` SSE) |
-| Screens | `server/screen.py`, `server/a11y.py`, `server/tools.py`, `server/executions.py` (`tool_executions`) |
-| Workers | `server/workers.py` (`works()`, `hold()` leases), `server/jobs.py` |
-| Limits | `server/quotas.py`, `server/sizes.py`, `server/limits.py` |
-| Snapshots | `/sandboxes/{id}/snapshots` in `server/sandbox_api.py`, `snapshots/` keys in `server/docker.py` |
-| SDK / examples | `sdk/python`, `examples/` |
+- Webhooks for sandbox state and agent completion (`server/webhooks.py`: `sandbox.state`, `run.finished`)
+- SSE events stream (`server/events.py`: `GET /events/stream`)
+- API keys stored as hash + prefix; the full key is returned once (`server/auth_api.py`)
 
 ---
 
-## Part A — Embed and share
+## Part A — API quality (the SDKs and CLI build on it)
 
-### Step 1. Signed viewer URLs
+### Step 1. One error format
+- Every error body is `{"error": {"code", "message", "hint", "docs_url"}}`. `code` is a stable snake_case string
+  (`sandbox_not_found`, `quota_exceeded`, `validation_failed`, `internal_error`, …).
+- Exception handlers in `server/server.py` for `HTTPException`, `RequestValidationError` and `Exception`. A 500 logs the
+  traceback with a request id and returns only `internal_error` + the request id; never exception text.
+- A `ZooError(status, code, message, hint=None)` helper in `server/errors.py`; existing `HTTPException(detail=...)` calls
+  map to a code by status unless they pass one. `docs_url` points at `/docs/reference/errors#<code>`.
+- Done when: a 404, a 422 and a forced 500 all return the shape; the errors page lists every code.
 
-- New migration: `viewer_links (id TEXT PK, workspace_id FK, sandbox_id FK ON DELETE CASCADE, token_hash TEXT UNIQUE,
-  mode TEXT CHECK (mode IN ('view', 'control')), end_user TEXT, created_by FK users, expires_at TIMESTAMPTZ NOT NULL,
-  revoked_at TIMESTAMPTZ, created_at)`.
-- `POST /sandboxes/{id}/viewer-links` (member+; a scoped key may create links only for its sandbox, a read-only key only
-  `view`) → `{url, token, expires_at}`. Max expiry `ZOO_MAX_VIEWER_LINK_HOURS` (default 24). Store only the SHA-256.
-  `GET` lists, `DELETE .../{link_id}` revokes.
-- `GET /embed/{token}`: a minimal page (no app shell, no login) that opens the VNC websocket with the token. The websocket
-  accepts either a user ticket (today) or a viewer-link token. `view` mode drops every input message server-side in
-  `server/vnc.py` — not only in the client.
-- Headers on `/embed/*`: `Content-Security-Policy: frame-ancestors` from `ZOO_EMBED_ORIGINS` (unset = `'none'`, so
-  embedding must be configured explicitly).
+### Step 2. `/v1`
+- Every public route is served under `/v1`. Unprefixed paths keep working and answer with `Deprecation: true` and
+  `Link: </v1/...>; rel="successor-version"`. The web app, SDKs, MCP config and docs use `/v1`.
+- Deprecation policy in the docs: a version is supported 12 months after its successor ships; removals are announced in
+  the changelog and by the `Deprecation`/`Sunset` headers.
+- Done when: the OpenAPI schema lists `/v1` paths only, and an old path returns the headers.
 
-Done when: create a `view` link, open its websocket with a raw client, send a key event → no effect in the sandbox; a
-`control` link moves the mouse; a revoked or expired link → 401 on connect; an open connection is closed within 60 s of
-revoke.
+### Step 3. Idempotency keys
+- Migration: `idempotency_keys (workspace_id, key, method, path, request_hash, status, response JSONB, created_at,
+  PK (workspace_id, key))`, purged after 24 h.
+- `Idempotency-Key` header on `POST /v1/sandboxes`, snapshots, viewer links, webhooks, API keys, agent runs, exports and
+  benchmarks: a repeat with the same body returns the stored response; a different body returns 409
+  `idempotency_key_reused`; one still in flight returns 409 `idempotency_key_in_progress`.
+- Done when: two identical creates with one key make one sandbox.
 
-### Step 2. React component and iframe
+### Step 4. Pagination
+- Cursor pagination on `GET /v1/sandboxes`, `/v1/sandboxes/{id}/executions`, `/v1/audit` (and webhooks deliveries):
+  `?limit=` (default 50, max 200) and `?cursor=`; responses `{"data": [...], "next_cursor": str | null}`.
+- Cursor = opaque base64 of `(created_at, id)`; queries use keyset order, not OFFSET.
+- Done when: walking all pages returns every row once; the web app follows cursors.
 
-- New package `sdk/react` (`@zoo/react`): `<ZooViewer url mode onTakeover />` wrapping the same noVNC code as
-  `web/src/components/vnc-screen.tsx` (move the shared code into the package and use it from `web/`).
-- Iframe docs: `<iframe src="{ZOO_URL}/embed/{token}">` and the `ZOO_EMBED_ORIGINS` setting.
-- Python SDK: `sandbox.viewer_link(mode, expires_in, end_user=None)`.
+### Step 5. Dashboard on events
+- Replace the 5-second `refetchInterval` polling in `web/src` with one `EventSource` on `/v1/events/stream` that
+  invalidates the affected queries; keep polling only where no event exists.
+- Done when: no `refetchInterval` remains for sandbox status; build passes.
 
-Done when: `bun run build` in `sdk/react` and `web/` passes. Stop; the user checks UI.
+## Part B — SDKs
 
-### Step 3. Share links and takeover
+### Step 6. Python SDK (`sdk/python`, `zoo-sdk`)
+- `Zoo` and `AsyncZoo` clients (httpx), `py.typed`, full type hints, models matching the API.
+- Every call has a timeout (default 30 s, per-call override); retries with exponential backoff + jitter on connect
+  errors, 429 and 5xx for idempotent calls, and on creates via an automatic `Idempotency-Key`.
+- `with zoo.sandbox(kind="desktop") as box:` / `async with` — always deletes on exit, also on error.
+- `box.exec(cmd, stream=True)` yields output as it arrives (server streaming endpoint added if missing).
+- Errors raise `ZooError` subclasses carrying `code`, `message`, `hint`, `docs_url`.
+- GitHub Actions workflow to build and publish to PyPI on a `sdk-py-v*` tag (trusted publishing). The user publishes.
+- Done when: `uv build` makes a wheel; a script creates, execs (streamed) and cleans up against compose.
 
-- Share link = viewer link (step 1) shown in the UI with a copy button and expiry picker, view or control.
-- Takeover: a `control` viewer sending input while an agent run is `running` pauses the run.
-  - `agent_runs.state` gets `paused`; `agent_runs` gets `paused_by TEXT` (user id or `link:<id>`) and `paused_at`.
-  - The run loop checks the state between steps (same place it checks `cancel_requested`) and waits while paused.
-  - `POST /sandboxes/{id}/agent/runs/{run_id}/takeover` and `/release` (member+, or a `control` link token). Release
-    resumes the run with a message "the user changed the screen" added to its context.
-- UI: Share dialog on the sandbox page; Take over / Hand back buttons in the viewer (build only).
+### Step 7. TypeScript SDK (`sdk/typescript`, `@zoo/sdk`)
+- Types generated from `/v1/openapi.json` with `openapi-typescript`; a hand-written `Zoo` client and `Sandbox` class
+  with the same methods, timeouts, retries and errors as Python.
+- `await using box = await zoo.sandbox({ kind: "desktop" })` (`Symbol.asyncDispose`) plus `zoo.withSandbox(fn)`.
+- Streaming exec as an async iterator. ESM + CJS build; npm publish workflow on `sdk-ts-v*`.
+- Done when: `bun run build` passes and the same script as step 6 runs in TS.
 
-Done when: start an agent run, call `takeover` → run state `paused` and no new steps; `release` → steps continue; both
-show in the audit log.
+### Step 8. Framework adapters
+- `zoo_sdk.adapters`: Claude Agent SDK (tools / in-process MCP server), OpenAI Agents SDK (`function_tool`s + computer
+  tool), LangGraph (LangChain tools). `@zoo/sdk/ai`: Vercel AI SDK `tool()`s. Optional extras; nothing imported unless
+  used.
+- One example per framework in `examples/`.
+- Done when: each example typechecks.
 
----
+## Part C — CLI
 
-## Part B — End users
+### Step 9. `zoo` user commands
+- Console script `zoo` in `zoo-sdk` (Typer): `login` (stores URL + key in `~/.config/zoo/config.toml`, 0600), `create
+  --kind desktop`, `ls`, `exec <id> -- cmd` (streamed, exit code passed through), `shell <id>` (terminal WebSocket, raw
+  TTY), `view <id>` (opens a viewer link in the browser), `cp` (`<id>:path` either way), `logs <id> [-f]`, `rm`.
+- `--json` on every read command; `ZOO_URL`/`ZOO_API_KEY` override the config.
+- Done when: each command works against compose (checked with the shell, not a browser, for `view`).
 
-### Step 4. Labels on sandboxes
+### Step 10. Operator commands
+- Same binary: `zoo server upgrade` (pull images, run migrations, restart), `zoo server backup` / `restore`
+  (`pg_dump` + object store, matching the existing backup), `zoo server doctor` (Postgres, object store, runtimes,
+  KVM/Docker, ports, versions; one line each, non-zero exit on failure).
+- Done when: `doctor` passes on compose and fails clearly with Postgres down.
 
-- New migration: `sandbox_labels (sandbox_id FK CASCADE, key TEXT, value TEXT, PRIMARY KEY (sandbox_id, key))` with an
-  index on `(key, value)`. This table is the only place labels live. Limits, validated in the request model: ≤ 20 keys,
-  keys `[a-z0-9_./-]{1,63}`, values ≤ 255 chars.
-- `POST /sandboxes` and `PATCH /sandboxes/{id}` take `labels`; `GET /sandboxes?label=key=value` (repeatable, AND).
-- Agent runs and tool executions inherit the sandbox's labels at read time (join), not copies.
+## Part D — First run
 
-Done when: create sandboxes with `end_user=alice` and `end_user=bob`; `GET /sandboxes?label=end_user=alice` returns only
-Alice's.
+### Step 11. Onboarding
+- Migration: `users.onboarded_at`. First login without it lands on `/welcome`: 1) create a sandbox, 2) create and copy
+  an API key (shown once, with the warning), 3) copy an MCP config with the key and `/v1` URL filled in. Skip and
+  finish both set `onboarded_at`.
+- Done when: build passes; `PUT /v1/me/onboarded` works.
 
-### Step 5. Keys and quotas per label
+### Step 12. Connect
+- "Connect" button on each sandbox: a dialog with tabs MCP JSON, curl, Python, TypeScript, each with the sandbox id and
+  URL filled in and a key placeholder (or a new key on request), and a copy button.
+- Done when: build passes.
 
-- `api_keys` gets `label_selector TEXT` (JSON object, e.g. `{"end_user": "alice"}`; null = none). A key with a selector:
-  sees only sandboxes whose labels match, gets 404 on others, and every sandbox it creates gets the selector's labels
-  forced on (a request trying to set a different value → 403).
-- Quotas: `label_quotas (workspace_id FK, key TEXT, value TEXT, max_running_sandboxes, max_cpus, max_memory_mb,
-  max_storage_gb, PRIMARY KEY (workspace_id, key, value))`, plus `label_quota_defaults (workspace_id, key, ...)` applied
-  to every value of a key that has no explicit row. Enforce in the same transaction as the workspace quota in
-  `server/quotas.py` (workspace lock first, then label usage). Over quota → 409 naming the label.
-- API: `PUT/GET/DELETE /workspaces/{id}/label-quotas` (admin+).
+### Step 13. Seeded demo
+- On a workspace's first sandbox create from onboarding, offer "Start with a demo": a desktop sandbox labelled
+  `demo=true` and a suggested task ("Open Firefox, search for …, summarise the top result") pre-filled in the Agent
+  tab. No sandbox is created without the user asking.
+- Done when: build passes; the API path for it works with curl.
 
-Done when: a key for `end_user=alice` can't see Bob's sandbox; a default of 1 running sandbox per `end_user` → Alice's
-second create is 409 while Bob can still create one.
+## Part E — Dashboard polish
 
----
+### Step 14. Split the sandbox page
+- `web/src/routes/_app/sandboxes/$sandboxId.tsx` (2,573 lines) becomes a layout route plus one route per tab
+  (`overview`, `screen`, `terminal`, `files`, `agent`, `executions`, `snapshots`, `share`, `settings`), shared pieces in
+  `web/src/components/sandbox/`. URLs per tab.
+- Done when: no file over ~500 lines; build passes.
 
-## Part C — Events and usage
+### Step 15. Every state shown
+- Provisioning shows its steps (from `sandbox.state` events and the job's stage); failed shows the reason and Retry;
+  an unreachable server shows a banner with retry; loading and empty states everywhere.
+- Done when: build passes.
 
-### Step 6. Event model and SSE
+### Step 16. Palette, shortcuts, empty states
+- `⌘K` command palette (go to sandbox/page, create sandbox, copy id, open Connect); shortcuts (`c` create, `g s`
+  sandboxes, `?` help); every empty list says what to do next with a button.
+- Done when: build passes.
 
-- New migration: `events (id TEXT PK, seq BIGINT IDENTITY UNIQUE, workspace_id FK, sandbox_id, run_id, type TEXT,
-  data TEXT, created_at)`, index `(workspace_id, seq)`. Types: `run.started`, `run.step`, `run.finished`
-  (`succeeded|failed|cancelled` in data), `takeover.started`, `takeover.ended`, `sandbox.state` (running, stopped,
-  deleted).
-- One function `events.emit(...)` inserts the row and `pg_notify('zoo_event', workspace_id)` in the same transaction.
-  Call it from `Run.emit()`, the takeover routes and the sandbox state changes in the job handlers.
-- `GET /events/stream?sandbox_id=&type=` (SSE; scoped keys see only what they may see). `Last-Event-ID` = `seq`
-  resumes. Same LISTEN pattern as `follow()` in `server/agent_api.py`.
-- Purge events older than `ZOO_EVENT_RETENTION_DAYS` (default 7) in a worker loop under `hold("events", ...)`.
-
-Done when: `curl -N /events/stream` shows run.started → run.step… → run.finished for a run; disconnect, reconnect with
-`Last-Event-ID` → missed events arrive, none duplicated.
-
-### Step 7. Webhooks
-
-- New migration: `webhooks (id, workspace_id FK, url TEXT, secret_encrypted TEXT, types TEXT, label_selector TEXT,
-  enabled BOOLEAN, created_at)` and `webhook_deliveries (id, webhook_id FK CASCADE, event_id FK, attempts BIGINT,
-  next_attempt_at TIMESTAMPTZ, status TEXT CHECK IN ('pending','delivered','failed'), last_error TEXT, response_status
-  BIGINT)`.
-- `events.emit` inserts a `pending` delivery per matching webhook (same transaction). A worker loop claims deliveries
-  with `FOR UPDATE SKIP LOCKED`, POSTs JSON with headers `Zoo-Event-Id`, `Zoo-Timestamp`, `Zoo-Signature: v1=<HMAC-SHA256
-  of "{timestamp}.{body}">`, 10 s timeout. Non-2xx → retry with backoff (1 m, 5 m, 30 m, 2 h, 6 h), then `failed`.
-- Webhook URLs go through the existing egress/SSRF checks (no private IPs unless `ZOO_WEBHOOK_ALLOW_PRIVATE=1`).
-- API (admin+): CRUD on `/webhooks`, `GET /webhooks/{id}/deliveries`, `POST /webhooks/{id}/test`. Secret shown once.
-- UI: Settings → Webhooks (build only).
-
-Done when: point a webhook at a local receiver (`python -m http.server`-style script in `scripts/`), run an agent → the
-receiver gets each event with a signature that verifies; stop the receiver → deliveries retry and show `failed` after
-the last attempt (shorten backoff with an env var for the test).
-
-### Step 8. Usage metering
-
-- New migration: `usage (workspace_id FK, sandbox_id TEXT, metric TEXT CHECK IN ('cpu_minutes','memory_mb_minutes',
-  'storage_gb_hours','agent_steps','agent_tokens','agent_cost'), quantity DOUBLE PRECISION, period_start TIMESTAMPTZ,
-  PRIMARY KEY (sandbox_id, metric, period_start))` — hourly buckets. `sandbox_id` is not an FK: usage outlives the
-  sandbox. Labels are copied into `usage_labels (sandbox_id, key, value)` when the sandbox is created so deleted
-  sandboxes still roll up by label.
-- Worker loop every 60 s under `hold("metering", ...)`: for each running sandbox add allocated `cpus` and `memory_mb`
-  minutes (allocation, not measured use — document this); hourly add `storage_gb_hours` for disk + snapshots + profiles.
-  Upsert with `ON CONFLICT ... DO UPDATE SET quantity = usage.quantity + EXCLUDED.quantity`.
-- Agent steps/tokens/cost: add in the same place `agent_runs.steps/tokens/cost` are updated.
-- API: `GET /usage?from=&to=&group_by=sandbox|label:<key>|day&metric=` (admin+, or a key with a label selector for its
-  own label) and `GET /usage/export` (CSV).
-
-Done when: run a sandbox 5 minutes with 2 CPUs → ≈10 `cpu_minutes`; group by `label:end_user` returns one row per end
-user; after deleting the sandbox its usage is still there.
-
----
-
-## Part D — Data
-
-### Step 9. Trajectory export
-
-- `POST /agent/runs/{run_id}/export` (or a filter: `sandbox_id`, label, time range) → job writes
-  `exports/{export_id}/trajectory.jsonl` and `exports/{export_id}/frames/{step}.png` (+ `{step}.a11y.json`). One JSONL
-  line per step: `{run_id, step, timestamp, instruction, screenshot, a11y_tree, action, result, model, tokens}`.
-- Capture what is missing today: when a step runs, store the accessibility tree (`server/a11y.py`) next to the
-  screenshot in object storage (`agent/{run_id}/{message_id}.a11y.json.enc`), gated by workspace setting
-  `capture_a11y` (default on).
-- Result: a presigned URL to a `.tar.gz` of the export. Exports expire after `ZOO_EXPORT_RETENTION_DAYS` (default 7).
-
-Done when: export one run; untar; JSONL line count = run steps; every referenced frame exists.
-
----
-
-## Part E — Agents
-
-### Step 10. Provider per run, xAI added
-
-- `PROVIDERS` in `server/agent_api.py`: add `xai` (Grok vision model through LiteLLM's `xai/` prefix; check cua
-  supports it — if cua has no loop for it, use the generic vision loop like Qwen3-VL and say so in a comment).
-- Run requests take optional `provider`, `model`, `api_base`; the workspace setting is the default. Store
-  `agent_runs.provider`. The key comes from the vault as today (`AGENT_<PROVIDER>_API_KEY`); missing key → 400 naming
-  the secret.
-- `GET /agent/providers` lists providers, default models and whether the workspace has a key.
-
-Done when: two runs in one sandbox with different providers both finish (needs two real keys; with one key, check the
-second fails with the clear 400).
-
-### Step 11. Benchmark harness
-
-- Task suite format (YAML/JSON): `tasks: [{id, instruction, setup: {snapshot_id?, commands?}, check: {command,
-  expect_exit_code} | {judge: prompt}, timeout}]`.
-- New migration: `benchmarks (id, workspace_id, suite TEXT, models TEXT, state, created_at)`,
-  `benchmark_results (benchmark_id, task_id, model, run_id, sandbox_id, passed BOOLEAN, score DOUBLE PRECISION,
-  steps, tokens, cost, seconds, error)`.
-- `POST /benchmarks` (suite + models + `parallel`): for each task × model create a sandbox (from the task's snapshot via
-  the snapshot restore path, labelled `benchmark=<id>`), run setup, start an agent run with that model, run the check,
-  delete the sandbox. Respect workspace quotas; `parallel` is capped by them.
-- `GET /benchmarks/{id}` → per-model pass rate, mean steps/cost/time, and per-task results; `export` as CSV.
-- CLI: `python -m server.bench suite.yaml --models a,b`.
-
-Done when: a 3-task suite against 1 model with `parallel=3` runs 3 sandboxes at once and reports a pass rate.
-
----
+### Step 17. Keys shown once
+- The created-key dialog shows the full key once with a "you won't see this again" warning and copy; lists show the
+  prefix only (server side already does).
+- Done when: build passes.
 
 ## Part F — Finish
 
-### Step 12. Full suite, e2e, docs
-
-- `ZOO_TEST_DATABASE_URL=... uv run pytest -q`; `scripts/e2e.sh` against `docker compose up -d --build --scale
-  worker=2`; ruff + basedpyright clean; `helm lint`/`template` with new env vars added to the chart.
-- Docs in `docs/`: embedding and share links, labels and end users, events/SSE/webhooks (with signature verification
-  example), usage metering, trajectory export, providers, benchmarks.
-- Add these items to `TODO.md` and tick what this plan delivered.
+### Step 18. Quickstart, docs, tests
+- Rewrite the quickstart around the five-minute path: install, `zoo login`, create, connect an agent.
+- Reference pages: errors, versioning, idempotency, pagination, SDKs, CLI.
+- Unit tests for steps 1–4 and the SDK retry/cleanup logic; `scripts/e2e.sh` covers the CLI path.
+- Done when: the full suite and e2e pass.

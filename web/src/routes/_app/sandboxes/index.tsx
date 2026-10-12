@@ -9,7 +9,10 @@ import {
 } from "lucide-react"
 import { useMemo, useState } from "react"
 
-import { CreateSandboxDialog } from "@/components/create-sandbox-dialog"
+import {
+  CreateSandboxDialog,
+  openCreateSandbox,
+} from "@/components/create-sandbox-dialog"
 import { EmptyState, Page } from "@/components/page"
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
@@ -138,11 +141,16 @@ function SandboxesPage() {
       ) : visible.length === 0 ? (
         <EmptyState
           icon={Box}
-          title="No sandboxes found"
+          title={query ? "No sandboxes found" : "No sandboxes yet"}
           description={
             query
               ? "Nothing matches that filter."
-              : "Create a sandbox to spin up a desktop."
+              : "Create a sandbox to spin up a desktop an agent can use. Press c any time, or ⌘K for everything."
+          }
+          action={
+            query ? undefined : (
+              <Button onClick={openCreateSandbox}>Create a sandbox</Button>
+            )
           }
         />
       ) : (

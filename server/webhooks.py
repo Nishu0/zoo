@@ -26,14 +26,14 @@ import uuid
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from db.connection import db_manager
 from db.generated.models import Webhook
 from db.generated.query import CreateWebhookParams, FinishWebhookDeliveryParams, Querier, UpdateWebhookParams
 from logger.logger import logger
-from server import labels
+from server import labels, pages
 from server.auth_api import AuthApi, Member, require
 from server.events import event_response
 from server.jobs import stamp
@@ -206,16 +206,24 @@ class WebhooksApi:
         ):
             db.delete_webhook(id=self.owned(webhook_id, user, db).id)
 
-        @self.app.get("/webhooks/{webhook_id}/deliveries", response_model=list[DeliveryResponse])
+        @self.app.get("/webhooks/{webhook_id}/deliveries", response_model=pages.Page[DeliveryResponse])
         def deliveries(
             webhook_id: str,
-            limit: int = Query(default=50, ge=1, le=500),
+            page: pages.Params = Depends(),
             user: Member = Depends(current_user),
             db: Querier = Depends(db_manager.get_client),
-        ) -> list[DeliveryResponse]:
+        ) -> pages.Page[DeliveryResponse]:
             require(user, "admin")
             webhook = self.owned(webhook_id, user, db)
-            return [
+            rows, after = pages.collect(
+                lambda at, id, limit: db.page_webhook_deliveries(
+                    webhook_id=webhook.id, before_at=at, before_id=id, row_limit=limit
+                ),
+                lambda row: True,
+                lambda row: (row.created_at, row.id),
+                page,
+            )
+            data = [
                 DeliveryResponse(
                     id=row.id,
                     event_id=row.event_id,
@@ -228,8 +236,9 @@ class WebhooksApi:
                     created_at=to_stamp(row.created_at),
                     delivered_at=to_stamp(row.delivered_at),
                 )
-                for row in db.list_webhook_deliveries(webhook_id=webhook.id, limit=limit)
+                for row in rows
             ]
+            return pages.Page(data=data, next_cursor=after)
 
         @self.app.post("/webhooks/{webhook_id}/test", status_code=202)
         def test_webhook(

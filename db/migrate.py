@@ -8,6 +8,10 @@ import sys
 import time
 
 import psycopg
+from dotenv import load_dotenv
+
+# like main.py: a .env in the working directory, for running from source (compose passes the environment itself)
+load_dotenv()
 
 # any constant: it names this lock among the database's advisory locks
 LOCK = 7_402_118

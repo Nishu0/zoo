@@ -131,7 +131,7 @@ def test_profile_apps_per_os(client, alice):
 
 def test_admin_is_a_macos_option(client, alice):
     res = client.post("/sandboxes", json={"kind": "desktop", "admin": True}, headers=alice)
-    assert res.status_code == 400 and "macOS" in res.json()["detail"]
+    assert res.status_code == 400 and "macOS" in res.json()["error"]["message"]
 
 
 def test_local_wrapping_and_aws_signing():

@@ -80,12 +80,12 @@ def test_stop_start_delete(client, alice, sandbox, fake):
     assert fake.containers == {}
     assert sid not in fake.volumes
     assert client.get(f"/sandboxes/{sid}", headers=alice).status_code == 404
-    assert client.get("/sandboxes", headers=alice).json() == []
+    assert client.get("/sandboxes", headers=alice).json() == {"data": [], "next_cursor": None}
 
 
 def test_sandboxes_are_private(client, alice, bob, sandbox):
     sid = sandbox["id"]
-    assert client.get("/sandboxes", headers=bob).json() == []
+    assert client.get("/sandboxes", headers=bob).json() == {"data": [], "next_cursor": None}
     for method, path in [
         ("get", f"/sandboxes/{sid}"),
         ("post", f"/sandboxes/{sid}/stop"),
@@ -114,7 +114,7 @@ def test_exec_screenshot_and_history(client, alice, sandbox):
     assert shot.headers["content-type"] == "image/png"
     assert shot.content == PNG
 
-    history = client.get(f"/sandboxes/{sid}/executions", headers=alice).json()
+    history = client.get(f"/sandboxes/{sid}/executions", headers=alice).json()["data"]
     assert {(e["tool_name"], e["status"]) for e in history} == {
         ("execute_command", "completed"),
         ("screenshot", "completed"),
@@ -124,9 +124,16 @@ def test_exec_screenshot_and_history(client, alice, sandbox):
 def test_tool_failures_are_recorded(client, alice, sandbox, fake):
     fake.fail_tool = "xdotool crashed"
     res = client.post(f"/sandboxes/{sandbox['id']}/tools/click", json={"x": 1, "y": 2}, headers=alice)
-    assert res.status_code == 500
-    assert res.json()["detail"] == "xdotool crashed"
-    [execution] = client.get(f"/sandboxes/{sandbox['id']}/executions", headers=alice).json()
+    # the sandbox failed, not Zoo: 502 with its (redacted) error
+    assert res.status_code == 502
+    assert res.json()["error"] == {
+        "code": "upstream_error",
+        "message": "xdotool crashed",
+        "hint": None,
+        "docs_url": res.json()["error"]["docs_url"],
+        "request_id": res.headers["x-request-id"],
+    }
+    [execution] = client.get(f"/sandboxes/{sandbox['id']}/executions", headers=alice).json()["data"]
     assert execution["status"] == "failed"
     assert execution["error_message"] == "xdotool crashed"
 

@@ -1,9 +1,12 @@
+import base64
+import codecs
 import io
 import os
 import re
 import shlex
 import tarfile
 import time
+from collections.abc import Iterator
 from pathlib import PurePosixPath
 from typing import Any, NamedTuple
 
@@ -716,6 +719,59 @@ class ShellTools:
             "timed_out": result.exit_code == 124,
         }
 
+    @staticmethod
+    def stream_command(container_id: str, command: str, timeout: int = 30) -> Iterator[tuple[str, Any]]:
+        """Runs a command and yields ("stdout" | "stderr", text) as its output arrives, then ("exit", exit code).
+
+        The command runs detached in the sandbox, writing to files under /tmp/zoo-exec, which are read every
+        POLL seconds from where the last read stopped; so it works wherever exec does, and a slow reader can't stall
+        the command."""
+        container = get_container(container_id)
+        name = f"/tmp/zoo-exec/{os.urandom(8).hex()}"
+        script = base64.b64encode(command.encode()).decode()
+        setup = (
+            f"mkdir -p /tmp/zoo-exec && echo {script} | base64 -d > {name}.sh && : > {name}.out && : > {name}.err && "
+            f"(nohup sh -c 'timeout -k 2 {int(timeout)} sh -l {name}.sh > {name}.out 2> {name}.err; "
+            f"echo $? > {name}.code' > /dev/null 2>&1 &)"
+        )
+        result = container.exec_run(["sh", "-c", setup], demux=True)
+        if result.exit_code != 0:
+            _, err = result.output
+            raise RuntimeError(f"couldn't start the command: {(err or b'').decode(errors='replace')}")
+        decoders = {
+            "stdout": codecs.getincrementaldecoder("utf-8")("replace"),
+            "stderr": codecs.getincrementaldecoder("utf-8")("replace"),
+        }
+        offsets = {"stdout": 0, "stderr": 0}
+        try:
+            while True:
+                # the exit code is checked before reading, so a finished command's output is all read this round
+                poll = (
+                    f"[ -f {name}.code ] && done=1; tail -c +{offsets['stdout'] + 1} {name}.out; "
+                    f'tail -c +{offsets["stderr"] + 1} {name}.err >&2; [ -n "$done" ] && exit {POLL_DONE}; exit 0'
+                )
+                result = container.exec_run(["sh", "-c", poll], demux=True)
+                stdout, stderr = result.output
+                for stream, data in (("stdout", stdout or b""), ("stderr", stderr or b"")):
+                    if data:
+                        offsets[stream] += len(data)
+                        text = decoders[stream].decode(data)
+                        if text:
+                            yield stream, text
+                if result.exit_code == POLL_DONE:
+                    code = container.exec_run(["cat", f"{name}.code"]).output
+                    yield "exit", int((code or b"-1").strip() or -1)
+                    return
+                if result.exit_code != 0:
+                    raise RuntimeError("lost track of the command")
+                time.sleep(POLL)
+        finally:
+            container.exec_run(["sh", "-c", f"rm -f {name}.sh {name}.out {name}.err {name}.code"])
+
+
+POLL = 0.3
+POLL_DONE = 100
+
 
 class FileSystem:
     @staticmethod
@@ -870,12 +926,15 @@ class FileSystem:
 
     @staticmethod
     def write_file(container_id: str, path: str, content: str):
+        return FileSystem.write_bytes(container_id, path, content.encode("utf-8"))
+
+    @staticmethod
+    def write_bytes(container_id: str, path: str, data: bytes) -> dict:
         target = PurePosixPath(HOME) / path
 
         if target.name in ("", ".", ".."):
             raise ValueError("A filename is required")
 
-        data = content.encode("utf-8")
         guest = hub.for_runtime(container_id)
         if guest is not None and guest.has("files"):
             guest.write(str(target), data)
@@ -891,14 +950,10 @@ class FileSystem:
             tar.addfile(info, io.BytesIO(data))
 
         container = get_container(container_id)
-
-        parent = str(target.parent)
-
-        if parent == ".":
-            parent = "."
+        container.exec_run(["mkdir", "-p", str(target.parent)])
 
         success = container.put_archive(
-            parent,
+            str(target.parent),
             buffer.getvalue(),
         )
 
@@ -910,6 +965,19 @@ class FileSystem:
             "path": str(target),
             "size": len(data),
         }
+
+    @staticmethod
+    def read_bytes(container_id: str, path: str) -> bytes:
+        """A file's bytes; relative paths are in the home directory."""
+        target = PurePosixPath(HOME) / path
+        guest = hub.for_runtime(container_id)
+        if guest is not None and guest.has("files"):
+            return guest.read(str(target))
+        result = get_container(container_id).exec_run(["cat", "--", str(target)], demux=True)
+        stdout, stderr = result.output
+        if result.exit_code != 0:
+            raise FileNotFoundError((stderr or b"").decode(errors="replace").strip() or str(target))
+        return stdout or b""
 
 
 class ObserveTools:

@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router"
 import { Plus } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { FieldError } from "@/components/auth-shell"
 import { Button } from "@/components/ui/button"
@@ -132,9 +132,28 @@ function Choice({
   )
 }
 
-export function CreateSandboxDialog() {
+const OPEN_EVENT = "zoo:create-sandbox"
+
+/** Opens the app-wide create dialog (the palette and the `c` shortcut use it). */
+export function openCreateSandbox() {
+  window.dispatchEvent(new Event(OPEN_EVENT))
+}
+
+/**
+ * The create-a-sandbox dialog. With `global`, it has no button of its own and opens on openCreateSandbox(); the app
+ * layout mounts one of those.
+ */
+export function CreateSandboxDialog({
+  global = false,
+}: { global?: boolean } = {}) {
   const create = useCreateSandbox()
   const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (!global) return
+    const show = () => setOpen(true)
+    window.addEventListener(OPEN_EVENT, show)
+    return () => window.removeEventListener(OPEN_EVENT, show)
+  }, [global])
   const servers = useServers()
   const platforms = usePlatforms()
   const profiles = useProfiles()
@@ -215,10 +234,12 @@ export function CreateSandboxDialog() {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger render={<Button />}>
-        <Plus />
-        Create Sandbox
-      </DialogTrigger>
+      {!global && (
+        <DialogTrigger render={<Button />}>
+          <Plus />
+          Create Sandbox
+        </DialogTrigger>
+      )}
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>

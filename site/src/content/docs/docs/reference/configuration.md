@@ -55,6 +55,7 @@ chart's `env` map on Kubernetes.
 | `ZOO_BACKUP_KEEP` | `7` | Internal setting. |
 | `ZOO_BROWSER_HOME` | `https://duckduckgo.com` | Start page for `browser` sandboxes. |
 | `ZOO_CODE_IMAGE` | `zoo-code:latest` | Image for `code` sandboxes. |
+| `ZOO_DOCS_URL` | `https://github.com/chann44/zoo/blob/main/site/src/content/docs/docs/reference/errors.md` | Base of the errors page that error responses link to as `docs_url` (`<url>#<code>`). |
 | `ZOO_DOMAIN` | `—` | Always-allowed domain for Caddy. |
 | `ZOO_EMBED_ORIGINS` | `—` | Origins (space-separated) that may put a viewer link's page in an iframe; none when unset. |
 | `ZOO_EVENT_RETENTION_DAYS` | `7` | How long events (`GET /events`, webhooks) and their deliveries are kept. |
@@ -105,7 +106,7 @@ chart's `env` map on Kubernetes.
 | `ZOO_SANDBOX_IMAGE` | `zoo-sandbox:latest` | Image for `desktop` and `browser` sandboxes. |
 | `ZOO_SECRETS_KEY` | `—` | Encrypts stored secrets, agent keys, app profiles and VNC passwords. Back it up. |
 | `ZOO_SECRETS_KEY_PREVIOUS` | `—` | Old keys, comma-separated, kept only until `make rotate-secrets` has run. |
-| `ZOO_URL` | `http://localhost:8000` | Internal setting. |
+| `ZOO_URL` | `http://localhost:8000` | The API URL the Python SDK and the zoo CLI use; http://localhost:8000 by default. |
 | `ZOO_WEBHOOK_ALLOW_PRIVATE` | `—` | `1` lets webhooks reach private addresses. |
 | `ZOO_WEBHOOK_BACKOFF_SECONDS` | `60,300,1800,7200,21600` | Seconds between a failed webhook delivery's retries, comma-separated; it fails after the last. |
 | `ZOO_WINDOWS_BASE` | `zoo-windows-base` | Hyper-V VM that Windows sandboxes are cloned from. |
@@ -121,5 +122,5 @@ chart's `env` map on Kubernetes.
 the chat channels. See the [chat channels guide](/docs/guides/chat-channels/) and
 [observability](/docs/guides/domain-https-backups/#observability).
 
-Undocumented in this table: `KUBERNETES_SERVICE_HOST`, `KUBERNETES_SERVICE_PORT`, `WHATSAPP_GRAPH_URL`, `ZOO_BACKUP_INTERVAL_HOURS`, `ZOO_BACKUP_KEEP`, `ZOO_GUEST_WINDOWS_BINARY`, `ZOO_MAX_SANDBOX_CPUS`, `ZOO_MAX_SANDBOX_DISK_GB`, `ZOO_MAX_SANDBOX_MEMORY_MB`, `ZOO_NODE_BIND`, `ZOO_NODE_MAX`, `ZOO_SANDBOX_DISK_GB`, `ZOO_URL`.
+Undocumented in this table: `KUBERNETES_SERVICE_HOST`, `KUBERNETES_SERVICE_PORT`, `WHATSAPP_GRAPH_URL`, `ZOO_BACKUP_INTERVAL_HOURS`, `ZOO_BACKUP_KEEP`, `ZOO_GUEST_WINDOWS_BINARY`, `ZOO_MAX_SANDBOX_CPUS`, `ZOO_MAX_SANDBOX_DISK_GB`, `ZOO_MAX_SANDBOX_MEMORY_MB`, `ZOO_NODE_BIND`, `ZOO_NODE_MAX`, `ZOO_SANDBOX_DISK_GB`.
 

@@ -10,16 +10,6 @@
                 }
             }
         ],
-        "./sdk/python/zoo_sdk/__init__.py": [
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 40,
-                    "endColumn": 48,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./sdk/python/zoo_sdk/agent.py": [
             {
                 "code": "reportMissingImports",

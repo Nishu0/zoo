@@ -80,7 +80,7 @@ def test_each_action_keeps_the_screenshot_it_was_decided_on(client, alice, sandb
         assert res.status_code == 200 and res.content == PNG and res.headers["content-type"] == "image/png"
     # stored encrypted
     run = latest_run(sandbox["id"])
-    stored = [STORE[k] for k in STORE if k.startswith(f"agent/{run.id}/")]
+    stored = [STORE[k] for k in STORE if k.startswith(f"agent/{run.id}/") and not k.endswith(".a11y.enc")]
     assert stored
     for data in stored:
         assert data != PNG and decrypt_bytes(data) == PNG
@@ -291,7 +291,7 @@ def test_stop_reaches_a_run_on_another_worker(client, alice, sandbox, zoo):
     assert client.get(f"/sandboxes/{sandbox['id']}/agent", headers=alice).json()["running"] is True
     assert client.post(f"/sandboxes/{sandbox['id']}/agent/stop", headers=alice).status_code == 204
     with db_manager.session() as db:
-        assert db.heartbeat_agent_run(id="run-3", worker="other") == 1
+        assert db.heartbeat_agent_run(id="run-3", worker="other") is not None
 
 
 def test_stopping_a_queued_run(client, alice, sandbox, zoo):

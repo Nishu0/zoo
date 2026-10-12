@@ -53,7 +53,7 @@ def test_running_sandbox_is_redacted_against_its_boot_secrets(client, alice, san
 def test_failed_tool_rows_are_written_in_the_background(client, alice, sandbox, fake):
     fake.fail_tool = "boom"
     client.post(f"/sandboxes/{sandbox['id']}/tools/click", json={"x": 1, "y": 2}, headers=alice)
-    [row] = client.get(f"/sandboxes/{sandbox['id']}/executions", headers=alice).json()
+    [row] = client.get(f"/sandboxes/{sandbox['id']}/executions", headers=alice).json()["data"]
     assert (row["status"], row["error_message"]) == ("failed", "boom")
     assert runtime_of(sandbox["id"])
 

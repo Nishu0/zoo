@@ -27,7 +27,7 @@ from db.connection import db_manager
 from db.generated.models import Event
 from db.generated.query import ListEventsParams, ListLateEventsParams, Querier
 from logger.logger import logger
-from server import labels, workers
+from server import idempotency, labels, workers
 from server.auth_api import AuthApi, Member
 from server.jobs import stamp
 from utils.time import to_stamp
@@ -206,6 +206,7 @@ def purge():
     with db_manager.session() as db:
         db.purge_events(created_at=stamp(-RETENTION.total_seconds()))
         db.purge_webhook_deliveries(created_at=stamp(-RETENTION.total_seconds()))
+    idempotency.purge()
 
 
 async def purge_loop():

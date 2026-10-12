@@ -36,7 +36,7 @@ function AuditPage() {
   const [filters, setFilters] = useState<AuditFilters>({})
   const log = useAuditLog(filters)
   const [exportError, setExportError] = useState<string | null>(null)
-  const entries = log.data?.pages.flatMap((p) => p.entries) ?? []
+  const entries = log.data?.pages.flatMap((p) => p.data) ?? []
 
   if (workspace && !roleAtLeast(workspace.role, "admin")) {
     return (

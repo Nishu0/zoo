@@ -43,7 +43,7 @@ def test_snapshots_are_private_and_limited(client, alice, bob, sandbox, monkeypa
     for _ in range(2):
         assert client.post(f"/sandboxes/{sandbox['id']}/snapshots", headers=alice).status_code == 202
     res = client.post(f"/sandboxes/{sandbox['id']}/snapshots", headers=alice)
-    assert res.status_code == 409 and "at most 2" in res.json()["detail"]
+    assert res.status_code == 409 and "at most 2" in res.json()["error"]["message"]
     assert client.get(f"/sandboxes/{sandbox['id']}/snapshots", headers=bob).status_code == 404
     snap_id = snapshots(client, alice, sandbox["id"])[0]["id"]
     assert client.delete(f"/sandboxes/{sandbox['id']}/snapshots/{snap_id}", headers=bob).status_code == 404
@@ -60,7 +60,7 @@ def test_a_failed_snapshot_is_kept_with_its_error(client, alice, sandbox, fake):
     assert client.get(f"/sandboxes/{sandbox['id']}", headers=alice).json()["status"] == "running"
     client.post(f"/sandboxes/{sandbox['id']}/stop", headers=alice)
     res = client.post(f"/sandboxes/{sandbox['id']}/snapshots/{snap['id']}/restore", headers=alice)
-    assert res.status_code == 409 and "failed" in res.json()["detail"]
+    assert res.status_code == 409 and "failed" in res.json()["error"]["message"]
 
 
 def test_vm_snapshots_need_the_vm_stopped(client, alice, sandbox):
@@ -71,7 +71,7 @@ def test_vm_snapshots_need_the_vm_stopped(client, alice, sandbox):
         sandbox["id"],
     )
     res = client.post(f"/sandboxes/{sandbox['id']}/snapshots", headers=alice)
-    assert res.status_code == 409 and "stop the sandbox" in res.json()["detail"]
+    assert res.status_code == 409 and "stop the sandbox" in res.json()["error"]["message"]
 
 
 def test_linux_snapshots_move_with_the_sandbox_and_go_with_it(client, alice, sandbox, fake):

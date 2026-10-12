@@ -1,0 +1,51 @@
+{
+  "name": "@zoo/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for Zoo: self-hosted Linux, macOS and Windows sandboxes for AI agents",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./ai": {
+      "types": "./dist/ai.d.ts",
+      "import": "./dist/ai.js",
+      "default": "./dist/ai.js"
+    }
+  },
+  "files": [
+    "dist",
+    "openapi.json"
+  ],
+  "scripts": {
+    "generate": "cd ../.. && uv run python scripts/openapi.py sdk/typescript/openapi.json && cd sdk/typescript && openapi-typescript openapi.json -o src/schema.ts",
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "peerDependencies": {
+    "ai": ">=5",
+    "zod": ">=3.25"
+  },
+  "peerDependenciesMeta": {
+    "ai": {
+      "optional": true
+    },
+    "zod": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "ai": "^5.0.0",
+    "openapi-typescript": "^7.8.0",
+    "typescript": "^5.8.3",
+    "zod": "^3.25.0"
+  }
+}

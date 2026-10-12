@@ -24,11 +24,11 @@ from pydantic import BaseModel
 from db.connection import db_manager
 from db.generated.query import CreateAuditLogParams, ListAuditLogsParams, ListAuditLogsRow, Querier
 from logger.logger import logger
+from server import pages
 from server.auth_api import AuthApi, Member, require
 from server.limits import client_ip
 from utils.time import to_stamp
 
-PAGE = 100
 EXPORT_PAGE = 1000
 # these write their own, richer entries (server/security.py audit)
 SELF_AUDITED = (
@@ -52,9 +52,9 @@ class AuditLogResponse(BaseModel):
 
 
 class AuditPage(BaseModel):
-    entries: list[AuditLogResponse]
+    data: list[AuditLogResponse]
     # pass back as `cursor` for the next page; null on the last
-    cursor: str | None
+    next_cursor: str | None
 
 
 def system(workspace_id: str, action: str, resource_type: str, resource_id: str | None, **metadata):
@@ -182,7 +182,7 @@ class AuditApi:
 
         @self.app.get("/audit-logs", response_model=AuditPage)
         def list_audit_logs(
-            cursor: str | None = None,
+            page: pages.Params = Depends(),
             actor: str | None = None,
             action: str | None = None,
             resource_type: str | None = None,
@@ -193,9 +193,13 @@ class AuditApi:
             db: Querier = Depends(db_manager.get_client),
         ) -> AuditPage:
             require(user, "admin")
-            rows = self.page(user, db, PAGE, cursor, actor, action, resource_type, sandbox_id, since, until)
-            last = rows[-1] if len(rows) == PAGE else None
-            return AuditPage(entries=[entry(r) for r in rows], cursor=cursor_after(last) if last else None)
+            rows = self.page(
+                user, db, page.limit + 1, page.cursor, actor, action, resource_type, sandbox_id, since, until
+            )
+            last = rows[page.limit - 1] if len(rows) > page.limit else None
+            return AuditPage(
+                data=[entry(r) for r in rows[: page.limit]], next_cursor=cursor_after(last) if last else None
+            )
 
         @self.app.get("/audit-logs/export")
         def export_audit_logs(

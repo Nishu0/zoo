@@ -133,6 +133,8 @@ class UserResponse(BaseModel):
     email: str
     name: str | None
     avatar_url: str | None
+    # null until the dashboard's first-run steps are done or skipped
+    onboarded_at: str | None = None
 
 
 class ApiKeyRequest(BaseModel):
@@ -199,7 +201,18 @@ class AuthApi:
 
         @self.app.get("/auth/me", response_model=UserResponse)
         def me(user: User = Depends(self.current_user)) -> UserResponse:
-            return UserResponse(id=user.id, email=user.email, name=user.name, avatar_url=user.avatar_url)
+            return UserResponse(
+                id=user.id,
+                email=user.email,
+                name=user.name,
+                avatar_url=user.avatar_url,
+                onboarded_at=to_stamp(user.onboarded_at),
+            )
+
+        @self.app.put("/auth/me/onboarded", status_code=204)
+        def onboarded(user: User = Depends(self.current_user), db: Querier = Depends(db_manager.get_client)):
+            """Marks the first-run steps done (or skipped), so the dashboard stops showing them."""
+            db.set_user_onboarded(id=user.id)
 
         @self.app.get("/api-keys", response_model=list[ApiKeyResponse])
         def list_keys(

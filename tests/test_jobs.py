@@ -158,7 +158,7 @@ def test_busy_sandboxes_refuse_other_lifecycle_work(client, alice, sandbox, queu
     target = add_server("alice@example.com")
     client.post(f"/sandboxes/{sid}/move", json={"server_id": target}, headers=alice)
     res = client.post(f"/sandboxes/{sid}/start", headers=alice)
-    assert (res.status_code, res.json()["detail"]) == (409, "sandbox is busy: move in progress")
+    assert (res.status_code, res.json()["error"]["message"]) == (409, "sandbox is busy: move in progress")
     queued.drain()
     assert client.get(f"/sandboxes/{sid}", headers=alice).json()["server_id"] == target
 
@@ -207,7 +207,7 @@ def test_health_probes(client, alice, monkeypatch):
     assert client.get("/healthz").json() == {"status": "ok"}
     ready = client.get("/readyz")
     assert ready.status_code == 200
-    assert ready.json()["checks"] == {"database": "ok", "docker": "ok"}
+    assert ready.json()["checks"] == {"database": "ok", "object_store": "ok", "docker": "ok"}
 
     from tests.test_sandboxes import add_server
 

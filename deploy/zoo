@@ -12,6 +12,9 @@
 #   zoo node install --windows --key KEY [--control-plane URL] [--iso PATH|URL] [--edition NAME]
 #                         on Windows (Git Bash, elevated): turn on Hyper-V and OpenSSH and, with --iso, build the
 #                         base Windows VM unattended (install-node.ps1)
+#
+# Sandbox commands (zoo login, create, ls, exec, shell, view, cp, logs, rm) are the Python CLI's
+# (pip install 'zoo-sdk[cli]'); this script hands them to it, and it hands operator commands back here.
 set -euo pipefail
 
 REPO="chann44/zoo"
@@ -21,6 +24,20 @@ HEALTH_TIMEOUT="${ZOO_HEALTH_TIMEOUT:-300}"
 say() { printf '\033[1m==> %s\033[0m\n' "$*"; }
 warn() { printf '\033[33mwarning: %s\033[0m\n' "$*" >&2; }
 die() { printf '\033[31merror: %s\033[0m\n' "$*" >&2; exit 1; }
+
+# the Python CLI's commands: run the first other `zoo` on PATH that isn't a shell script
+case "${1:-}" in
+    login | create | ls | exec | shell | view | cp | logs | rm)
+        self=$(realpath "$0")
+        IFS=: read -ra dirs <<< "$PATH"
+        for dir in "${dirs[@]}"; do
+            cli="$dir/zoo"
+            [ -x "$cli" ] && [ "$(realpath "$cli")" != "$self" ] || continue
+            head -c 64 "$cli" | grep -q bash && continue
+            exec "$cli" "$@"
+        done
+        die "zoo $1 is part of the zoo CLI: pip install 'zoo-sdk[cli]' (or uv tool install 'zoo-sdk[cli]')" ;;
+esac
 
 # zoo node install: sets up this machine as a server for a control plane (install.sh --node), so it runs before
 # the check for a control plane install below

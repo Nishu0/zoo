@@ -8,70 +8,133 @@ Generated from the code by `site/scripts/generate_reference.py` — do not edit 
 Regenerate with `bun run docs:gen` from `site/`.
 :::
 
-Every HTTP status the API can return, and where it is declared or raised. The SDK
-raises `zoo_sdk.ZooError` with `"<status>: <detail>"` for any of them.
+Every error the API returns has one shape:
+
+```json
+{"error": {"code": "sandbox_not_found", "message": "sandbox not found",
+           "hint": "`GET /v1/sandboxes` lists this workspace's sandboxes; ids are case-sensitive.",
+           "docs_url": "…/errors#sandbox_not_found", "request_id": "3f9c…"}}
+```
+
+Match on `code`: it is stable within an API version, while `message` may change. A `500` never carries
+exception text; report its `request_id` (also in the `X-Request-Id` header) and the operator finds the
+traceback in the logs. The SDKs raise a `ZooError` subclass per status (`NotFoundError`, `ConflictError`,
+`RateLimitError`, …) carrying `code`, `message`, `hint` and `docs_url`.
+
+## Codes
+
+### `bad_request`
+
+HTTP `400`. The request was malformed. Check the body against the endpoint's schema.
+
+### `unauthenticated`
+
+HTTP `401`. No or invalid credentials. Send `Authorization: Bearer <key>`.
+
+Fix: Create an API key in Settings → API keys and send it as `Authorization: Bearer <key>`.
+
+### `forbidden`
+
+HTTP `403`. Your role, API key scope or a sandbox policy doesn't allow this.
+
+### `not_found`
+
+HTTP `404`. No such route or object.
+
+### `sandbox_not_found`
+
+HTTP `404`. No sandbox with that id in this workspace. `GET /v1/sandboxes` lists them.
+
+Fix: `GET /v1/sandboxes` lists this workspace's sandboxes; ids are case-sensitive.
+
+### `method_not_allowed`
+
+HTTP `405`. The route exists but not with this method.
+
+### `conflict`
+
+HTTP `409`. The object's current state doesn't allow this, e.g. the sandbox isn't running.
+
+### `quota_exceeded`
+
+HTTP `409`. A workspace, member or label quota is used up.
+
+Fix: Stop or delete sandboxes, or ask a workspace admin to raise the quota.
+
+### `idempotency_key_reused`
+
+HTTP `409`. This Idempotency-Key was used with a different request body.
+
+Fix: Use a new Idempotency-Key for a different request.
+
+### `idempotency_key_in_progress`
+
+HTTP `409`. A request with this Idempotency-Key is still running.
+
+Fix: Wait for the first request to finish, then retry.
+
+### `gone`
+
+HTTP `410`. The object existed but has expired or been revoked.
+
+### `too_large`
+
+HTTP `413`. The request body is too large.
+
+### `validation_failed`
+
+HTTP `422`. A field didn't match the schema; the message names it.
+
+### `rate_limited`
+
+HTTP `429`. Too many requests. Wait as long as the Retry-After header says.
+
+Fix: Retry after the number of seconds in the Retry-After header.
+
+### `internal_error`
+
+HTTP `500`. Zoo failed. Retry; if it keeps failing, report the request id.
+
+Fix: Retry. If it keeps failing, report the request id to your Zoo operator.
+
+### `not_supported`
+
+HTTP `501`. This runtime or deployment doesn't support it.
+
+### `upstream_error`
+
+HTTP `502`. A sandbox, node or provider Zoo talks to failed.
+
+### `unavailable`
+
+HTTP `503`. Zoo or a dependency is starting or overloaded. Retry with backoff.
+
+Fix: Retry with exponential backoff.
+
+### `timeout`
+
+HTTP `504`. A sandbox, node or provider didn't answer in time.
+
+Fix: Retry; long commands can pass a larger `timeout`.
+
+## Statuses
+
+Where each HTTP status is declared or raised.
 
 | Status | Where it comes from |
 | --- | --- |
-| `200` | `GET /`, `POST /auth/login`, `GET /auth/me`, +112 more |
-| `201` | `POST /auth/signup`, `POST /api-keys`, `POST /sandboxes`, +12 more |
-| `202` | `POST /sandboxes/{sandbox_id}/snapshots`, `POST /webhooks/{webhook_id}/test`, `POST /agent/exports`, +1 more |
-| `204` | `DELETE /sandboxes/{sandbox_id}/snapshots/{snapshot_id}`, `DELETE /sandboxes/{sandbox_id}/agent`, `POST /sandboxes/{sandbox_id}/agent/stop`, +15 more |
+| `200` | `GET /`, `POST /v1/auth/login`, `GET /v1/auth/me`, +115 more |
+| `201` | `POST /v1/auth/signup`, `POST /v1/api-keys`, `POST /v1/sandboxes`, +12 more |
+| `202` | `POST /v1/sandboxes/{sandbox_id}/snapshots`, `POST /v1/webhooks/{webhook_id}/test`, `POST /v1/agent/exports`, +1 more |
+| `204` | `PUT /v1/auth/me/onboarded`, `DELETE /v1/sandboxes/{sandbox_id}/snapshots/{snapshot_id}`, `DELETE /v1/sandboxes/{sandbox_id}/agent`, +16 more |
 | `400` | raised by the handlers |
 | `401` | raised by the handlers |
 | `403` | raised by the handlers |
 | `404` | raised by the handlers |
 | `409` | raised by the handlers |
-| `422` | `POST /auth/signup`, `POST /auth/login`, `GET /auth/me`, +148 more |
+| `422` | `POST /v1/auth/signup`, `POST /v1/auth/login`, `GET /v1/auth/me`, +152 more |
 | `429` | raised by the handlers |
 | `500` | raised by the handlers |
 | `502` | raised by the handlers |
 | `503` | raised by the handlers |
 | `504` | raised by the handlers |
-
-## What each one means, and the fix
-
-### `400` — The request was malformed
-
-Check the body against the endpoint's schema in the [API reference](/docs/reference/api/).
-
-### `401` — No or invalid credentials
-
-Send `Authorization: Bearer <key>`; create a key under **Profile → API keys**. Session cookies only work on the dashboard origin.
-
-### `403` — Denied by a policy, or not an admin
-
-Tool calls: check the sandbox's **Permissions** tab (`shell.exec`, `screen.read`, `input.control`, `files.read`, `files.write`). `/admin/*` and Domains need `ADMIN_EMAILS`.
-
-### `404` — Unknown sandbox, server or object
-
-`GET /sandboxes` to list what exists; ids are case-sensitive.
-
-### `409` — Conflict with the sandbox's current state
-
-Typical causes: the name is taken, a `macOS` sandbox hit *Mac full* (wait, or create with `"queue": false`), or an app is running while a profile loads (quit the app, then load).
-
-### `422` — Validation failed
-
-FastAPI's response names the field that didn't match the schema; compare with the endpoint's request body in the [API reference](/docs/reference/api/).
-
-### `429` — Rate limited
-
-Honor `Retry-After`. Limits: 20 login attempts a minute per IP, 10 an hour for signups, 600 requests a minute per API key.
-
-### `500` — The API hit an unexpected error
-
-Check the API logs (and Grafana, if enabled); open an issue with the trace id if it persists.
-
-### `502` — A hop in front of the API failed
-
-Check the reverse proxy (Caddy) and that the API container is up.
-
-### `503` — The sandbox or guest is unreachable
-
-The sandbox may still be starting, its server offline, or (on remote sandboxes) `ZOO_GUEST_REMOTE_URL` unset. Retry once the sandbox is running.
-
-### `504` — A call timed out behind a proxy
-
-Long tool calls can outlive proxy timeouts; raise the proxy's read timeout, or retry.
-

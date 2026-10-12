@@ -90,7 +90,7 @@ def test_load_is_refused_while_the_app_runs(client, alice, sandbox, make_sandbox
     container.running_apps.add("firefox")
     res = client.post(f"/sandboxes/{other['id']}/profiles/{profile['id']}", headers=alice)
     assert res.status_code == 409
-    assert "Firefox is running" in res.json()["detail"]
+    assert "Firefox is running" in res.json()["error"]["message"]
     assert container.dirs == {}
     container.running_apps.clear()
     assert client.post(f"/sandboxes/{other['id']}/profiles/{profile['id']}", headers=alice).status_code == 200

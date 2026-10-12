@@ -553,7 +553,7 @@ LIMIT 1;
 
 -- name: ListAPIKeysByWorkspace :many
 SELECT id, workspace_id, created_by, name, key_prefix,
-       scopes, expires_at, last_used_at, revoked_at, created_at, sandbox_id, read_only
+       scopes, expires_at, last_used_at, revoked_at, created_at, sandbox_id, read_only, label_selector
 FROM api_keys
 WHERE workspace_id = $1
 ORDER BY created_at DESC;
@@ -1608,3 +1608,54 @@ SELECT * FROM benchmark_results WHERE benchmark_id = $1 ORDER BY task_id, model;
 
 -- name: RenameSandbox :one
 UPDATE sandboxes SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *;
+
+-- Idempotency keys (server/idempotency.py)
+
+-- name: ClaimIdempotencyKey :one
+-- the row, new (status NULL, inserted true) or the one already there
+INSERT INTO idempotency_keys (owner, key, method, path, request_hash)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (owner, key) DO UPDATE SET owner = idempotency_keys.owner
+RETURNING *, (xmax = 0) AS inserted;
+
+-- name: FinishIdempotencyKey :exec
+UPDATE idempotency_keys SET status = $1, content_type = $2, response = $3
+WHERE owner = $4 AND key = $5;
+
+-- name: ReleaseIdempotencyKey :exec
+DELETE FROM idempotency_keys WHERE owner = $1 AND key = $2;
+
+-- name: PurgeIdempotencyKeys :exec
+DELETE FROM idempotency_keys WHERE created_at < $1;
+
+-- Pages (server/pages.py): newest first, continuing after (before_at, before_id)
+
+-- name: PageSandboxes :many
+SELECT * FROM sandboxes
+WHERE workspace_id = sqlc.arg(workspace_id) AND deleted_at IS NULL
+  AND (sqlc.narg(before_at)::timestamptz IS NULL
+       OR (created_at, id) < (sqlc.narg(before_at)::timestamptz, sqlc.narg(before_id)::text))
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(row_limit);
+
+-- name: PageToolExecutions :many
+SELECT te.* FROM tool_executions te
+JOIN agent_sessions s ON s.id = te.session_id
+WHERE s.sandbox_id = sqlc.arg(sandbox_id)
+  AND (sqlc.narg(before_at)::timestamptz IS NULL
+       OR (te.created_at, te.id) < (sqlc.narg(before_at)::timestamptz, sqlc.narg(before_id)::text))
+ORDER BY te.created_at DESC, te.id DESC
+LIMIT sqlc.arg(row_limit);
+
+-- name: PageWebhookDeliveries :many
+SELECT d.*, e.type AS event_type
+FROM webhook_deliveries d
+JOIN events e ON e.id = d.event_id
+WHERE d.webhook_id = sqlc.arg(webhook_id)
+  AND (sqlc.narg(before_at)::timestamptz IS NULL
+       OR (d.created_at, d.id) < (sqlc.narg(before_at)::timestamptz, sqlc.narg(before_id)::text))
+ORDER BY d.created_at DESC, d.id DESC
+LIMIT sqlc.arg(row_limit);
+
+-- name: SetUserOnboarded :exec
+UPDATE users SET onboarded_at = COALESCE(onboarded_at, now()) WHERE id = $1;

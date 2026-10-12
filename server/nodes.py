@@ -58,7 +58,9 @@ logger = logging.getLogger(__name__)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DIST = os.environ.get("ZOO_NODE_DIST") or os.path.join(ROOT, "node", "dist")
-PORT = int(os.environ.get("ZOO_NODE_PORT", "7443"))
+# "off": this process serves no node endpoint (server/server.py)
+_PORT = os.environ.get("ZOO_NODE_PORT", "7443")
+PORT = 0 if _PORT == "off" else int(_PORT)
 TOKEN_PREFIX = "zn1."
 TOKEN_TTL = 3600
 CERT_DAYS = 365

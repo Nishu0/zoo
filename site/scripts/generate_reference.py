@@ -344,18 +344,29 @@ def gen_sdk() -> None:
         GENERATED_NOTE,
         "",
         "```bash",
-        "pip install ./sdk/python",
+        "pip install zoo-sdk            # or: pip install ./sdk/python",
+        "pip install 'zoo-sdk[cli]'     # plus the zoo command",
         "```",
         "",
         "```python",
         "from zoo_sdk import Zoo",
         "",
         "zoo = Zoo()  # reads ZOO_API_KEY and ZOO_URL",
+        'with zoo.sandbox(kind="desktop") as box:  # deleted on exit, also on error',
+        '    for chunk in box.exec("uname -a", stream=True):',
+        '        print(chunk.data, end="")',
         "```",
+        "",
+        "`AsyncZoo` is the asyncio twin (`async with await zoo.sandbox(kind=...) as box`). Every call has a timeout",
+        "(30 s unless it passes `timeout=`) and is retried with exponential backoff when that is safe: connection failures",
+        "and 429 always; 5xx and timeouts for reads and for creates, which carry an automatic `Idempotency-Key`. Errors",
+        "are `ZooError` subclasses with the API's [error code](/docs/reference/errors/). The TypeScript SDK",
+        "(`npm install @zoo/sdk`) has the same methods in camelCase; see `sdk/typescript/README.md`.",
     ]
 
     for path in sorted(pkg.glob("*.py")):
-        if path.name == "__init__.py" and path.parent != pkg:
+        # private helpers, and the CLI, which has its own page
+        if path.name.startswith("_") and path.name != "__init__.py" or path.name == "cli.py":
             continue
         tree = ast.parse(path.read_text())
         classes = [n for n in tree.body if isinstance(n, ast.ClassDef)]
@@ -443,6 +454,8 @@ DESCRIPTIONS = {
     "ZOO_AGENT_MAX_SECONDS": "Cap on each agent task's wall-clock seconds.",
     "ZOO_AGENT_MAX_TOKENS": "Cap on each agent task's model tokens.",
     "ZOO_EMBED_ORIGINS": "Origins (space-separated) that may put a viewer link's page in an iframe; none when unset.",
+    "ZOO_DOCS_URL": "Base of the errors page that error responses link to as `docs_url` (`<url>#<code>`).",
+    "ZOO_URL": "The API URL the Python SDK and the zoo CLI use; http://localhost:8000 by default.",
     "ZOO_MAX_VIEWER_LINK_HOURS": "Longest a viewer link may last.",
     "ZOO_EVENT_RETENTION_DAYS": "How long events (`GET /events`, webhooks) and their deliveries are kept.",
     "ZOO_EXPORT_RETENTION_DAYS": "How long trajectory exports are kept.",
@@ -568,55 +581,14 @@ def gen_config() -> None:
 # Error reference — from the statuses the OpenAPI schema actually declares
 # ---------------------------------------------------------------------------
 
-ERROR_FIXES = {
-    "400": (
-        "The request was malformed",
-        "Check the body against the endpoint's schema in the [API reference](/docs/reference/api/).",
-    ),
-    "401": (
-        "No or invalid credentials",
-        "Send `Authorization: Bearer <key>`; create a key under **Profile → API keys**. Session cookies only work on the dashboard origin.",
-    ),
-    "403": (
-        "Denied by a policy, or not an admin",
-        "Tool calls: check the sandbox's **Permissions** tab (`shell.exec`, `screen.read`, `input.control`, `files.read`, `files.write`). `/admin/*` and Domains need `ADMIN_EMAILS`.",
-    ),
-    "404": ("Unknown sandbox, server or object", "`GET /sandboxes` to list what exists; ids are case-sensitive."),
-    "409": (
-        "Conflict with the sandbox's current state",
-        'Typical causes: the name is taken, a `macOS` sandbox hit *Mac full* (wait, or create with `"queue": false`), or an app is running while a profile loads (quit the app, then load).',
-    ),
-    "413": ("Body too large", "Split the file; restore takes the tar as the whole body."),
-    "422": (
-        "Validation failed",
-        "FastAPI's response names the field that didn't match the schema; compare with the endpoint's request body in the [API reference](/docs/reference/api/).",
-    ),
-    "429": (
-        "Rate limited",
-        "Honor `Retry-After`. Limits: 20 login attempts a minute per IP, 10 an hour for signups, 600 requests a minute per API key.",
-    ),
-    "500": (
-        "The API hit an unexpected error",
-        "Check the API logs (and Grafana, if enabled); open an issue with the trace id if it persists.",
-    ),
-    "502": ("A hop in front of the API failed", "Check the reverse proxy (Caddy) and that the API container is up."),
-    "503": (
-        "The sandbox or guest is unreachable",
-        "The sandbox may still be starting, its server offline, or (on remote sandboxes) `ZOO_GUEST_REMOTE_URL` unset. Retry once the sandbox is running.",
-    ),
-    "504": (
-        "A call timed out behind a proxy",
-        "Long tool calls can outlive proxy timeouts; raise the proxy's read timeout, or retry.",
-    ),
-}
-
-
 def gen_errors() -> None:
     sys.path.insert(0, str(ROOT))
     import os
 
     os.environ.setdefault("JWT_SECRET", "docs")
     os.environ.setdefault("ZOO_SECRETS_KEY", "docs")
+    os.environ.setdefault("DATABASE_URL", "postgresql://docs:docs@127.0.0.1:1/docs")
+    os.environ.setdefault("ZOO_OBJECT_STORE", "s3://docs")
     from main import app
 
     spec = app.openapi()
@@ -659,19 +631,38 @@ def gen_errors() -> None:
         "",
         GENERATED_NOTE,
         "",
-        "Every HTTP status the API can return, and where it is declared or raised. The SDK",
-        'raises `zoo_sdk.ZooError` with `"<status>: <detail>"` for any of them.',
+        "Every error the API returns has one shape:",
+        "",
+        "```json",
+        '{"error": {"code": "sandbox_not_found", "message": "sandbox not found",',
+        '           "hint": "`GET /v1/sandboxes` lists this workspace\'s sandboxes; ids are case-sensitive.",',
+        '           "docs_url": "…/errors#sandbox_not_found", "request_id": "3f9c…"}}',
+        "```",
+        "",
+        "Match on `code`: it is stable within an API version, while `message` may change. A `500` never carries",
+        "exception text; report its `request_id` (also in the `X-Request-Id` header) and the operator finds the",
+        "traceback in the logs. The SDKs raise a `ZooError` subclass per status (`NotFoundError`, `ConflictError`,",
+        "`RateLimitError`, …) carrying `code`, `message`, `hint` and `docs_url`.",
+        "",
+        "## Codes",
+        "",
+    ]
+    from server.errors import CODES, HINTS
+
+    for code, (status, meaning) in CODES.items():
+        out += [f"### `{code}`", "", f"HTTP `{status}`. {meaning}", ""]
+        if code in HINTS:
+            out += [f"Fix: {HINTS[code]}", ""]
+    out += [
+        "## Statuses",
+        "",
+        "Where each HTTP status is declared or raised.",
         "",
         "| Status | Where it comes from |",
         "| --- | --- |",
     ]
     for code in sorted(usage, key=sort_key):
         out.append(f"| `{code}` | {where(code)} |")
-
-    out += ["", "## What each one means, and the fix", ""]
-    for code in sorted((c for c in usage if c.isdigit() and int(c) >= 400), key=sort_key):
-        meaning, fix = ERROR_FIXES.get(code, ("No note yet.", "Open an issue if it isn't expected."))
-        out += [f"### `{code}` — {meaning}", "", fix, ""]
 
     write("errors.md", "\n".join(out) + "\n")
     print(f"errors.md: {len(usage)} statuses")

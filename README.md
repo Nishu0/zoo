@@ -21,28 +21,34 @@ watch, and take over when needed, from the dashboard.
 On an Ubuntu or Debian server with KVM:
 
 ```bash
-# 1. install — Docker, Kata microVMs, the dashboard and the zoo CLI
+# 1. install — Docker, Kata microVMs, the dashboard and the zoo operator command
 curl -fsSL https://github.com/chann44/zoo/releases/latest/download/install.sh | sudo bash -s -- --admin-email you@example.com
-
-# 2. connect your agent — any MCP client gets every sandbox tool
-cat > .mcp.json <<'JSON'
-{ "mcpServers": { "zoo": { "type": "http", "url": "http://localhost:8000/mcp/",
-    "headers": { "Authorization": "Bearer zoo_YOUR_KEY" } } } }
-JSON
-
-# 3. drive a sandbox from Python
-pip install ./sdk/python
-python -c "from zoo_sdk import Zoo; box = Zoo().create('hello'); print(box.exec('uname -a')['stdout'])"
 ```
 
-Open `http://<server ip>:3000` to watch. No KVM? The installer falls back to `runc` and
-tells you.
+2. Open `http://<server ip>:3000` and sign up. The first run walks you through creating a sandbox (or a demo with a
+   task ready to run), copying an API key and copying an MCP config with the key filled in.
+3. Paste that config into Claude Desktop, Claude Code or Cursor, or drive sandboxes from code:
+
+```bash
+pip install 'zoo-sdk[cli]'
+zoo login && zoo create --kind desktop && zoo ls
+```
+
+```python
+from zoo_sdk import Zoo
+
+with Zoo().sandbox(kind="desktop") as box:  # deleted when the block ends
+    print(box.exec("uname -a")["stdout"])
+```
+
+No KVM? The installer falls back to `runc` and tells you. The whole path is in the
+[quickstart](site/src/content/docs/docs/get-started/quickstart.md).
 
 ## Documentation
 
 **[docs](site/src/content/docs/docs/index.mdx)** — built with the site at `/docs`:
 
-- **Get started**: [Install](site/src/content/docs/docs/get-started/install.md) · [Your first sandbox](site/src/content/docs/docs/get-started/first-sandbox.md) · [Connect Claude Code or Claude Desktop](site/src/content/docs/docs/get-started/mcp.md) · [A computer-use agent in 5 minutes](site/src/content/docs/docs/get-started/cua-agent.md) · [Run Claude Code in a sandbox](site/src/content/docs/docs/get-started/claude-code.md)
+- **Get started**: [Quickstart](site/src/content/docs/docs/get-started/quickstart.md) · [Install](site/src/content/docs/docs/get-started/install.md) · [Your first sandbox](site/src/content/docs/docs/get-started/first-sandbox.md) · [Connect Claude Code or Claude Desktop](site/src/content/docs/docs/get-started/mcp.md) · [A computer-use agent in 5 minutes](site/src/content/docs/docs/get-started/cua-agent.md) · [Run Claude Code in a sandbox](site/src/content/docs/docs/get-started/claude-code.md)
 - **Guides**: remote servers, macOS and Windows sandboxes, [policies](site/src/content/docs/docs/guides/policies.md), vault, chat channels, HTTPS and backups, upgrading, Kubernetes, [building on Zoo](site/src/content/docs/docs/guides/building-on-zoo.md) (embedding, end users, events and webhooks, metering, trajectories, benchmarks)
 - **Concepts**: architecture, security model, runtimes
 - **Reference** (generated from the code): REST API, tools, SDK, configuration, errors

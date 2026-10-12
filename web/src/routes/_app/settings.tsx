@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { useState } from "react"
 
+import { SecretOnce } from "@/components/connect"
 import { Page } from "@/components/page"
 import { Button } from "@/components/ui/button"
 import {
@@ -252,24 +253,7 @@ function ApiKeysCard() {
             <p className="text-sm text-destructive">{create.error.message}</p>
           )}
         </form>
-        {created && (
-          <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2">
-            <span className="flex-1 truncate font-mono text-xs">{created}</span>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Copy key"
-              onClick={() => navigator.clipboard.writeText(created)}
-            >
-              <Copy />
-            </Button>
-          </div>
-        )}
-        {created && (
-          <p className="text-xs text-muted-foreground">
-            Copy it now. You won't see this key again.
-          </p>
-        )}
+        {created && <SecretOnce value={created} />}
         {keys.data?.length ? (
           <div className="flex flex-col divide-y divide-border rounded-lg border border-border">
             {keys.data.map((k) => (

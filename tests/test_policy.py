@@ -27,7 +27,7 @@ def test_denied_permission_blocks_its_tools_only(client, alice, sandbox):
     ]:
         res = client.post(path, json=body, headers=alice)
         assert res.status_code == 403, path
-        assert res.json()["detail"] == "shell.exec is denied for this sandbox"
+        assert res.json()["error"]["message"] == "shell.exec is denied for this sandbox"
     assert client.post(f"/sandboxes/{sid}/tools/screenshot", headers=alice).status_code == 200
 
     client.put(

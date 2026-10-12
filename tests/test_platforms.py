@@ -33,7 +33,7 @@ def test_unsupported_kind_says_which_host_to_add(client, alice, monkeypatch):
     monkeypatch.setattr("server.macos.local_zoovm", lambda: False)
     res = client.post("/sandboxes", json={"name": "mac", "kind": "macos"}, headers=alice)
     assert res.status_code == 400
-    assert "add a Mac" in res.json()["detail"]
+    assert "add a Mac" in res.json()["error"]["message"]
 
 
 def test_linux_sandboxes_can_run_on_a_mac_with_docker(client, alice):

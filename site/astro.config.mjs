@@ -12,6 +12,7 @@ const sidebar = [
     {
         label: "Get started",
         items: [
+            "docs/get-started/quickstart",
             "docs/get-started/install",
             "docs/get-started/first-sandbox",
             "docs/get-started/mcp",
@@ -32,6 +33,7 @@ const sidebar = [
             "docs/guides/upgrading",
             "docs/guides/kubernetes",
             "docs/guides/building-on-zoo",
+            "docs/guides/agent-frameworks",
         ],
     },
     {
@@ -41,9 +43,11 @@ const sidebar = [
     {
         label: "Reference",
         items: [
+            "docs/reference/conventions",
             "docs/reference/api",
             "docs/reference/tools",
             "docs/reference/sdk",
+            "docs/reference/cli",
             "docs/reference/configuration",
             "docs/reference/errors",
         ],

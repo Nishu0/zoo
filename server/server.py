@@ -10,7 +10,21 @@ from db.connection import db_manager
 from integrations import discord, relay, slack, whatsapp
 from logger.logger import logger
 from mcp_tools.server import build_mcp
-from server import backups, events, exports, gateway, health, metering, nodes, objects, webhooks, workers
+from server import (
+    backups,
+    errors,
+    events,
+    exports,
+    gateway,
+    health,
+    idempotency,
+    metering,
+    nodes,
+    objects,
+    versioning,
+    webhooks,
+    workers,
+)
 from server.admin_api import AdminApi
 from server.agent_api import AgentApi
 from server.audit_api import AuditApi
@@ -100,7 +114,13 @@ class Server:
             allow_credentials=False,
             allow_methods=["*"],
             allow_headers=["*"],
+            expose_headers=["X-Request-Id", "Idempotent-Replayed", "Deprecation", "Link"],
         )
+
+        errors.register(self.app)
+        # outermost last: /v1 is stripped before idempotency keys see the path
+        idempotency.register(self.app)
+        versioning.register(self.app)
 
         db_manager.init_db()
         objects.require()

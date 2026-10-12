@@ -14,2110 +14,6 @@ authenticated with an API key unless it is under `/auth`:
 
 The Python SDK wraps these endpoints; see [SDK](/docs/reference/sdk/).
 
-## Sandboxes
-
-| Endpoint | Purpose |
-| --- | --- |
-| [`GET /sandboxes`](#get-sandboxes) | List Sandboxes |
-| [`POST /sandboxes`](#post-sandboxes) | Create Sandbox |
-| [`GET /sandboxes/{sandbox_id}`](#get-sandboxessandbox_id) | Get Sandbox |
-| [`PATCH /sandboxes/{sandbox_id}`](#patch-sandboxessandbox_id) | Update Sandbox |
-| [`DELETE /sandboxes/{sandbox_id}`](#delete-sandboxessandbox_id) | Delete Sandbox |
-| [`GET /sandboxes/{sandbox_id}/agent`](#get-sandboxessandbox_idagent) | State |
-| [`POST /sandboxes/{sandbox_id}/agent`](#post-sandboxessandbox_idagent) | Chat |
-| [`DELETE /sandboxes/{sandbox_id}/agent`](#delete-sandboxessandbox_idagent) | Reset |
-| [`GET /sandboxes/{sandbox_id}/agent/channels`](#get-sandboxessandbox_idagentchannels) | List Channels |
-| [`POST /sandboxes/{sandbox_id}/agent/channels`](#post-sandboxessandbox_idagentchannels) | Add Channel |
-| [`PATCH /sandboxes/{sandbox_id}/agent/channels/{channel_id}`](#patch-sandboxessandbox_idagentchannelschannel_id) | Update Channel |
-| [`DELETE /sandboxes/{sandbox_id}/agent/channels/{channel_id}`](#delete-sandboxessandbox_idagentchannelschannel_id) | Remove Channel |
-| [`GET /sandboxes/{sandbox_id}/agent/messages/{message_id}/screenshot`](#get-sandboxessandbox_idagentmessagesmessage_idscreenshot) | Screenshot |
-| [`POST /sandboxes/{sandbox_id}/agent/release`](#post-sandboxessandbox_idagentrelease) | Release |
-| [`POST /sandboxes/{sandbox_id}/agent/stop`](#post-sandboxessandbox_idagentstop) | Stop |
-| [`GET /sandboxes/{sandbox_id}/agent/stream`](#get-sandboxessandbox_idagentstream) | Attach |
-| [`POST /sandboxes/{sandbox_id}/agent/takeover`](#post-sandboxessandbox_idagenttakeover) | Takeover |
-| [`GET /sandboxes/{sandbox_id}/apps`](#get-sandboxessandbox_idapps) | List Apps |
-| [`PUT /sandboxes/{sandbox_id}/apps/{binary}`](#put-sandboxessandbox_idappsbinary) | Set App |
-| [`GET /sandboxes/{sandbox_id}/backup`](#get-sandboxessandbox_idbackup) | Backup |
-| [`POST /sandboxes/{sandbox_id}/exec`](#post-sandboxessandbox_idexec) | Execute |
-| [`GET /sandboxes/{sandbox_id}/executions`](#get-sandboxessandbox_idexecutions) | List Executions |
-| [`GET /sandboxes/{sandbox_id}/guest`](#get-sandboxessandbox_idguest) | Guest Status |
-| [`PUT /sandboxes/{sandbox_id}/lifecycle`](#put-sandboxessandbox_idlifecycle) | Set Lifecycle |
-| [`POST /sandboxes/{sandbox_id}/move`](#post-sandboxessandbox_idmove) | Move Sandbox |
-| [`GET /sandboxes/{sandbox_id}/network`](#get-sandboxessandbox_idnetwork) | Get Network |
-| [`PUT /sandboxes/{sandbox_id}/network`](#put-sandboxessandbox_idnetwork) | Set Network |
-| [`POST /sandboxes/{sandbox_id}/network/rules`](#post-sandboxessandbox_idnetworkrules) | Add Rule |
-| [`DELETE /sandboxes/{sandbox_id}/network/rules/{rule_id}`](#delete-sandboxessandbox_idnetworkrulesrule_id) | Delete Rule |
-| [`GET /sandboxes/{sandbox_id}/permissions`](#get-sandboxessandbox_idpermissions) | List Permissions |
-| [`PUT /sandboxes/{sandbox_id}/permissions`](#put-sandboxessandbox_idpermissions) | Set Permission |
-| [`POST /sandboxes/{sandbox_id}/profiles`](#post-sandboxessandbox_idprofiles) | Capture Profile |
-| [`POST /sandboxes/{sandbox_id}/profiles/{profile_id}`](#post-sandboxessandbox_idprofilesprofile_id) | Apply Profile |
-| [`POST /sandboxes/{sandbox_id}/restore`](#post-sandboxessandbox_idrestore) | Restore |
-| [`POST /sandboxes/{sandbox_id}/screenshot`](#post-sandboxessandbox_idscreenshot) | Screenshot |
-| [`GET /sandboxes/{sandbox_id}/secrets`](#get-sandboxessandbox_idsecrets) | List Secrets |
-| [`PUT /sandboxes/{sandbox_id}/secrets`](#put-sandboxessandbox_idsecrets) | Set Secret |
-| [`DELETE /sandboxes/{sandbox_id}/secrets/{secret_id}`](#delete-sandboxessandbox_idsecretssecret_id) | Delete Secret |
-| [`GET /sandboxes/{sandbox_id}/snapshots`](#get-sandboxessandbox_idsnapshots) | List Snapshots |
-| [`POST /sandboxes/{sandbox_id}/snapshots`](#post-sandboxessandbox_idsnapshots) | Create Snapshot |
-| [`DELETE /sandboxes/{sandbox_id}/snapshots/{snapshot_id}`](#delete-sandboxessandbox_idsnapshotssnapshot_id) | Delete Snapshot |
-| [`POST /sandboxes/{sandbox_id}/snapshots/{snapshot_id}/restore`](#post-sandboxessandbox_idsnapshotssnapshot_idrestore) | Restore From Snapshot |
-| [`POST /sandboxes/{sandbox_id}/start`](#post-sandboxessandbox_idstart) | Start Sandbox |
-| [`POST /sandboxes/{sandbox_id}/stop`](#post-sandboxessandbox_idstop) | Stop Sandbox |
-| [`POST /sandboxes/{sandbox_id}/terminal-ticket`](#post-sandboxessandbox_idterminal-ticket) | Terminal Ticket |
-| [`POST /sandboxes/{sandbox_id}/tools/{name}`](#post-sandboxessandbox_idtoolsname) | Call Tool |
-| [`POST /sandboxes/{sandbox_id}/upgrade`](#post-sandboxessandbox_idupgrade) | Upgrade Sandbox |
-| [`GET /sandboxes/{sandbox_id}/vault-secrets`](#get-sandboxessandbox_idvault-secrets) | Attached Secrets |
-| [`PUT /sandboxes/{sandbox_id}/vault-secrets/{secret_id}`](#put-sandboxessandbox_idvault-secretssecret_id) | Attach Secret |
-| [`DELETE /sandboxes/{sandbox_id}/vault-secrets/{secret_id}`](#delete-sandboxessandbox_idvault-secretssecret_id) | Detach Secret |
-| [`GET /sandboxes/{sandbox_id}/viewer-links`](#get-sandboxessandbox_idviewer-links) | List Links |
-| [`POST /sandboxes/{sandbox_id}/viewer-links`](#post-sandboxessandbox_idviewer-links) | Create Link |
-| [`DELETE /sandboxes/{sandbox_id}/viewer-links/{link_id}`](#delete-sandboxessandbox_idviewer-linkslink_id) | Revoke Link |
-| [`POST /sandboxes/{sandbox_id}/vnc-ticket`](#post-sandboxessandbox_idvnc-ticket) | Vnc Ticket |
-
-### `GET /sandboxes`
-
-List Sandboxes
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `label` | query | `string[]` | no | key=value; repeat to match all of them |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes`
-
-Create Sandbox
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `name` | `string or null` | no |  |
-| `kind` | `string` | no |  |
-| `server_id` | `string or null` | no |  |
-| `profile_ids` | `string[]` | no |  |
-| `secret_ids` | `string[]` | no |  |
-| `admin` | `boolean` | no |  |
-| `queue` | `boolean` | no |  |
-| `cpus` | `number` | no |  |
-| `memory_mb` | `integer` | no |  |
-| `disk_gb` | `integer or null` | no |  |
-| `idle_timeout_minutes` | `integer or null` | no |  |
-| `max_lifetime_minutes` | `integer or null` | no |  |
-| `labels` | `object` | no |  |
-
-| Response | |
-| --- | --- |
-| `201` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /sandboxes/{sandbox_id}`
-
-Get Sandbox
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `PATCH /sandboxes/{sandbox_id}`
-
-Update Sandbox
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `name` | `string or null` | no |  |
-| `labels` | `object or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `DELETE /sandboxes/{sandbox_id}`
-
-Delete Sandbox
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /sandboxes/{sandbox_id}/agent`
-
-State
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes/{sandbox_id}/agent`
-
-Chat
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `message` | `string` | yes |  |
-| `model` | `string or null` | no |  |
-| `provider` | `string or null` | no |  |
-| `api_base` | `string or null` | no |  |
-| `stream` | `boolean` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `DELETE /sandboxes/{sandbox_id}/agent`
-
-Reset
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `204` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /sandboxes/{sandbox_id}/agent/channels`
-
-List Channels
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes/{sandbox_id}/agent/channels`
-
-Add Channel
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `platform` | `string` | yes |  |
-| `external_id` | `string` | yes |  |
-| `allowed_users` | `string[]` | no |  |
-
-| Response | |
-| --- | --- |
-| `201` | Successful Response |
-| `422` | Validation Error |
-
-
-### `PATCH /sandboxes/{sandbox_id}/agent/channels/{channel_id}`
-
-Update Channel
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `channel_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `allowed_users` | `string[]` | yes |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `DELETE /sandboxes/{sandbox_id}/agent/channels/{channel_id}`
-
-Remove Channel
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `channel_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `204` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /sandboxes/{sandbox_id}/agent/messages/{message_id}/screenshot`
-
-Screenshot
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `message_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes/{sandbox_id}/agent/release`
-
-Hands the screen back to the agent, which carries on from the screen as the person left it.
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes/{sandbox_id}/agent/stop`
-
-Stop
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `204` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /sandboxes/{sandbox_id}/agent/stream`
-
-Attach
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes/{sandbox_id}/agent/takeover`
-
-Pauses the running agent before its next action, so a person can use the screen.
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /sandboxes/{sandbox_id}/apps`
-
-List Apps
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `PUT /sandboxes/{sandbox_id}/apps/{binary}`
-
-Set App
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `binary` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `effect` | `string` | yes |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /sandboxes/{sandbox_id}/backup`
-
-Backup
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes/{sandbox_id}/exec`
-
-Execute
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `command` | `string` | yes |  |
-| `timeout` | `integer` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /sandboxes/{sandbox_id}/executions`
-
-List Executions
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /sandboxes/{sandbox_id}/guest`
-
-Guest Status
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `PUT /sandboxes/{sandbox_id}/lifecycle`
-
-Set Lifecycle
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `idle_timeout_minutes` | `integer or null` | no |  |
-| `max_lifetime_minutes` | `integer or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes/{sandbox_id}/move`
-
-Move Sandbox
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `server_id` | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /sandboxes/{sandbox_id}/network`
-
-Get Network
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `PUT /sandboxes/{sandbox_id}/network`
-
-Set Network
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `default_action` | `string` | yes |  |
-| `allow_dns` | `boolean` | yes |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes/{sandbox_id}/network/rules`
-
-Add Rule
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `rule_type` | `string` | yes |  |
-| `value` | `string` | yes |  |
-| `effect` | `string` | yes |  |
-
-| Response | |
-| --- | --- |
-| `201` | Successful Response |
-| `422` | Validation Error |
-
-
-### `DELETE /sandboxes/{sandbox_id}/network/rules/{rule_id}`
-
-Delete Rule
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `rule_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /sandboxes/{sandbox_id}/permissions`
-
-List Permissions
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `PUT /sandboxes/{sandbox_id}/permissions`
-
-Set Permission
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `permission` | `string` | yes |  |
-| `action` | `string` | yes |  |
-| `effect` | `string` | yes |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes/{sandbox_id}/profiles`
-
-Capture Profile
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `name` | `string` | yes |  |
-| `app` | `string` | yes |  |
-| `profile_id` | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `201` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes/{sandbox_id}/profiles/{profile_id}`
-
-Apply Profile
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `profile_id` | path | `string` | yes |  |
-| `version` | query | `integer or null` | no |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes/{sandbox_id}/restore`
-
-Restore
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes/{sandbox_id}/screenshot`
-
-Screenshot
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `format` | query | `string` | no |  |
-| `scale` | query | `number` | no |  |
-| `quality` | query | `integer` | no |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /sandboxes/{sandbox_id}/secrets`
-
-List Secrets
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `PUT /sandboxes/{sandbox_id}/secrets`
-
-Set Secret
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `name` | `string` | yes |  |
-| `value` | `string` | yes |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `DELETE /sandboxes/{sandbox_id}/secrets/{secret_id}`
-
-Delete Secret
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `secret_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /sandboxes/{sandbox_id}/snapshots`
-
-List Snapshots
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes/{sandbox_id}/snapshots`
-
-Snapshots the home disk on the sandbox's host. Linux sandboxes can be running; macOS and Windows VMs
-must be stopped, since their whole disk is copied.
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `202` | Successful Response |
-| `422` | Validation Error |
-
-
-### `DELETE /sandboxes/{sandbox_id}/snapshots/{snapshot_id}`
-
-Delete Snapshot
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `snapshot_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `204` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes/{sandbox_id}/snapshots/{snapshot_id}/restore`
-
-Restore From Snapshot
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `snapshot_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes/{sandbox_id}/start`
-
-Start Sandbox
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes/{sandbox_id}/stop`
-
-Stop Sandbox
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes/{sandbox_id}/terminal-ticket`
-
-Terminal Ticket
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes/{sandbox_id}/tools/{name}`
-
-Call Tool
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `name` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes/{sandbox_id}/upgrade`
-
-Restarts the sandbox on the current default image. Its home volume is kept.
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /sandboxes/{sandbox_id}/vault-secrets`
-
-Attached Secrets
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `PUT /sandboxes/{sandbox_id}/vault-secrets/{secret_id}`
-
-Attach Secret
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `secret_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `DELETE /sandboxes/{sandbox_id}/vault-secrets/{secret_id}`
-
-Detach Secret
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `secret_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /sandboxes/{sandbox_id}/viewer-links`
-
-List Links
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes/{sandbox_id}/viewer-links`
-
-Create Link
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `mode` | `string` | no |  |
-| `expires_in_minutes` | `integer` | no |  |
-| `end_user` | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `201` | Successful Response |
-| `422` | Validation Error |
-
-
-### `DELETE /sandboxes/{sandbox_id}/viewer-links/{link_id}`
-
-Revoke Link
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `link_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `204` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /sandboxes/{sandbox_id}/vnc-ticket`
-
-Vnc Ticket
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `sandbox_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-## Servers
-
-| Endpoint | Purpose |
-| --- | --- |
-| [`GET /servers`](#get-servers) | List Servers |
-| [`POST /servers`](#post-servers) | Add Server |
-| [`GET /servers/install-command`](#get-serversinstall-command) | Server Install Command |
-| [`DELETE /servers/{server_id}`](#delete-serversserver_id) | Delete Server |
-| [`GET /servers/{server_id}/base`](#get-serversserver_idbase) | Base Status |
-| [`POST /servers/{server_id}/base/install`](#post-serversserver_idbaseinstall) | Base Install |
-| [`POST /servers/{server_id}/base/setup`](#post-serversserver_idbasesetup) | Base Setup |
-| [`POST /servers/{server_id}/base/start`](#post-serversserver_idbasestart) | Base Start |
-| [`POST /servers/{server_id}/base/stop`](#post-serversserver_idbasestop) | Base Stop |
-| [`POST /servers/{server_id}/base/vnc-ticket`](#post-serversserver_idbasevnc-ticket) | Base Vnc Ticket |
-| [`POST /servers/{server_id}/migrate`](#post-serversserver_idmigrate) | Migrate Server |
-| [`GET /servers/{server_id}/status`](#get-serversserver_idstatus) | Server Status |
-
-### `GET /servers`
-
-List Servers
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /servers`
-
-Add Server
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `name` | `string` | yes |  |
-| `docker_url` | `string` | yes |  |
-| `bind_address` | `string` | yes |  |
-| `platform` | `string` | no |  |
-| `host_key` | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `201` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /servers/install-command`
-
-Server Install Command
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `platform` | query | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `DELETE /servers/{server_id}`
-
-Delete Server
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `server_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `204` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /servers/{server_id}/base`
-
-Base Status
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `server_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /servers/{server_id}/base/install`
-
-Base Install
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `server_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /servers/{server_id}/base/setup`
-
-Base Setup
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `server_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `204` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /servers/{server_id}/base/start`
-
-Base Start
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `server_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /servers/{server_id}/base/stop`
-
-Base Stop
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `server_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /servers/{server_id}/base/vnc-ticket`
-
-Base Vnc Ticket
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `server_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /servers/{server_id}/migrate`
-
-Migrate Server
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `server_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `204` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /servers/{server_id}/status`
-
-Server Status
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `server_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-## Agent
-
-| Endpoint | Purpose |
-| --- | --- |
-| [`GET /agent/exports`](#get-agentexports) | List Exports |
-| [`POST /agent/exports`](#post-agentexports) | Create Export |
-| [`GET /agent/exports/{export_id}`](#get-agentexportsexport_id) | Get Export |
-| [`GET /agent/exports/{export_id}/download`](#get-agentexportsexport_iddownload) | Download |
-| [`GET /agent/integrations`](#get-agentintegrations) | Integrations |
-| [`GET /agent/providers`](#get-agentproviders) | Providers |
-| [`GET /agent/settings`](#get-agentsettings) | Get Settings |
-| [`PUT /agent/settings`](#put-agentsettings) | Put Settings |
-| [`DELETE /agent/settings`](#delete-agentsettings) | Reset Settings |
-
-### `GET /agent/exports`
-
-List Exports
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /agent/exports`
-
-Create Export
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `run_id` | `string or null` | no |  |
-| `sandbox_id` | `string or null` | no |  |
-| `labels` | `object or null` | no |  |
-| `from` | `string or null` | no |  |
-| `to` | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `202` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /agent/exports/{export_id}`
-
-Get Export
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `export_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /agent/exports/{export_id}/download`
-
-Download
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `export_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /agent/integrations`
-
-Integrations
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /agent/providers`
-
-What a run can be started with, and whether this workspace has a key for each.
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /agent/settings`
-
-Get Settings
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `PUT /agent/settings`
-
-Put Settings
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `provider` | `string` | yes |  |
-| `model` | `string` | yes |  |
-| `api_key` | `string or null` | no |  |
-| `api_key_secret_id` | `string or null` | no |  |
-| `api_base` | `string or null` | no |  |
-| `max_steps` | `integer or null` | no |  |
-| `max_seconds` | `integer or null` | no |  |
-| `max_tokens` | `integer or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `DELETE /agent/settings`
-
-Reset Settings
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-## App profiles
-
-| Endpoint | Purpose |
-| --- | --- |
-| [`GET /profiles`](#get-profiles) | List Profiles |
-| [`PATCH /profiles/{profile_id}`](#patch-profilesprofile_id) | Rename Profile |
-| [`DELETE /profiles/{profile_id}`](#delete-profilesprofile_id) | Delete Profile |
-| [`GET /profiles/{profile_id}/versions`](#get-profilesprofile_idversions) | List Profile Versions |
-| [`DELETE /profiles/{profile_id}/versions/{version}`](#delete-profilesprofile_idversionsversion) | Delete Profile Version |
-
-### `GET /profiles`
-
-List Profiles
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `PATCH /profiles/{profile_id}`
-
-Rename Profile
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `profile_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `name` | `string` | yes |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `DELETE /profiles/{profile_id}`
-
-Delete Profile
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `profile_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `204` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /profiles/{profile_id}/versions`
-
-List Profile Versions
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `profile_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `DELETE /profiles/{profile_id}/versions/{version}`
-
-Delete Profile Version
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `profile_id` | path | `string` | yes |  |
-| `version` | path | `integer` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-## Vault and secrets
-
-| Endpoint | Purpose |
-| --- | --- |
-| [`GET /vault/activity`](#get-vaultactivity) | Activity |
-| [`GET /vault/reminders`](#get-vaultreminders) | Reminders |
-| [`GET /vault/secrets`](#get-vaultsecrets) | List Secrets |
-| [`POST /vault/secrets`](#post-vaultsecrets) | Create Secret |
-| [`PATCH /vault/secrets/{secret_id}`](#patch-vaultsecretssecret_id) | Update Secret |
-| [`DELETE /vault/secrets/{secret_id}`](#delete-vaultsecretssecret_id) | Delete Secret |
-
-### `GET /vault/activity`
-
-Activity
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /vault/reminders`
-
-Reminders
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /vault/secrets`
-
-List Secrets
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /vault/secrets`
-
-Create Secret
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `name` | `string` | yes |  |
-| `value` | `string` | yes |  |
-| `description` | `string or null` | no |  |
-| `expires_at` | `string or null` | no |  |
-| `rotate_every_days` | `integer or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `201` | Successful Response |
-| `422` | Validation Error |
-
-
-### `PATCH /vault/secrets/{secret_id}`
-
-Update Secret
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `secret_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `value` | `string or null` | no |  |
-| `description` | `string or null` | no |  |
-| `expires_at` | `string or null` | no |  |
-| `rotate_every_days` | `integer or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `DELETE /vault/secrets/{secret_id}`
-
-Delete Secret
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `secret_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-## API keys
-
-| Endpoint | Purpose |
-| --- | --- |
-| [`GET /api-keys`](#get-api-keys) | List Keys |
-| [`POST /api-keys`](#post-api-keys) | Create Key |
-| [`DELETE /api-keys/{key_id}`](#delete-api-keyskey_id) | Revoke Key |
-
-### `GET /api-keys`
-
-List Keys
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /api-keys`
-
-Create Key
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `name` | `string` | yes |  |
-| `sandbox_id` | `string or null` | no |  |
-| `label_selector` | `object or null` | no |  |
-| `read_only` | `boolean` | no |  |
-| `expires_at` | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `201` | Successful Response |
-| `422` | Validation Error |
-
-
-### `DELETE /api-keys/{key_id}`
-
-Revoke Key
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `key_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-## Domains
-
-| Endpoint | Purpose |
-| --- | --- |
-| [`GET /domains/check`](#get-domainscheck) | Check Domain |
-
-### `GET /domains/check`
-
-Caddy's on-demand TLS `ask`: a certificate is only issued for a hostname this answers 200 for, so
-nobody can make the server request certificates for names it doesn't serve.
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `domain` | query | `string` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-## Admin
-
-| Endpoint | Purpose |
-| --- | --- |
-| [`GET /admin/backups`](#get-adminbackups) | List Backups |
-| [`POST /admin/backups`](#post-adminbackups) | Create Backup |
-| [`GET /admin/domains`](#get-admindomains) | List Domains |
-| [`POST /admin/domains`](#post-admindomains) | Add Domain |
-| [`DELETE /admin/domains/{domain_id}`](#delete-admindomainsdomain_id) | Delete Domain |
-| [`POST /admin/domains/{domain_id}/verify`](#post-admindomainsdomain_idverify) | Verify Domain |
-| [`GET /admin/sandboxes`](#get-adminsandboxes) | List Sandboxes |
-| [`GET /admin/users`](#get-adminusers) | List Users |
-
-### `GET /admin/backups`
-
-List Backups
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /admin/backups`
-
-Takes a backup now (server/backups.py): the database dump is done when this returns; the sandbox
-snapshots are queued.
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `201` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /admin/domains`
-
-List Domains
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /admin/domains`
-
-Add Domain
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `hostname` | `string` | yes |  |
-
-| Response | |
-| --- | --- |
-| `201` | Successful Response |
-| `422` | Validation Error |
-
-
-### `DELETE /admin/domains/{domain_id}`
-
-Delete Domain
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `domain_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `204` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /admin/domains/{domain_id}/verify`
-
-Looks the domain up again, for after its DNS record was changed.
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `domain_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /admin/sandboxes`
-
-List Sandboxes
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /admin/users`
-
-List Users
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-## Auth
-
-| Endpoint | Purpose |
-| --- | --- |
-| [`POST /auth/login`](#post-authlogin) | Login |
-| [`GET /auth/me`](#get-authme) | Me |
-| [`POST /auth/signup`](#post-authsignup) | Register |
-
-### `POST /auth/login`
-
-Login
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `email` | `string` | yes |  |
-| `password` | `string` | yes |  |
-| `name` | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /auth/me`
-
-Me
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /auth/signup`
-
-Register
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `email` | `string` | yes |  |
-| `password` | `string` | yes |  |
-| `name` | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `201` | Successful Response |
-| `422` | Validation Error |
-
-
-## Nodes
-
-| Endpoint | Purpose |
-| --- | --- |
-| [`GET /nodes/download/{os_name}/{arch}`](#get-nodesdownloados_namearch) | Download |
-| [`POST /nodes/join`](#post-nodesjoin) | Join |
-| [`POST /nodes/tokens`](#post-nodestokens) | Create Token |
-
-### `GET /nodes/download/{os_name}/{arch}`
-
-This API's zoo-node build, for installers. The binary is the same for everyone, so it's public.
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `os_name` | path | `string` | yes |  |
-| `arch` | path | `string` | yes |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /nodes/join`
-
-Called by `zoo-node join`, with no other credentials than the one-time token.
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `token` | `string` | yes |  |
-| `csr` | `string` | yes |  |
-| `hostname` | `string` | no |  |
-| `os` | `string` | yes |  |
-| `arch` | `string` | yes |  |
-| `ssh_user` | `string or null` | no |  |
-| `ssh_host_key` | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /nodes/tokens`
-
-Create Token
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `platform` | query | `string` | no |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `name` | `string` | yes |  |
-
-| Response | |
-| --- | --- |
-| `201` | Successful Response |
-| `422` | Validation Error |
-
-
-## Tools
-
-| Endpoint | Purpose |
-| --- | --- |
-| [`GET /tools`](#get-tools) | List Tools |
-
-### `GET /tools`
-
-List Tools
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `kind` | query | `string or null` | no |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-## Monitoring
-
-| Endpoint | Purpose |
-| --- | --- |
-| [`GET /monitoring`](#get-monitoring) | Monitoring |
-
-### `GET /monitoring`
-
-Monitoring
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-## Audit-logs
-
-| Endpoint | Purpose |
-| --- | --- |
-| [`GET /audit-logs`](#get-audit-logs) | List Audit Logs |
-| [`GET /audit-logs/export`](#get-audit-logsexport) | Export Audit Logs |
-
-### `GET /audit-logs`
-
-List Audit Logs
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `cursor` | query | `string or null` | no |  |
-| `actor` | query | `string or null` | no |  |
-| `action` | query | `string or null` | no |  |
-| `resource_type` | query | `string or null` | no |  |
-| `sandbox_id` | query | `string or null` | no |  |
-| `since` | query | `string or null` | no |  |
-| `until` | query | `string or null` | no |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /audit-logs/export`
-
-Export Audit Logs
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `actor` | query | `string or null` | no |  |
-| `action` | query | `string or null` | no |  |
-| `resource_type` | query | `string or null` | no |  |
-| `sandbox_id` | query | `string or null` | no |  |
-| `since` | query | `string or null` | no |  |
-| `until` | query | `string or null` | no |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-## Benchmarks
-
-| Endpoint | Purpose |
-| --- | --- |
-| [`GET /benchmarks`](#get-benchmarks) | List Benchmarks |
-| [`POST /benchmarks`](#post-benchmarks) | Create Benchmark |
-| [`GET /benchmarks/{benchmark_id}`](#get-benchmarksbenchmark_id) | Get Benchmark |
-| [`POST /benchmarks/{benchmark_id}/cancel`](#post-benchmarksbenchmark_idcancel) | Cancel Benchmark |
-| [`GET /benchmarks/{benchmark_id}/export`](#get-benchmarksbenchmark_idexport) | Export Benchmark |
-
-### `GET /benchmarks`
-
-List Benchmarks
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /benchmarks`
-
-Create Benchmark
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-**Request body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `suite` | `string or object` | yes |  |
-| `models` | `ModelChoice[]` | yes |  |
-| `parallel` | `integer` | no |  |
-
-| Response | |
-| --- | --- |
-| `202` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /benchmarks/{benchmark_id}`
-
-Get Benchmark
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `benchmark_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
-### `POST /benchmarks/{benchmark_id}/cancel`
-
-Cancel Benchmark
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `benchmark_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `204` | Successful Response |
-| `422` | Validation Error |
-
-
-### `GET /benchmarks/{benchmark_id}/export`
-
-Export Benchmark
-
-| Parameter | In | Type | Required | Description |
-| --- | --- | --- | --- | --- |
-| `benchmark_id` | path | `string` | yes |  |
-| `x-zoo-workspace` | header | `string or null` | no |  |
-
-| Response | |
-| --- | --- |
-| `200` | Successful Response |
-| `422` | Validation Error |
-
-
 ## Embed
 
 | Endpoint | Purpose |
@@ -2183,14 +79,705 @@ Embed Takeover
 | `422` | Validation Error |
 
 
-## Events
+## Other
 
 | Endpoint | Purpose |
 | --- | --- |
-| [`GET /events`](#get-events) | List Events |
-| [`GET /events/stream`](#get-eventsstream) | Stream |
+| [`GET /`](#get-) | Home |
 
-### `GET /events`
+### `GET /`
+
+Home
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+
+
+## V1
+
+| Endpoint | Purpose |
+| --- | --- |
+| [`GET /v1/admin/backups`](#get-v1adminbackups) | List Backups |
+| [`POST /v1/admin/backups`](#post-v1adminbackups) | Create Backup |
+| [`GET /v1/admin/domains`](#get-v1admindomains) | List Domains |
+| [`POST /v1/admin/domains`](#post-v1admindomains) | Add Domain |
+| [`DELETE /v1/admin/domains/{domain_id}`](#delete-v1admindomainsdomain_id) | Delete Domain |
+| [`POST /v1/admin/domains/{domain_id}/verify`](#post-v1admindomainsdomain_idverify) | Verify Domain |
+| [`GET /v1/admin/sandboxes`](#get-v1adminsandboxes) | List Sandboxes |
+| [`GET /v1/admin/users`](#get-v1adminusers) | List Users |
+| [`GET /v1/agent/exports`](#get-v1agentexports) | List Exports |
+| [`POST /v1/agent/exports`](#post-v1agentexports) | Create Export |
+| [`GET /v1/agent/exports/{export_id}`](#get-v1agentexportsexport_id) | Get Export |
+| [`GET /v1/agent/exports/{export_id}/download`](#get-v1agentexportsexport_iddownload) | Download |
+| [`GET /v1/agent/integrations`](#get-v1agentintegrations) | Integrations |
+| [`GET /v1/agent/providers`](#get-v1agentproviders) | Providers |
+| [`GET /v1/agent/settings`](#get-v1agentsettings) | Get Settings |
+| [`PUT /v1/agent/settings`](#put-v1agentsettings) | Put Settings |
+| [`DELETE /v1/agent/settings`](#delete-v1agentsettings) | Reset Settings |
+| [`GET /v1/api-keys`](#get-v1api-keys) | List Keys |
+| [`POST /v1/api-keys`](#post-v1api-keys) | Create Key |
+| [`DELETE /v1/api-keys/{key_id}`](#delete-v1api-keyskey_id) | Revoke Key |
+| [`GET /v1/audit-logs`](#get-v1audit-logs) | List Audit Logs |
+| [`GET /v1/audit-logs/export`](#get-v1audit-logsexport) | Export Audit Logs |
+| [`POST /v1/auth/login`](#post-v1authlogin) | Login |
+| [`GET /v1/auth/me`](#get-v1authme) | Me |
+| [`PUT /v1/auth/me/onboarded`](#put-v1authmeonboarded) | Onboarded |
+| [`POST /v1/auth/signup`](#post-v1authsignup) | Register |
+| [`GET /v1/benchmarks`](#get-v1benchmarks) | List Benchmarks |
+| [`POST /v1/benchmarks`](#post-v1benchmarks) | Create Benchmark |
+| [`GET /v1/benchmarks/{benchmark_id}`](#get-v1benchmarksbenchmark_id) | Get Benchmark |
+| [`POST /v1/benchmarks/{benchmark_id}/cancel`](#post-v1benchmarksbenchmark_idcancel) | Cancel Benchmark |
+| [`GET /v1/benchmarks/{benchmark_id}/export`](#get-v1benchmarksbenchmark_idexport) | Export Benchmark |
+| [`GET /v1/domains/check`](#get-v1domainscheck) | Check Domain |
+| [`GET /v1/events`](#get-v1events) | List Events |
+| [`GET /v1/events/stream`](#get-v1eventsstream) | Stream |
+| [`POST /v1/invitations/{token}/accept`](#post-v1invitationstokenaccept) | Accept |
+| [`GET /v1/kubernetes`](#get-v1kubernetes) | Kubernetes |
+| [`POST /v1/kubernetes/check`](#post-v1kubernetescheck) | Kubernetes Check |
+| [`GET /v1/monitoring`](#get-v1monitoring) | Monitoring |
+| [`GET /v1/nodes/download/{os_name}/{arch}`](#get-v1nodesdownloados_namearch) | Download |
+| [`POST /v1/nodes/join`](#post-v1nodesjoin) | Join |
+| [`POST /v1/nodes/tokens`](#post-v1nodestokens) | Create Token |
+| [`GET /v1/platforms`](#get-v1platforms) | List Platforms |
+| [`GET /v1/pool`](#get-v1pool) | List Pool |
+| [`PUT /v1/pool`](#put-v1pool) | Set Pool |
+| [`GET /v1/profile-apps`](#get-v1profile-apps) | Profile Apps |
+| [`GET /v1/profiles`](#get-v1profiles) | List Profiles |
+| [`PATCH /v1/profiles/{profile_id}`](#patch-v1profilesprofile_id) | Rename Profile |
+| [`DELETE /v1/profiles/{profile_id}`](#delete-v1profilesprofile_id) | Delete Profile |
+| [`GET /v1/profiles/{profile_id}/versions`](#get-v1profilesprofile_idversions) | List Profile Versions |
+| [`DELETE /v1/profiles/{profile_id}/versions/{version}`](#delete-v1profilesprofile_idversionsversion) | Delete Profile Version |
+| [`GET /v1/sandboxes`](#get-v1sandboxes) | List Sandboxes |
+| [`POST /v1/sandboxes`](#post-v1sandboxes) | Create Sandbox |
+| [`GET /v1/sandboxes/{sandbox_id}`](#get-v1sandboxessandbox_id) | Get Sandbox |
+| [`PATCH /v1/sandboxes/{sandbox_id}`](#patch-v1sandboxessandbox_id) | Update Sandbox |
+| [`DELETE /v1/sandboxes/{sandbox_id}`](#delete-v1sandboxessandbox_id) | Delete Sandbox |
+| [`GET /v1/sandboxes/{sandbox_id}/agent`](#get-v1sandboxessandbox_idagent) | State |
+| [`POST /v1/sandboxes/{sandbox_id}/agent`](#post-v1sandboxessandbox_idagent) | Chat |
+| [`DELETE /v1/sandboxes/{sandbox_id}/agent`](#delete-v1sandboxessandbox_idagent) | Reset |
+| [`GET /v1/sandboxes/{sandbox_id}/agent/channels`](#get-v1sandboxessandbox_idagentchannels) | List Channels |
+| [`POST /v1/sandboxes/{sandbox_id}/agent/channels`](#post-v1sandboxessandbox_idagentchannels) | Add Channel |
+| [`PATCH /v1/sandboxes/{sandbox_id}/agent/channels/{channel_id}`](#patch-v1sandboxessandbox_idagentchannelschannel_id) | Update Channel |
+| [`DELETE /v1/sandboxes/{sandbox_id}/agent/channels/{channel_id}`](#delete-v1sandboxessandbox_idagentchannelschannel_id) | Remove Channel |
+| [`GET /v1/sandboxes/{sandbox_id}/agent/messages/{message_id}/screenshot`](#get-v1sandboxessandbox_idagentmessagesmessage_idscreenshot) | Screenshot |
+| [`POST /v1/sandboxes/{sandbox_id}/agent/release`](#post-v1sandboxessandbox_idagentrelease) | Release |
+| [`POST /v1/sandboxes/{sandbox_id}/agent/stop`](#post-v1sandboxessandbox_idagentstop) | Stop |
+| [`GET /v1/sandboxes/{sandbox_id}/agent/stream`](#get-v1sandboxessandbox_idagentstream) | Attach |
+| [`POST /v1/sandboxes/{sandbox_id}/agent/takeover`](#post-v1sandboxessandbox_idagenttakeover) | Takeover |
+| [`GET /v1/sandboxes/{sandbox_id}/apps`](#get-v1sandboxessandbox_idapps) | List Apps |
+| [`PUT /v1/sandboxes/{sandbox_id}/apps/{binary}`](#put-v1sandboxessandbox_idappsbinary) | Set App |
+| [`GET /v1/sandboxes/{sandbox_id}/backup`](#get-v1sandboxessandbox_idbackup) | Backup |
+| [`POST /v1/sandboxes/{sandbox_id}/exec`](#post-v1sandboxessandbox_idexec) | Execute |
+| [`POST /v1/sandboxes/{sandbox_id}/exec/stream`](#post-v1sandboxessandbox_idexecstream) | Execute Streamed |
+| [`GET /v1/sandboxes/{sandbox_id}/executions`](#get-v1sandboxessandbox_idexecutions) | List Executions |
+| [`GET /v1/sandboxes/{sandbox_id}/files/content`](#get-v1sandboxessandbox_idfilescontent) | Download File |
+| [`PUT /v1/sandboxes/{sandbox_id}/files/content`](#put-v1sandboxessandbox_idfilescontent) | Upload File |
+| [`GET /v1/sandboxes/{sandbox_id}/guest`](#get-v1sandboxessandbox_idguest) | Guest Status |
+| [`PUT /v1/sandboxes/{sandbox_id}/lifecycle`](#put-v1sandboxessandbox_idlifecycle) | Set Lifecycle |
+| [`POST /v1/sandboxes/{sandbox_id}/move`](#post-v1sandboxessandbox_idmove) | Move Sandbox |
+| [`GET /v1/sandboxes/{sandbox_id}/network`](#get-v1sandboxessandbox_idnetwork) | Get Network |
+| [`PUT /v1/sandboxes/{sandbox_id}/network`](#put-v1sandboxessandbox_idnetwork) | Set Network |
+| [`POST /v1/sandboxes/{sandbox_id}/network/rules`](#post-v1sandboxessandbox_idnetworkrules) | Add Rule |
+| [`DELETE /v1/sandboxes/{sandbox_id}/network/rules/{rule_id}`](#delete-v1sandboxessandbox_idnetworkrulesrule_id) | Delete Rule |
+| [`GET /v1/sandboxes/{sandbox_id}/permissions`](#get-v1sandboxessandbox_idpermissions) | List Permissions |
+| [`PUT /v1/sandboxes/{sandbox_id}/permissions`](#put-v1sandboxessandbox_idpermissions) | Set Permission |
+| [`POST /v1/sandboxes/{sandbox_id}/profiles`](#post-v1sandboxessandbox_idprofiles) | Capture Profile |
+| [`POST /v1/sandboxes/{sandbox_id}/profiles/{profile_id}`](#post-v1sandboxessandbox_idprofilesprofile_id) | Apply Profile |
+| [`POST /v1/sandboxes/{sandbox_id}/restore`](#post-v1sandboxessandbox_idrestore) | Restore |
+| [`POST /v1/sandboxes/{sandbox_id}/screenshot`](#post-v1sandboxessandbox_idscreenshot) | Screenshot |
+| [`GET /v1/sandboxes/{sandbox_id}/secrets`](#get-v1sandboxessandbox_idsecrets) | List Secrets |
+| [`PUT /v1/sandboxes/{sandbox_id}/secrets`](#put-v1sandboxessandbox_idsecrets) | Set Secret |
+| [`DELETE /v1/sandboxes/{sandbox_id}/secrets/{secret_id}`](#delete-v1sandboxessandbox_idsecretssecret_id) | Delete Secret |
+| [`GET /v1/sandboxes/{sandbox_id}/snapshots`](#get-v1sandboxessandbox_idsnapshots) | List Snapshots |
+| [`POST /v1/sandboxes/{sandbox_id}/snapshots`](#post-v1sandboxessandbox_idsnapshots) | Create Snapshot |
+| [`DELETE /v1/sandboxes/{sandbox_id}/snapshots/{snapshot_id}`](#delete-v1sandboxessandbox_idsnapshotssnapshot_id) | Delete Snapshot |
+| [`POST /v1/sandboxes/{sandbox_id}/snapshots/{snapshot_id}/restore`](#post-v1sandboxessandbox_idsnapshotssnapshot_idrestore) | Restore From Snapshot |
+| [`POST /v1/sandboxes/{sandbox_id}/start`](#post-v1sandboxessandbox_idstart) | Start Sandbox |
+| [`POST /v1/sandboxes/{sandbox_id}/stop`](#post-v1sandboxessandbox_idstop) | Stop Sandbox |
+| [`POST /v1/sandboxes/{sandbox_id}/terminal-ticket`](#post-v1sandboxessandbox_idterminal-ticket) | Terminal Ticket |
+| [`POST /v1/sandboxes/{sandbox_id}/tools/{name}`](#post-v1sandboxessandbox_idtoolsname) | Call Tool |
+| [`POST /v1/sandboxes/{sandbox_id}/upgrade`](#post-v1sandboxessandbox_idupgrade) | Upgrade Sandbox |
+| [`GET /v1/sandboxes/{sandbox_id}/vault-secrets`](#get-v1sandboxessandbox_idvault-secrets) | Attached Secrets |
+| [`PUT /v1/sandboxes/{sandbox_id}/vault-secrets/{secret_id}`](#put-v1sandboxessandbox_idvault-secretssecret_id) | Attach Secret |
+| [`DELETE /v1/sandboxes/{sandbox_id}/vault-secrets/{secret_id}`](#delete-v1sandboxessandbox_idvault-secretssecret_id) | Detach Secret |
+| [`GET /v1/sandboxes/{sandbox_id}/viewer-links`](#get-v1sandboxessandbox_idviewer-links) | List Links |
+| [`POST /v1/sandboxes/{sandbox_id}/viewer-links`](#post-v1sandboxessandbox_idviewer-links) | Create Link |
+| [`DELETE /v1/sandboxes/{sandbox_id}/viewer-links/{link_id}`](#delete-v1sandboxessandbox_idviewer-linkslink_id) | Revoke Link |
+| [`POST /v1/sandboxes/{sandbox_id}/vnc-ticket`](#post-v1sandboxessandbox_idvnc-ticket) | Vnc Ticket |
+| [`GET /v1/servers`](#get-v1servers) | List Servers |
+| [`POST /v1/servers`](#post-v1servers) | Add Server |
+| [`GET /v1/servers/install-command`](#get-v1serversinstall-command) | Server Install Command |
+| [`DELETE /v1/servers/{server_id}`](#delete-v1serversserver_id) | Delete Server |
+| [`GET /v1/servers/{server_id}/base`](#get-v1serversserver_idbase) | Base Status |
+| [`POST /v1/servers/{server_id}/base/install`](#post-v1serversserver_idbaseinstall) | Base Install |
+| [`POST /v1/servers/{server_id}/base/setup`](#post-v1serversserver_idbasesetup) | Base Setup |
+| [`POST /v1/servers/{server_id}/base/start`](#post-v1serversserver_idbasestart) | Base Start |
+| [`POST /v1/servers/{server_id}/base/stop`](#post-v1serversserver_idbasestop) | Base Stop |
+| [`POST /v1/servers/{server_id}/base/vnc-ticket`](#post-v1serversserver_idbasevnc-ticket) | Base Vnc Ticket |
+| [`POST /v1/servers/{server_id}/migrate`](#post-v1serversserver_idmigrate) | Migrate Server |
+| [`GET /v1/servers/{server_id}/status`](#get-v1serversserver_idstatus) | Server Status |
+| [`GET /v1/tools`](#get-v1tools) | List Tools |
+| [`GET /v1/usage`](#get-v1usage) | Usage |
+| [`GET /v1/usage/export`](#get-v1usageexport) | Export |
+| [`GET /v1/vault/activity`](#get-v1vaultactivity) | Activity |
+| [`GET /v1/vault/reminders`](#get-v1vaultreminders) | Reminders |
+| [`GET /v1/vault/secrets`](#get-v1vaultsecrets) | List Secrets |
+| [`POST /v1/vault/secrets`](#post-v1vaultsecrets) | Create Secret |
+| [`PATCH /v1/vault/secrets/{secret_id}`](#patch-v1vaultsecretssecret_id) | Update Secret |
+| [`DELETE /v1/vault/secrets/{secret_id}`](#delete-v1vaultsecretssecret_id) | Delete Secret |
+| [`GET /v1/webhooks`](#get-v1webhooks) | List Webhooks |
+| [`POST /v1/webhooks`](#post-v1webhooks) | Create Webhook |
+| [`PUT /v1/webhooks/{webhook_id}`](#put-v1webhookswebhook_id) | Update Webhook |
+| [`DELETE /v1/webhooks/{webhook_id}`](#delete-v1webhookswebhook_id) | Delete Webhook |
+| [`GET /v1/webhooks/{webhook_id}/deliveries`](#get-v1webhookswebhook_iddeliveries) | Deliveries |
+| [`POST /v1/webhooks/{webhook_id}/test`](#post-v1webhookswebhook_idtest) | Test Webhook |
+| [`GET /v1/workspaces`](#get-v1workspaces) | List Workspaces |
+| [`POST /v1/workspaces`](#post-v1workspaces) | Create Workspace |
+| [`PATCH /v1/workspaces/{workspace_id}`](#patch-v1workspacesworkspace_id) | Rename Workspace |
+| [`DELETE /v1/workspaces/{workspace_id}`](#delete-v1workspacesworkspace_id) | Delete Workspace |
+| [`GET /v1/workspaces/{workspace_id}/invitations`](#get-v1workspacesworkspace_idinvitations) | List Invitations |
+| [`POST /v1/workspaces/{workspace_id}/invitations`](#post-v1workspacesworkspace_idinvitations) | Invite |
+| [`DELETE /v1/workspaces/{workspace_id}/invitations/{invitation_id}`](#delete-v1workspacesworkspace_idinvitationsinvitation_id) | Revoke Invitation |
+| [`GET /v1/workspaces/{workspace_id}/label-quotas`](#get-v1workspacesworkspace_idlabel-quotas) | List Label Quotas |
+| [`PUT /v1/workspaces/{workspace_id}/label-quotas`](#put-v1workspacesworkspace_idlabel-quotas) | Set Label Quota |
+| [`DELETE /v1/workspaces/{workspace_id}/label-quotas`](#delete-v1workspacesworkspace_idlabel-quotas) | Remove Label Quota |
+| [`PUT /v1/workspaces/{workspace_id}/lifecycle`](#put-v1workspacesworkspace_idlifecycle) | Set Lifecycle Defaults |
+| [`GET /v1/workspaces/{workspace_id}/members`](#get-v1workspacesworkspace_idmembers) | List Members |
+| [`PATCH /v1/workspaces/{workspace_id}/members/{user_id}`](#patch-v1workspacesworkspace_idmembersuser_id) | Change Role |
+| [`DELETE /v1/workspaces/{workspace_id}/members/{user_id}`](#delete-v1workspacesworkspace_idmembersuser_id) | Remove Member |
+| [`GET /v1/workspaces/{workspace_id}/quota`](#get-v1workspacesworkspace_idquota) | Get Quota |
+| [`PUT /v1/workspaces/{workspace_id}/quota`](#put-v1workspacesworkspace_idquota) | Set Quota |
+| [`PUT /v1/workspaces/{workspace_id}/trajectories`](#put-v1workspacesworkspace_idtrajectories) | Set Trajectory Settings |
+
+### `GET /v1/admin/backups`
+
+List Backups
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/admin/backups`
+
+Takes a backup now (server/backups.py): the database dump is done when this returns; the sandbox
+snapshots are queued.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `201` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/admin/domains`
+
+List Domains
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/admin/domains`
+
+Add Domain
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `hostname` | `string` | yes |  |
+
+| Response | |
+| --- | --- |
+| `201` | Successful Response |
+| `422` | Validation Error |
+
+
+### `DELETE /v1/admin/domains/{domain_id}`
+
+Delete Domain
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `domain_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `204` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/admin/domains/{domain_id}/verify`
+
+Looks the domain up again, for after its DNS record was changed.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `domain_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/admin/sandboxes`
+
+List Sandboxes
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/admin/users`
+
+List Users
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/agent/exports`
+
+List Exports
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/agent/exports`
+
+Create Export
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `run_id` | `string or null` | no |  |
+| `sandbox_id` | `string or null` | no |  |
+| `labels` | `object or null` | no |  |
+| `from` | `string or null` | no |  |
+| `to` | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `202` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/agent/exports/{export_id}`
+
+Get Export
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `export_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/agent/exports/{export_id}/download`
+
+Download
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `export_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/agent/integrations`
+
+Integrations
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/agent/providers`
+
+What a run can be started with, and whether this workspace has a key for each.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/agent/settings`
+
+Get Settings
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `PUT /v1/agent/settings`
+
+Put Settings
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `provider` | `string` | yes |  |
+| `model` | `string` | yes |  |
+| `api_key` | `string or null` | no |  |
+| `api_key_secret_id` | `string or null` | no |  |
+| `api_base` | `string or null` | no |  |
+| `max_steps` | `integer or null` | no |  |
+| `max_seconds` | `integer or null` | no |  |
+| `max_tokens` | `integer or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `DELETE /v1/agent/settings`
+
+Reset Settings
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/api-keys`
+
+List Keys
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/api-keys`
+
+Create Key
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | yes |  |
+| `sandbox_id` | `string or null` | no |  |
+| `label_selector` | `object or null` | no |  |
+| `read_only` | `boolean` | no |  |
+| `expires_at` | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `201` | Successful Response |
+| `422` | Validation Error |
+
+
+### `DELETE /v1/api-keys/{key_id}`
+
+Revoke Key
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `key_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/audit-logs`
+
+List Audit Logs
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `actor` | query | `string or null` | no |  |
+| `action` | query | `string or null` | no |  |
+| `resource_type` | query | `string or null` | no |  |
+| `sandbox_id` | query | `string or null` | no |  |
+| `since` | query | `string or null` | no |  |
+| `until` | query | `string or null` | no |  |
+| `limit` | query | `integer` | no |  |
+| `cursor` | query | `string or null` | no | next_cursor of the page before |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/audit-logs/export`
+
+Export Audit Logs
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `actor` | query | `string or null` | no |  |
+| `action` | query | `string or null` | no |  |
+| `resource_type` | query | `string or null` | no |  |
+| `sandbox_id` | query | `string or null` | no |  |
+| `since` | query | `string or null` | no |  |
+| `until` | query | `string or null` | no |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/auth/login`
+
+Login
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `email` | `string` | yes |  |
+| `password` | `string` | yes |  |
+| `name` | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/auth/me`
+
+Me
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `PUT /v1/auth/me/onboarded`
+
+Marks the first-run steps done (or skipped), so the dashboard stops showing them.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `204` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/auth/signup`
+
+Register
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `email` | `string` | yes |  |
+| `password` | `string` | yes |  |
+| `name` | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `201` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/benchmarks`
+
+List Benchmarks
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/benchmarks`
+
+Create Benchmark
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `suite` | `string or object` | yes |  |
+| `models` | `ModelChoice[]` | yes |  |
+| `parallel` | `integer` | no |  |
+
+| Response | |
+| --- | --- |
+| `202` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/benchmarks/{benchmark_id}`
+
+Get Benchmark
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `benchmark_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/benchmarks/{benchmark_id}/cancel`
+
+Cancel Benchmark
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `benchmark_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `204` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/benchmarks/{benchmark_id}/export`
+
+Export Benchmark
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `benchmark_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/domains/check`
+
+Caddy's on-demand TLS `ask`: a certificate is only issued for a hostname this answers 200 for, so
+nobody can make the server request certificates for names it doesn't serve.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `domain` | query | `string` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/events`
 
 List Events
 
@@ -2207,7 +794,7 @@ List Events
 | `422` | Validation Error |
 
 
-### `GET /events/stream`
+### `GET /v1/events/stream`
 
 Stream
 
@@ -2225,13 +812,7 @@ Stream
 | `422` | Validation Error |
 
 
-## Invitations
-
-| Endpoint | Purpose |
-| --- | --- |
-| [`POST /invitations/{token}/accept`](#post-invitationstokenaccept) | Accept |
-
-### `POST /invitations/{token}/accept`
+### `POST /v1/invitations/{token}/accept`
 
 Accept
 
@@ -2246,14 +827,7 @@ Accept
 | `422` | Validation Error |
 
 
-## Kubernetes
-
-| Endpoint | Purpose |
-| --- | --- |
-| [`GET /kubernetes`](#get-kubernetes) | Kubernetes |
-| [`POST /kubernetes/check`](#post-kubernetescheck) | Kubernetes Check |
-
-### `GET /kubernetes`
+### `GET /v1/kubernetes`
 
 Whether this machine's Linux sandboxes run on Kubernetes, and what the cluster lacks for them.
 
@@ -2267,7 +841,7 @@ Whether this machine's Linux sandboxes run on Kubernetes, and what the cluster l
 | `422` | Validation Error |
 
 
-### `POST /kubernetes/check`
+### `POST /v1/kubernetes/check`
 
 The requirements check with a probe pod under the RuntimeClass on every sandbox node (admins).
 
@@ -2281,28 +855,79 @@ The requirements check with a probe pod under the RuntimeClass on every sandbox 
 | `422` | Validation Error |
 
 
-## Other
+### `GET /v1/monitoring`
 
-| Endpoint | Purpose |
-| --- | --- |
-| [`GET /`](#get-) | Home |
+Monitoring
 
-### `GET /`
-
-Home
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
 
 | Response | |
 | --- | --- |
 | `200` | Successful Response |
+| `422` | Validation Error |
 
 
-## Platforms
+### `GET /v1/nodes/download/{os_name}/{arch}`
 
-| Endpoint | Purpose |
+This API's zoo-node build, for installers. The binary is the same for everyone, so it's public.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `os_name` | path | `string` | yes |  |
+| `arch` | path | `string` | yes |  |
+
+| Response | |
 | --- | --- |
-| [`GET /platforms`](#get-platforms) | List Platforms |
+| `200` | Successful Response |
+| `422` | Validation Error |
 
-### `GET /platforms`
+
+### `POST /v1/nodes/join`
+
+Called by `zoo-node join`, with no other credentials than the one-time token.
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `token` | `string` | yes |  |
+| `csr` | `string` | yes |  |
+| `hostname` | `string` | no |  |
+| `os` | `string` | yes |  |
+| `arch` | `string` | yes |  |
+| `ssh_user` | `string or null` | no |  |
+| `ssh_host_key` | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/nodes/tokens`
+
+Create Token
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `platform` | query | `string` | no |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | yes |  |
+
+| Response | |
+| --- | --- |
+| `201` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/platforms`
 
 Every sandbox OS, and whether this install can run it. The control plane's own Docker runs Linux.
 
@@ -2316,14 +941,7 @@ Every sandbox OS, and whether this install can run it. The control plane's own D
 | `422` | Validation Error |
 
 
-## Pool
-
-| Endpoint | Purpose |
-| --- | --- |
-| [`GET /pool`](#get-pool) | List Pool |
-| [`PUT /pool`](#put-pool) | Set Pool |
-
-### `GET /pool`
+### `GET /v1/pool`
 
 List Pool
 
@@ -2337,7 +955,7 @@ List Pool
 | `422` | Validation Error |
 
 
-### `PUT /pool`
+### `PUT /v1/pool`
 
 Set Pool
 
@@ -2359,13 +977,7 @@ Set Pool
 | `422` | Validation Error |
 
 
-## Profile-apps
-
-| Endpoint | Purpose |
-| --- | --- |
-| [`GET /profile-apps`](#get-profile-apps) | Profile Apps |
-
-### `GET /profile-apps`
+### `GET /v1/profile-apps`
 
 Profile Apps
 
@@ -2380,14 +992,1298 @@ Profile Apps
 | `422` | Validation Error |
 
 
-## Usage
+### `GET /v1/profiles`
 
-| Endpoint | Purpose |
+List Profiles
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
 | --- | --- |
-| [`GET /usage`](#get-usage) | Usage |
-| [`GET /usage/export`](#get-usageexport) | Export |
+| `200` | Successful Response |
+| `422` | Validation Error |
 
-### `GET /usage`
+
+### `PATCH /v1/profiles/{profile_id}`
+
+Rename Profile
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `profile_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | yes |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `DELETE /v1/profiles/{profile_id}`
+
+Delete Profile
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `profile_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `204` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/profiles/{profile_id}/versions`
+
+List Profile Versions
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `profile_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `DELETE /v1/profiles/{profile_id}/versions/{version}`
+
+Delete Profile Version
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `profile_id` | path | `string` | yes |  |
+| `version` | path | `integer` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/sandboxes`
+
+List Sandboxes
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `label` | query | `string[]` | no | key=value; repeat to match all of them |
+| `limit` | query | `integer` | no |  |
+| `cursor` | query | `string or null` | no | next_cursor of the page before |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes`
+
+Create Sandbox
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string or null` | no |  |
+| `kind` | `string` | no |  |
+| `server_id` | `string or null` | no |  |
+| `profile_ids` | `string[]` | no |  |
+| `secret_ids` | `string[]` | no |  |
+| `admin` | `boolean` | no |  |
+| `queue` | `boolean` | no |  |
+| `cpus` | `number` | no |  |
+| `memory_mb` | `integer` | no |  |
+| `disk_gb` | `integer or null` | no |  |
+| `idle_timeout_minutes` | `integer or null` | no |  |
+| `max_lifetime_minutes` | `integer or null` | no |  |
+| `labels` | `object` | no |  |
+
+| Response | |
+| --- | --- |
+| `201` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/sandboxes/{sandbox_id}`
+
+Get Sandbox
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `PATCH /v1/sandboxes/{sandbox_id}`
+
+Update Sandbox
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string or null` | no |  |
+| `labels` | `object or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `DELETE /v1/sandboxes/{sandbox_id}`
+
+Delete Sandbox
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/sandboxes/{sandbox_id}/agent`
+
+State
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/agent`
+
+Chat
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `message` | `string` | yes |  |
+| `model` | `string or null` | no |  |
+| `provider` | `string or null` | no |  |
+| `api_base` | `string or null` | no |  |
+| `stream` | `boolean` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `DELETE /v1/sandboxes/{sandbox_id}/agent`
+
+Reset
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `204` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/sandboxes/{sandbox_id}/agent/channels`
+
+List Channels
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/agent/channels`
+
+Add Channel
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `platform` | `string` | yes |  |
+| `external_id` | `string` | yes |  |
+| `allowed_users` | `string[]` | no |  |
+
+| Response | |
+| --- | --- |
+| `201` | Successful Response |
+| `422` | Validation Error |
+
+
+### `PATCH /v1/sandboxes/{sandbox_id}/agent/channels/{channel_id}`
+
+Update Channel
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `channel_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `allowed_users` | `string[]` | yes |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `DELETE /v1/sandboxes/{sandbox_id}/agent/channels/{channel_id}`
+
+Remove Channel
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `channel_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `204` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/sandboxes/{sandbox_id}/agent/messages/{message_id}/screenshot`
+
+Screenshot
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `message_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/agent/release`
+
+Hands the screen back to the agent, which carries on from the screen as the person left it.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/agent/stop`
+
+Stop
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `204` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/sandboxes/{sandbox_id}/agent/stream`
+
+Attach
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/agent/takeover`
+
+Pauses the running agent before its next action, so a person can use the screen.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/sandboxes/{sandbox_id}/apps`
+
+List Apps
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `PUT /v1/sandboxes/{sandbox_id}/apps/{binary}`
+
+Set App
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `binary` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `effect` | `string` | yes |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/sandboxes/{sandbox_id}/backup`
+
+Backup
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/exec`
+
+Execute
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `command` | `string` | yes |  |
+| `timeout` | `integer` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/exec/stream`
+
+Runs a command and streams its output as server-sent events: `stdout` and `stderr` ({"data": text})
+as it arrives, then `exit` ({"exit_code", "timed_out"}). Linux sandboxes only.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `command` | `string` | yes |  |
+| `timeout` | `integer` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/sandboxes/{sandbox_id}/executions`
+
+List Executions
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `limit` | query | `integer` | no |  |
+| `cursor` | query | `string or null` | no | next_cursor of the page before |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/sandboxes/{sandbox_id}/files/content`
+
+A file's bytes (Linux sandboxes).
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `path` | query | `string` | yes | absolute, or relative to the home directory |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `PUT /v1/sandboxes/{sandbox_id}/files/content`
+
+Writes the request body to a file, making its folder (Linux sandboxes).
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `path` | query | `string` | yes | absolute, or relative to the home directory |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/sandboxes/{sandbox_id}/guest`
+
+Guest Status
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `PUT /v1/sandboxes/{sandbox_id}/lifecycle`
+
+Set Lifecycle
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `idle_timeout_minutes` | `integer or null` | no |  |
+| `max_lifetime_minutes` | `integer or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/move`
+
+Move Sandbox
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `server_id` | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/sandboxes/{sandbox_id}/network`
+
+Get Network
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `PUT /v1/sandboxes/{sandbox_id}/network`
+
+Set Network
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `default_action` | `string` | yes |  |
+| `allow_dns` | `boolean` | yes |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/network/rules`
+
+Add Rule
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `rule_type` | `string` | yes |  |
+| `value` | `string` | yes |  |
+| `effect` | `string` | yes |  |
+
+| Response | |
+| --- | --- |
+| `201` | Successful Response |
+| `422` | Validation Error |
+
+
+### `DELETE /v1/sandboxes/{sandbox_id}/network/rules/{rule_id}`
+
+Delete Rule
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `rule_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/sandboxes/{sandbox_id}/permissions`
+
+List Permissions
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `PUT /v1/sandboxes/{sandbox_id}/permissions`
+
+Set Permission
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `permission` | `string` | yes |  |
+| `action` | `string` | yes |  |
+| `effect` | `string` | yes |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/profiles`
+
+Capture Profile
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | yes |  |
+| `app` | `string` | yes |  |
+| `profile_id` | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `201` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/profiles/{profile_id}`
+
+Apply Profile
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `profile_id` | path | `string` | yes |  |
+| `version` | query | `integer or null` | no |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/restore`
+
+Restore
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/screenshot`
+
+Screenshot
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `format` | query | `string` | no |  |
+| `scale` | query | `number` | no |  |
+| `quality` | query | `integer` | no |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/sandboxes/{sandbox_id}/secrets`
+
+List Secrets
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `PUT /v1/sandboxes/{sandbox_id}/secrets`
+
+Set Secret
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | yes |  |
+| `value` | `string` | yes |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `DELETE /v1/sandboxes/{sandbox_id}/secrets/{secret_id}`
+
+Delete Secret
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `secret_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/sandboxes/{sandbox_id}/snapshots`
+
+List Snapshots
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/snapshots`
+
+Snapshots the home disk on the sandbox's host. Linux sandboxes can be running; macOS and Windows VMs
+must be stopped, since their whole disk is copied.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `202` | Successful Response |
+| `422` | Validation Error |
+
+
+### `DELETE /v1/sandboxes/{sandbox_id}/snapshots/{snapshot_id}`
+
+Delete Snapshot
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `snapshot_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `204` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/snapshots/{snapshot_id}/restore`
+
+Restore From Snapshot
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `snapshot_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/start`
+
+Start Sandbox
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/stop`
+
+Stop Sandbox
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/terminal-ticket`
+
+Terminal Ticket
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/tools/{name}`
+
+Call Tool
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `name` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/upgrade`
+
+Restarts the sandbox on the current default image. Its home volume is kept.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/sandboxes/{sandbox_id}/vault-secrets`
+
+Attached Secrets
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `PUT /v1/sandboxes/{sandbox_id}/vault-secrets/{secret_id}`
+
+Attach Secret
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `secret_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `DELETE /v1/sandboxes/{sandbox_id}/vault-secrets/{secret_id}`
+
+Detach Secret
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `secret_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/sandboxes/{sandbox_id}/viewer-links`
+
+List Links
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/viewer-links`
+
+Create Link
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `mode` | `string` | no |  |
+| `expires_in_minutes` | `integer` | no |  |
+| `end_user` | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `201` | Successful Response |
+| `422` | Validation Error |
+
+
+### `DELETE /v1/sandboxes/{sandbox_id}/viewer-links/{link_id}`
+
+Revoke Link
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `link_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `204` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/sandboxes/{sandbox_id}/vnc-ticket`
+
+Vnc Ticket
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `sandbox_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/servers`
+
+List Servers
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/servers`
+
+Add Server
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | yes |  |
+| `docker_url` | `string` | yes |  |
+| `bind_address` | `string` | yes |  |
+| `platform` | `string` | no |  |
+| `host_key` | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `201` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/servers/install-command`
+
+Server Install Command
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `platform` | query | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `DELETE /v1/servers/{server_id}`
+
+Delete Server
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `server_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `204` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/servers/{server_id}/base`
+
+Base Status
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `server_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/servers/{server_id}/base/install`
+
+Base Install
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `server_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/servers/{server_id}/base/setup`
+
+Base Setup
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `server_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `204` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/servers/{server_id}/base/start`
+
+Base Start
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `server_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/servers/{server_id}/base/stop`
+
+Base Stop
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `server_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/servers/{server_id}/base/vnc-ticket`
+
+Base Vnc Ticket
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `server_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/servers/{server_id}/migrate`
+
+Migrate Server
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `server_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `204` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/servers/{server_id}/status`
+
+Server Status
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `server_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/tools`
+
+List Tools
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `kind` | query | `string or null` | no |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/usage`
 
 Usage
 
@@ -2405,7 +2301,7 @@ Usage
 | `422` | Validation Error |
 
 
-### `GET /usage/export`
+### `GET /v1/usage/export`
 
 Export
 
@@ -2423,18 +2319,112 @@ Export
 | `422` | Validation Error |
 
 
-## Webhooks
+### `GET /v1/vault/activity`
 
-| Endpoint | Purpose |
+Activity
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
 | --- | --- |
-| [`GET /webhooks`](#get-webhooks) | List Webhooks |
-| [`POST /webhooks`](#post-webhooks) | Create Webhook |
-| [`PUT /webhooks/{webhook_id}`](#put-webhookswebhook_id) | Update Webhook |
-| [`DELETE /webhooks/{webhook_id}`](#delete-webhookswebhook_id) | Delete Webhook |
-| [`GET /webhooks/{webhook_id}/deliveries`](#get-webhookswebhook_iddeliveries) | Deliveries |
-| [`POST /webhooks/{webhook_id}/test`](#post-webhookswebhook_idtest) | Test Webhook |
+| `200` | Successful Response |
+| `422` | Validation Error |
 
-### `GET /webhooks`
+
+### `GET /v1/vault/reminders`
+
+Reminders
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/vault/secrets`
+
+List Secrets
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `POST /v1/vault/secrets`
+
+Create Secret
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | yes |  |
+| `value` | `string` | yes |  |
+| `description` | `string or null` | no |  |
+| `expires_at` | `string or null` | no |  |
+| `rotate_every_days` | `integer or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `201` | Successful Response |
+| `422` | Validation Error |
+
+
+### `PATCH /v1/vault/secrets/{secret_id}`
+
+Update Secret
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `secret_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+**Request body**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `value` | `string or null` | no |  |
+| `description` | `string or null` | no |  |
+| `expires_at` | `string or null` | no |  |
+| `rotate_every_days` | `integer or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `DELETE /v1/vault/secrets/{secret_id}`
+
+Delete Secret
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `secret_id` | path | `string` | yes |  |
+| `x-zoo-workspace` | header | `string or null` | no |  |
+
+| Response | |
+| --- | --- |
+| `200` | Successful Response |
+| `422` | Validation Error |
+
+
+### `GET /v1/webhooks`
 
 List Webhooks
 
@@ -2448,7 +2438,7 @@ List Webhooks
 | `422` | Validation Error |
 
 
-### `POST /webhooks`
+### `POST /v1/webhooks`
 
 Create Webhook
 
@@ -2471,7 +2461,7 @@ Create Webhook
 | `422` | Validation Error |
 
 
-### `PUT /webhooks/{webhook_id}`
+### `PUT /v1/webhooks/{webhook_id}`
 
 Update Webhook
 
@@ -2495,7 +2485,7 @@ Update Webhook
 | `422` | Validation Error |
 
 
-### `DELETE /webhooks/{webhook_id}`
+### `DELETE /v1/webhooks/{webhook_id}`
 
 Delete Webhook
 
@@ -2510,7 +2500,7 @@ Delete Webhook
 | `422` | Validation Error |
 
 
-### `GET /webhooks/{webhook_id}/deliveries`
+### `GET /v1/webhooks/{webhook_id}/deliveries`
 
 Deliveries
 
@@ -2518,6 +2508,7 @@ Deliveries
 | --- | --- | --- | --- | --- |
 | `webhook_id` | path | `string` | yes |  |
 | `limit` | query | `integer` | no |  |
+| `cursor` | query | `string or null` | no | next_cursor of the page before |
 | `x-zoo-workspace` | header | `string or null` | no |  |
 
 | Response | |
@@ -2526,7 +2517,7 @@ Deliveries
 | `422` | Validation Error |
 
 
-### `POST /webhooks/{webhook_id}/test`
+### `POST /v1/webhooks/{webhook_id}/test`
 
 Sends a webhook.test event to this webhook only; its delivery shows in /deliveries.
 
@@ -2541,29 +2532,7 @@ Sends a webhook.test event to this webhook only; its delivery shows in /deliveri
 | `422` | Validation Error |
 
 
-## Workspaces
-
-| Endpoint | Purpose |
-| --- | --- |
-| [`GET /workspaces`](#get-workspaces) | List Workspaces |
-| [`POST /workspaces`](#post-workspaces) | Create Workspace |
-| [`PATCH /workspaces/{workspace_id}`](#patch-workspacesworkspace_id) | Rename Workspace |
-| [`DELETE /workspaces/{workspace_id}`](#delete-workspacesworkspace_id) | Delete Workspace |
-| [`GET /workspaces/{workspace_id}/invitations`](#get-workspacesworkspace_idinvitations) | List Invitations |
-| [`POST /workspaces/{workspace_id}/invitations`](#post-workspacesworkspace_idinvitations) | Invite |
-| [`DELETE /workspaces/{workspace_id}/invitations/{invitation_id}`](#delete-workspacesworkspace_idinvitationsinvitation_id) | Revoke Invitation |
-| [`GET /workspaces/{workspace_id}/label-quotas`](#get-workspacesworkspace_idlabel-quotas) | List Label Quotas |
-| [`PUT /workspaces/{workspace_id}/label-quotas`](#put-workspacesworkspace_idlabel-quotas) | Set Label Quota |
-| [`DELETE /workspaces/{workspace_id}/label-quotas`](#delete-workspacesworkspace_idlabel-quotas) | Remove Label Quota |
-| [`PUT /workspaces/{workspace_id}/lifecycle`](#put-workspacesworkspace_idlifecycle) | Set Lifecycle Defaults |
-| [`GET /workspaces/{workspace_id}/members`](#get-workspacesworkspace_idmembers) | List Members |
-| [`PATCH /workspaces/{workspace_id}/members/{user_id}`](#patch-workspacesworkspace_idmembersuser_id) | Change Role |
-| [`DELETE /workspaces/{workspace_id}/members/{user_id}`](#delete-workspacesworkspace_idmembersuser_id) | Remove Member |
-| [`GET /workspaces/{workspace_id}/quota`](#get-workspacesworkspace_idquota) | Get Quota |
-| [`PUT /workspaces/{workspace_id}/quota`](#put-workspacesworkspace_idquota) | Set Quota |
-| [`PUT /workspaces/{workspace_id}/trajectories`](#put-workspacesworkspace_idtrajectories) | Set Trajectory Settings |
-
-### `GET /workspaces`
+### `GET /v1/workspaces`
 
 List Workspaces
 
@@ -2577,7 +2546,7 @@ List Workspaces
 | `422` | Validation Error |
 
 
-### `POST /workspaces`
+### `POST /v1/workspaces`
 
 Create Workspace
 
@@ -2597,7 +2566,7 @@ Create Workspace
 | `422` | Validation Error |
 
 
-### `PATCH /workspaces/{workspace_id}`
+### `PATCH /v1/workspaces/{workspace_id}`
 
 Rename Workspace
 
@@ -2618,7 +2587,7 @@ Rename Workspace
 | `422` | Validation Error |
 
 
-### `DELETE /workspaces/{workspace_id}`
+### `DELETE /v1/workspaces/{workspace_id}`
 
 Delete Workspace
 
@@ -2633,7 +2602,7 @@ Delete Workspace
 | `422` | Validation Error |
 
 
-### `GET /workspaces/{workspace_id}/invitations`
+### `GET /v1/workspaces/{workspace_id}/invitations`
 
 List Invitations
 
@@ -2648,7 +2617,7 @@ List Invitations
 | `422` | Validation Error |
 
 
-### `POST /workspaces/{workspace_id}/invitations`
+### `POST /v1/workspaces/{workspace_id}/invitations`
 
 Invite
 
@@ -2670,7 +2639,7 @@ Invite
 | `422` | Validation Error |
 
 
-### `DELETE /workspaces/{workspace_id}/invitations/{invitation_id}`
+### `DELETE /v1/workspaces/{workspace_id}/invitations/{invitation_id}`
 
 Revoke Invitation
 
@@ -2686,7 +2655,7 @@ Revoke Invitation
 | `422` | Validation Error |
 
 
-### `GET /workspaces/{workspace_id}/label-quotas`
+### `GET /v1/workspaces/{workspace_id}/label-quotas`
 
 List Label Quotas
 
@@ -2701,7 +2670,7 @@ List Label Quotas
 | `422` | Validation Error |
 
 
-### `PUT /workspaces/{workspace_id}/label-quotas`
+### `PUT /v1/workspaces/{workspace_id}/label-quotas`
 
 Set Label Quota
 
@@ -2727,7 +2696,7 @@ Set Label Quota
 | `422` | Validation Error |
 
 
-### `DELETE /workspaces/{workspace_id}/label-quotas`
+### `DELETE /v1/workspaces/{workspace_id}/label-quotas`
 
 Remove Label Quota
 
@@ -2744,7 +2713,7 @@ Remove Label Quota
 | `422` | Validation Error |
 
 
-### `PUT /workspaces/{workspace_id}/lifecycle`
+### `PUT /v1/workspaces/{workspace_id}/lifecycle`
 
 Set Lifecycle Defaults
 
@@ -2766,7 +2735,7 @@ Set Lifecycle Defaults
 | `422` | Validation Error |
 
 
-### `GET /workspaces/{workspace_id}/members`
+### `GET /v1/workspaces/{workspace_id}/members`
 
 List Members
 
@@ -2781,7 +2750,7 @@ List Members
 | `422` | Validation Error |
 
 
-### `PATCH /workspaces/{workspace_id}/members/{user_id}`
+### `PATCH /v1/workspaces/{workspace_id}/members/{user_id}`
 
 Change Role
 
@@ -2803,7 +2772,7 @@ Change Role
 | `422` | Validation Error |
 
 
-### `DELETE /workspaces/{workspace_id}/members/{user_id}`
+### `DELETE /v1/workspaces/{workspace_id}/members/{user_id}`
 
 Remove Member
 
@@ -2819,7 +2788,7 @@ Remove Member
 | `422` | Validation Error |
 
 
-### `GET /workspaces/{workspace_id}/quota`
+### `GET /v1/workspaces/{workspace_id}/quota`
 
 Get Quota
 
@@ -2834,7 +2803,7 @@ Get Quota
 | `422` | Validation Error |
 
 
-### `PUT /workspaces/{workspace_id}/quota`
+### `PUT /v1/workspaces/{workspace_id}/quota`
 
 Set Quota
 
@@ -2858,7 +2827,7 @@ Set Quota
 | `422` | Validation Error |
 
 
-### `PUT /workspaces/{workspace_id}/trajectories`
+### `PUT /v1/workspaces/{workspace_id}/trajectories`
 
 Set Trajectory Settings
 
@@ -3055,8 +3024,8 @@ Request and response bodies, as the API defines them.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `entries` | `AuditLogResponse[]` | yes |  |
-| `cursor` | `string or null` | yes |  |
+| `data` | `AuditLogResponse[]` | yes |  |
+| `next_cursor` | `string or null` | yes |  |
 
 
 ### `AuthRequst`
@@ -3659,6 +3628,30 @@ The server's zoo-node and what it last reported.
 | `seen_at` | `string or null` | yes |  |
 
 
+### `Page_DeliveryResponse_`
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `data` | `DeliveryResponse[]` | yes |  |
+| `next_cursor` | `string or null` | yes |  |
+
+
+### `Page_SandboxResponse_`
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `data` | `SandboxResponse[]` | yes |  |
+| `next_cursor` | `string or null` | yes |  |
+
+
+### `Page_ToolExecutionResponse_`
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `data` | `ToolExecutionResponse[]` | yes |  |
+| `next_cursor` | `string or null` | yes |  |
+
+
 ### `PermissionRequest`
 
 | Field | Type | Required | Description |
@@ -4042,6 +4035,7 @@ The server's zoo-node and what it last reported.
 | `email` | `string` | yes |  |
 | `name` | `string or null` | yes |  |
 | `avatar_url` | `string or null` | yes |  |
+| `onboarded_at` | `string or null` | no |  |
 
 
 ### `ValidationError`

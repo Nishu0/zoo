@@ -552,7 +552,7 @@ def test_migrating_a_server_installs_the_node_over_its_connection(client, alice,
     other = add_server("alice@example.com", name="other")
     monkeypatch.setitem(nodes_api.MIGRATE, "linux", lambda server, token: None)
     res = client.post(f"/servers/{other}/migrate", headers=alice)
-    assert res.status_code == 504 and "hasn't connected" in res.json()["detail"]
+    assert res.status_code == 504 and "hasn't connected" in res.json()["error"]["message"]
 
     # a failure on the host comes back to the caller
     def broken(server, token):
@@ -560,7 +560,7 @@ def test_migrating_a_server_installs_the_node_over_its_connection(client, alice,
 
     monkeypatch.setitem(nodes_api.MIGRATE, "linux", broken)
     res = client.post(f"/servers/{other}/migrate", headers=alice)
-    assert res.status_code == 502 and "no space left" in res.json()["detail"]
+    assert res.status_code == 502 and "no space left" in res.json()["error"]["message"]
 
 
 def test_only_ssh_servers_migrate(client, alice, bob):

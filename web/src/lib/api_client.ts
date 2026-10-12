@@ -1,3 +1,4 @@
+import { useEffect } from "react"
 import {
   useInfiniteQuery,
   useMutation,
@@ -21,7 +22,8 @@ function resolveApiUrl() {
   return configured.toString().replace(/\/$/, "")
 }
 
-const API_URL = resolveApiUrl()
+const API_ROOT = resolveApiUrl()
+const API_URL = `${API_ROOT}/v1`
 const TOKEN_KEY = "zoo.token"
 // the workspace this browser acts in; none means the user's personal workspace
 const WORKSPACE_KEY = "zoo.workspace"
@@ -55,6 +57,7 @@ export const userSchema = z.object({
   email: z.string(),
   name: z.string().nullable(),
   avatar_url: z.string().nullable(),
+  onboarded_at: z.string().nullable().optional(),
 })
 
 export const sandboxStatusSchema = z.enum([
@@ -123,6 +126,7 @@ export const createSandboxSchema = z.object({
   // minutes; left out, the workspace's default
   idle_timeout_minutes: z.number().int().positive().optional(),
   max_lifetime_minutes: z.number().int().positive().optional(),
+  labels: z.record(z.string(), z.string()).optional(),
 })
 
 // the server's zoo-node and what it last reported
@@ -607,10 +611,12 @@ export const auditEntrySchema = z.object({
   created_at: z.string(),
 })
 
-export const auditPageSchema = z.object({
-  entries: z.array(auditEntrySchema),
-  cursor: z.string().nullable(),
-})
+/** A page of a list endpoint; pass `next_cursor` back as `cursor` for the next one. */
+function pageSchema<T extends z.ZodType>(item: T) {
+  return z.object({ data: z.array(item), next_cursor: z.string().nullable() })
+}
+
+export const auditPageSchema = pageSchema(auditEntrySchema)
 
 export type AuditFilters = {
   actor?: string
@@ -925,7 +931,10 @@ function authHeaders(init?: HeadersInit): Headers {
 export class ApiError extends Error {
   constructor(
     public status: number,
-    message: string
+    message: string,
+    public code = "unknown",
+    public hint: string | null = null,
+    public requestId: string | null = null
   ) {
     super(message)
     this.name = "ApiError"
@@ -933,7 +942,13 @@ export class ApiError extends Error {
 }
 
 const errorSchema = z.object({
-  detail: z.union([z.string(), z.array(z.object({ msg: z.string() }))]),
+  error: z.object({
+    code: z.string(),
+    message: z.string(),
+    hint: z.string().nullable().optional(),
+    docs_url: z.string().optional(),
+    request_id: z.string().optional(),
+  }),
 })
 
 async function request<T extends z.ZodType>(
@@ -960,12 +975,27 @@ async function request<T extends z.ZodType>(
 
 function responseError(status: number, body: unknown) {
   const parsed = errorSchema.safeParse(body)
-  const message = !parsed.success
-    ? `Request failed (${status})`
-    : typeof parsed.data.detail === "string"
-      ? parsed.data.detail
-      : parsed.data.detail.map((d) => d.msg).join(", ")
-  return new ApiError(status, message)
+  if (!parsed.success) return new ApiError(status, `Request failed (${status})`)
+  const { code, message, hint, request_id } = parsed.data.error
+  return new ApiError(status, message, code, hint ?? null, request_id ?? null)
+}
+
+/** Every item of a paged list endpoint, following next_cursor. */
+async function requestAll<T extends z.ZodType>(
+  path: string,
+  item: T
+): Promise<z.infer<T>[]> {
+  const items: z.infer<T>[] = []
+  let cursor: string | null = null
+  do {
+    const sep = path.includes("?") ? "&" : "?"
+    const query = `${sep}limit=200${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`
+    const page: { data: z.infer<T>[]; next_cursor: string | null } =
+      await request(`${path}${query}`, pageSchema(item))
+    items.push(...page.data)
+    cursor = page.next_cursor
+  } while (cursor)
+  return items
 }
 
 /** Fetches an authenticated image and returns an object URL for an <img>; revoke it when done. */
@@ -1024,9 +1054,10 @@ export const api = {
         body: JSON.stringify(input),
       }),
     me: () => request("/auth/me", userSchema),
+    onboarded: () => request("/auth/me/onboarded", z.null(), { method: "PUT" }),
   },
   sandboxes: {
-    list: () => request("/sandboxes", z.array(sandboxSchema)),
+    list: () => requestAll("/sandboxes", sandboxSchema),
     get: (id: string) => request(`/sandboxes/${id}`, sandboxSchema),
     create: (input: CreateSandboxInput) =>
       request("/sandboxes", sandboxSchema, {
@@ -1053,7 +1084,10 @@ export const api = {
         method: "DELETE",
       }),
     executions: (id: string) =>
-      request(`/sandboxes/${id}/executions`, z.array(executionSchema)),
+      request(
+        `/sandboxes/${id}/executions?limit=100`,
+        pageSchema(executionSchema)
+      ).then((page) => page.data),
     exec: (id: string, command: string) =>
       request(`/sandboxes/${id}/exec`, execResultSchema, {
         method: "POST",
@@ -1180,7 +1214,10 @@ export const api = {
     remove: (id: string) =>
       request(`/webhooks/${id}`, z.null(), { method: "DELETE" }),
     deliveries: (id: string) =>
-      request(`/webhooks/${id}/deliveries`, z.array(webhookDeliverySchema)),
+      request(
+        `/webhooks/${id}/deliveries?limit=100`,
+        pageSchema(webhookDeliverySchema)
+      ).then((page) => page.data),
     test: (id: string) =>
       request(`/webhooks/${id}/test`, z.object({ event_id: z.string() }), {
         method: "POST",
@@ -1469,6 +1506,8 @@ export function sandboxBackupUrl(id: string) {
 }
 
 export const MCP_URL = `${API_URL}/mcp/`
+/** The REST API's base URL, /v1 included, for snippets people paste elsewhere. */
+export const API_BASE = API_URL
 
 export function apiUrl(path: string) {
   return `${API_URL}${path}`
@@ -1562,7 +1601,7 @@ export const queryKeys = {
   domains: ["domains"] as const,
 }
 
-const isSettling = (sandbox: Sandbox) =>
+export const isSettling = (sandbox: Sandbox) =>
   sandbox.job !== null ||
   sandbox.status === "pending" ||
   sandbox.status === "provisioning" ||
@@ -1634,12 +1673,116 @@ export function useLogout() {
   }
 }
 
+const eventSchema = z.object({
+  seq: z.number(),
+  type: z.string(),
+  sandbox_id: z.string().nullable(),
+  run_id: z.string().nullable(),
+  data: z.record(z.string(), z.unknown()),
+})
+
+export type ZooEvent = z.infer<typeof eventSchema>
+
+/** "live" while the workspace's event stream is connected, "offline" while the server can't be reached. */
+export type Connection = "connecting" | "live" | "offline"
+
+/**
+ * Follows the workspace's events (GET /events/stream) for as long as the app is open, reconnecting with backoff and
+ * Last-Event-ID, and refreshes the queries each event touches; this replaces polling for sandbox and agent state.
+ */
+export function useEventStream(
+  enabled: boolean,
+  onConnection?: (state: Connection) => void
+) {
+  const queryClient = useQueryClient()
+  const workspace = getWorkspaceId()
+  useEffect(() => {
+    if (!enabled) return
+    const abort = new AbortController()
+    const stopped = () => abort.signal.aborted
+    let lastId: string | null = null
+    let delay = 1000
+
+    function touched(event: ZooEvent) {
+      const id = event.sandbox_id
+      if (event.type === "sandbox.state") {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.sandboxes,
+          exact: true,
+        })
+      }
+      if (!id) return
+      if (event.type === "sandbox.state") {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.sandbox(id),
+          exact: true,
+        })
+      } else if (
+        event.type.startsWith("run.") ||
+        event.type.startsWith("takeover.")
+      ) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.agent(id) })
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.executions(id),
+        })
+      }
+    }
+
+    async function follow() {
+      while (!stopped()) {
+        try {
+          const headers = authHeaders()
+          if (lastId) headers.set("Last-Event-ID", lastId)
+          const res = await fetch(`${API_URL}/events/stream`, {
+            headers,
+            signal: abort.signal,
+          })
+          if (!res.ok || !res.body) throw new Error(`events: ${res.status}`)
+          onConnection?.("live")
+          delay = 1000
+          // anything may have changed while disconnected
+          void queryClient.invalidateQueries({ queryKey: queryKeys.sandboxes })
+          const reader = res.body
+            .pipeThrough(new TextDecoderStream())
+            .getReader()
+          let buffer = ""
+          for (;;) {
+            const { value, done } = await reader.read()
+            if (done) break
+            buffer += value
+            let end
+            while ((end = buffer.indexOf("\n\n")) >= 0) {
+              const frame = buffer.slice(0, end)
+              buffer = buffer.slice(end + 2)
+              let data = ""
+              for (const line of frame.split("\n")) {
+                if (line.startsWith("id: ")) lastId = line.slice(4)
+                else if (line.startsWith("data: ")) data += line.slice(6)
+              }
+              if (!data) continue
+              const parsed = eventSchema.safeParse(JSON.parse(data))
+              if (parsed.success) touched(parsed.data)
+            }
+          }
+        } catch {
+          if (stopped()) return
+        }
+        onConnection?.("offline")
+        await new Promise((resolve) => setTimeout(resolve, delay))
+        delay = Math.min(delay * 2, 30000)
+      }
+    }
+
+    onConnection?.("connecting")
+    void follow()
+    return () => abort.abort()
+  }, [enabled, queryClient, workspace, onConnection])
+}
+
 export function useSandboxes() {
   return useQuery({
     queryKey: queryKeys.sandboxes,
     queryFn: api.sandboxes.list,
-    refetchInterval: (query) =>
-      query.state.data?.some(isSettling) ? 1500 : false,
   })
 }
 
@@ -1648,8 +1791,6 @@ export function useSandbox(id: string, enabled = true) {
     queryKey: queryKeys.sandbox(id),
     queryFn: () => api.sandboxes.get(id),
     enabled,
-    refetchInterval: (query) =>
-      query.state.data && isSettling(query.state.data) ? 1500 : false,
     retry: false,
   })
 }
@@ -1785,15 +1926,13 @@ export function useExecutions(id: string) {
   return useQuery({
     queryKey: queryKeys.executions(id),
     queryFn: () => api.sandboxes.executions(id),
-    refetchInterval: 5000,
   })
 }
 
-export function useAgent(id: string, poll: boolean) {
+export function useAgent(id: string) {
   return useQuery({
     queryKey: queryKeys.agent(id),
     queryFn: () => api.agent.state(id),
-    refetchInterval: poll ? 5000 : false,
     refetchOnWindowFocus: false,
   })
 }
@@ -1934,6 +2073,17 @@ export function useSaveAgentSettings() {
 
 export function useApiKeys() {
   return useQuery({ queryKey: queryKeys.apiKeys, queryFn: api.apiKeys.list })
+}
+
+/** Marks the first-run steps done (or skipped). */
+export function useFinishOnboarding() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.auth.onboarded,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.me })
+    },
+  })
 }
 
 export function useCreateApiKey() {
@@ -2381,7 +2531,7 @@ export function useAuditLog(filters: AuditFilters) {
     queryKey: queryKeys.audit(filters),
     queryFn: ({ pageParam }) => api.audit.page(filters, pageParam),
     initialPageParam: null as string | null,
-    getNextPageParam: (last) => last.cursor,
+    getNextPageParam: (last) => last.next_cursor,
   })
 }
 

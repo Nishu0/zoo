@@ -107,6 +107,36 @@ RETURNING id, seq, workspace_id, created_by, run_ids, state, worker, claimed_at,
 """
 
 
+CLAIM_IDEMPOTENCY_KEY = """-- name: claim_idempotency_key \\:one
+
+INSERT INTO idempotency_keys (owner, key, method, path, request_hash)
+VALUES (:p1, :p2, :p3, :p4, :p5)
+ON CONFLICT (owner, key) DO UPDATE SET owner = idempotency_keys.owner
+RETURNING owner, key, method, path, request_hash, status, content_type, response, created_at, (xmax = 0) AS inserted
+"""
+
+
+class ClaimIdempotencyKeyParams(pydantic.BaseModel):
+    owner: str
+    key: str
+    method: str
+    path: str
+    request_hash: str
+
+
+class ClaimIdempotencyKeyRow(pydantic.BaseModel):
+    owner: str
+    key: str
+    method: str
+    path: str
+    request_hash: str
+    status: Optional[int]
+    content_type: Optional[str]
+    response: Optional[str]
+    created_at: datetime.datetime
+    inserted: bool
+
+
 CLAIM_JOB = """-- name: claim_job \\:one
 UPDATE jobs
 SET state = 'running', attempts = attempts + 1, updated_at = CURRENT_TIMESTAMP
@@ -632,7 +662,7 @@ RETURNING id, session_id, tool_name, status, input, output, error_message, start
 CREATE_USER = """-- name: create_user \\:one
 INSERT INTO users (id, email, name, avatar_url, password)
 VALUES (:p1, :p2, :p3, :p4, :p5)
-RETURNING id, email, name, password, avatar_url, created_at, updated_at
+RETURNING id, email, name, password, avatar_url, created_at, updated_at, onboarded_at
 """
 
 
@@ -975,6 +1005,20 @@ class FinishExportParams(pydantic.BaseModel):
     id: str
 
 
+FINISH_IDEMPOTENCY_KEY = """-- name: finish_idempotency_key \\:exec
+UPDATE idempotency_keys SET status = :p1, content_type = :p2, response = :p3
+WHERE owner = :p4 AND key = :p5
+"""
+
+
+class FinishIdempotencyKeyParams(pydantic.BaseModel):
+    status: Optional[int]
+    content_type: Optional[str]
+    response: Optional[str]
+    owner: str
+    key: str
+
+
 FINISH_JOB = """-- name: finish_job \\:exec
 UPDATE jobs
 SET state = :p1, last_error = :p2, finished_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
@@ -1240,12 +1284,12 @@ SELECT id, session_id, tool_name, status, input, output, error_message, started_
 
 
 GET_USER = """-- name: get_user \\:one
-SELECT id, email, name, password, avatar_url, created_at, updated_at FROM users WHERE id = :p1 LIMIT 1
+SELECT id, email, name, password, avatar_url, created_at, updated_at, onboarded_at FROM users WHERE id = :p1 LIMIT 1
 """
 
 
 GET_USER_BY_EMAIL = """-- name: get_user_by_email \\:one
-SELECT id, email, name, password, avatar_url, created_at, updated_at FROM users WHERE email = :p1 LIMIT 1
+SELECT id, email, name, password, avatar_url, created_at, updated_at, onboarded_at FROM users WHERE email = :p1 LIMIT 1
 """
 
 
@@ -1478,7 +1522,7 @@ SELECT id, user_id, name, description, ciphertext, created_at, updated_at, last_
 
 LIST_API_KEYS_BY_WORKSPACE = """-- name: list_api_keys_by_workspace \\:many
 SELECT id, workspace_id, created_by, name, key_prefix,
-       scopes, expires_at, last_used_at, revoked_at, created_at, sandbox_id, read_only
+       scopes, expires_at, last_used_at, revoked_at, created_at, sandbox_id, read_only, label_selector
 FROM api_keys
 WHERE workspace_id = :p1
 ORDER BY created_at DESC
@@ -1498,6 +1542,7 @@ class ListAPIKeysByWorkspaceRow(pydantic.BaseModel):
     created_at: datetime.datetime
     sandbox_id: Optional[str]
     read_only: bool
+    label_selector: Optional[str]
 
 
 LIST_APPS_BY_WORKSPACE = """-- name: list_apps_by_workspace \\:many
@@ -1911,7 +1956,7 @@ WHERE ul.sandbox_id IN (SELECT DISTINCT u.sandbox_id FROM usage u WHERE u.worksp
 
 
 LIST_USERS = """-- name: list_users \\:many
-SELECT id, email, name, password, avatar_url, created_at, updated_at FROM users ORDER BY created_at DESC
+SELECT id, email, name, password, avatar_url, created_at, updated_at, onboarded_at FROM users ORDER BY created_at DESC
 """
 
 
@@ -2082,6 +2127,55 @@ UPDATE vault_secrets SET last_used_at = CURRENT_TIMESTAMP WHERE id = :p1
 """
 
 
+PAGE_SANDBOXES = """-- name: page_sandboxes \\:many
+
+SELECT id, workspace_id, image_version_id, created_by, name, status, runtime, runtime_id, runtime_host, access_url, resources, config, error_message, started_at, stopped_at, created_at, updated_at, deleted_at, server_id, kind, unreachable_since, base_version, boot_seconds, recovered_at, cpus, memory_mb, disk_gb, last_activity_at, idle_timeout_minutes, max_lifetime_minutes FROM sandboxes
+WHERE workspace_id = :p1 AND deleted_at IS NULL
+  AND (:p2\\:\\:timestamptz IS NULL
+       OR (created_at, id) < (:p2\\:\\:timestamptz, :p3\\:\\:text))
+ORDER BY created_at DESC, id DESC
+LIMIT :p4
+"""
+
+
+PAGE_TOOL_EXECUTIONS = """-- name: page_tool_executions \\:many
+SELECT te.id, te.session_id, te.tool_name, te.status, te.input, te.output, te.error_message, te.started_at, te.completed_at, te.created_at FROM tool_executions te
+JOIN agent_sessions s ON s.id = te.session_id
+WHERE s.sandbox_id = :p1
+  AND (:p2\\:\\:timestamptz IS NULL
+       OR (te.created_at, te.id) < (:p2\\:\\:timestamptz, :p3\\:\\:text))
+ORDER BY te.created_at DESC, te.id DESC
+LIMIT :p4
+"""
+
+
+PAGE_WEBHOOK_DELIVERIES = """-- name: page_webhook_deliveries \\:many
+SELECT d.id, d.seq, d.webhook_id, d.event_id, d.status, d.attempts, d.next_attempt_at, d.last_error, d.response_status, d.created_at, d.delivered_at, e.type AS event_type
+FROM webhook_deliveries d
+JOIN events e ON e.id = d.event_id
+WHERE d.webhook_id = :p1
+  AND (:p2\\:\\:timestamptz IS NULL
+       OR (d.created_at, d.id) < (:p2\\:\\:timestamptz, :p3\\:\\:text))
+ORDER BY d.created_at DESC, d.id DESC
+LIMIT :p4
+"""
+
+
+class PageWebhookDeliveriesRow(pydantic.BaseModel):
+    id: str
+    seq: int
+    webhook_id: str
+    event_id: str
+    status: str
+    attempts: int
+    next_attempt_at: datetime.datetime
+    last_error: Optional[str]
+    response_status: Optional[int]
+    created_at: datetime.datetime
+    delivered_at: Optional[datetime.datetime]
+    event_type: str
+
+
 PAUSE_AGENT_RUN = """-- name: pause_agent_run \\:one
 
 UPDATE agent_runs SET paused_at = CURRENT_TIMESTAMP, paused_by = :p1
@@ -2109,6 +2203,11 @@ DELETE FROM events WHERE created_at < :p1
 
 PURGE_EXPORTS = """-- name: purge_exports \\:many
 DELETE FROM exports WHERE created_at < :p1 RETURNING id
+"""
+
+
+PURGE_IDEMPOTENCY_KEYS = """-- name: purge_idempotency_keys \\:exec
+DELETE FROM idempotency_keys WHERE created_at < :p1
 """
 
 
@@ -2142,6 +2241,11 @@ RETURNING event_id
 REDEEM_TICKET = """-- name: redeem_ticket \\:one
 DELETE FROM tickets WHERE ticket_hash = :p1
 RETURNING ticket_hash, user_id, target, expires_at
+"""
+
+
+RELEASE_IDEMPOTENCY_KEY = """-- name: release_idempotency_key \\:exec
+DELETE FROM idempotency_keys WHERE owner = :p1 AND key = :p2
 """
 
 
@@ -2452,6 +2556,11 @@ ON CONFLICT (sandbox_id, key) DO UPDATE SET value = EXCLUDED.value
 """
 
 
+SET_USER_ONBOARDED = """-- name: set_user_onboarded \\:exec
+UPDATE users SET onboarded_at = COALESCE(onboarded_at, now()) WHERE id = :p1
+"""
+
+
 SET_VAULT_SECRET_SCHEDULE = """-- name: set_vault_secret_schedule \\:exec
 UPDATE vault_secrets
 SET expires_at = :p1, rotate_every_days = :p2, updated_at = CURRENT_TIMESTAMP
@@ -2644,7 +2753,7 @@ UPDATE_USER = """-- name: update_user \\:one
 UPDATE users
 SET name = :p1, avatar_url = :p2, updated_at = CURRENT_TIMESTAMP
 WHERE id = :p3
-RETURNING id, email, name, password, avatar_url, created_at, updated_at
+RETURNING id, email, name, password, avatar_url, created_at, updated_at, onboarded_at
 """
 
 
@@ -3039,6 +3148,29 @@ class Querier:
             error=row[10],
             created_at=row[11],
             finished_at=row[12],
+        )
+
+    def claim_idempotency_key(self, arg: ClaimIdempotencyKeyParams) -> Optional[ClaimIdempotencyKeyRow]:
+        row = self._conn.execute(sqlalchemy.text(CLAIM_IDEMPOTENCY_KEY), {
+            "p1": arg.owner,
+            "p2": arg.key,
+            "p3": arg.method,
+            "p4": arg.path,
+            "p5": arg.request_hash,
+        }).first()
+        if row is None:
+            return None
+        return ClaimIdempotencyKeyRow(
+            owner=row[0],
+            key=row[1],
+            method=row[2],
+            path=row[3],
+            request_hash=row[4],
+            status=row[5],
+            content_type=row[6],
+            response=row[7],
+            created_at=row[8],
+            inserted=row[9],
         )
 
     def claim_job(self, *, id: str) -> Optional[models.Job]:
@@ -3861,6 +3993,7 @@ class Querier:
             avatar_url=row[4],
             created_at=row[5],
             updated_at=row[6],
+            onboarded_at=row[7],
         )
 
     def create_vault_secret(self, arg: CreateVaultSecretParams) -> Optional[models.VaultSecret]:
@@ -4187,6 +4320,15 @@ class Querier:
             "p3": arg.steps,
             "p4": arg.size_bytes,
             "p5": arg.id,
+        })
+
+    def finish_idempotency_key(self, arg: FinishIdempotencyKeyParams) -> None:
+        self._conn.execute(sqlalchemy.text(FINISH_IDEMPOTENCY_KEY), {
+            "p1": arg.status,
+            "p2": arg.content_type,
+            "p3": arg.response,
+            "p4": arg.owner,
+            "p5": arg.key,
         })
 
     def finish_job(self, *, state: str, last_error: Optional[str], id: str) -> None:
@@ -5010,6 +5152,7 @@ class Querier:
             avatar_url=row[4],
             created_at=row[5],
             updated_at=row[6],
+            onboarded_at=row[7],
         )
 
     def get_user_by_email(self, *, email: str) -> Optional[models.User]:
@@ -5024,6 +5167,7 @@ class Querier:
             avatar_url=row[4],
             created_at=row[5],
             updated_at=row[6],
+            onboarded_at=row[7],
         )
 
     def get_vault_secret(self, *, id: str) -> Optional[models.VaultSecret]:
@@ -5502,6 +5646,7 @@ class Querier:
                 created_at=row[9],
                 sandbox_id=row[10],
                 read_only=row[11],
+                label_selector=row[12],
             )
 
     def list_apps_by_workspace(self, *, workspace_id: Optional[str]) -> Iterator[models.App]:
@@ -6260,6 +6405,7 @@ class Querier:
                 avatar_url=row[4],
                 created_at=row[5],
                 updated_at=row[6],
+                onboarded_at=row[7],
             )
 
     def list_vault_audit_logs(self, *, workspace_id: str, limit: int) -> Iterator[models.AuditLog]:
@@ -6430,6 +6576,91 @@ class Querier:
     def mark_vault_secret_used(self, *, id: str) -> None:
         self._conn.execute(sqlalchemy.text(MARK_VAULT_SECRET_USED), {"p1": id})
 
+    def page_sandboxes(self, *, workspace_id: str, before_at: Optional[datetime.datetime], before_id: Optional[str], row_limit: int) -> Iterator[models.Sandbox]:
+        result = self._conn.execute(sqlalchemy.text(PAGE_SANDBOXES), {
+            "p1": workspace_id,
+            "p2": before_at,
+            "p3": before_id,
+            "p4": row_limit,
+        })
+        for row in result:
+            yield models.Sandbox(
+                id=row[0],
+                workspace_id=row[1],
+                image_version_id=row[2],
+                created_by=row[3],
+                name=row[4],
+                status=row[5],
+                runtime=row[6],
+                runtime_id=row[7],
+                runtime_host=row[8],
+                access_url=row[9],
+                resources=row[10],
+                config=row[11],
+                error_message=row[12],
+                started_at=row[13],
+                stopped_at=row[14],
+                created_at=row[15],
+                updated_at=row[16],
+                deleted_at=row[17],
+                server_id=row[18],
+                kind=row[19],
+                unreachable_since=row[20],
+                base_version=row[21],
+                boot_seconds=row[22],
+                recovered_at=row[23],
+                cpus=row[24],
+                memory_mb=row[25],
+                disk_gb=row[26],
+                last_activity_at=row[27],
+                idle_timeout_minutes=row[28],
+                max_lifetime_minutes=row[29],
+            )
+
+    def page_tool_executions(self, *, sandbox_id: str, before_at: Optional[datetime.datetime], before_id: Optional[str], row_limit: int) -> Iterator[models.ToolExecution]:
+        result = self._conn.execute(sqlalchemy.text(PAGE_TOOL_EXECUTIONS), {
+            "p1": sandbox_id,
+            "p2": before_at,
+            "p3": before_id,
+            "p4": row_limit,
+        })
+        for row in result:
+            yield models.ToolExecution(
+                id=row[0],
+                session_id=row[1],
+                tool_name=row[2],
+                status=row[3],
+                input=row[4],
+                output=row[5],
+                error_message=row[6],
+                started_at=row[7],
+                completed_at=row[8],
+                created_at=row[9],
+            )
+
+    def page_webhook_deliveries(self, *, webhook_id: str, before_at: Optional[datetime.datetime], before_id: Optional[str], row_limit: int) -> Iterator[PageWebhookDeliveriesRow]:
+        result = self._conn.execute(sqlalchemy.text(PAGE_WEBHOOK_DELIVERIES), {
+            "p1": webhook_id,
+            "p2": before_at,
+            "p3": before_id,
+            "p4": row_limit,
+        })
+        for row in result:
+            yield PageWebhookDeliveriesRow(
+                id=row[0],
+                seq=row[1],
+                webhook_id=row[2],
+                event_id=row[3],
+                status=row[4],
+                attempts=row[5],
+                next_attempt_at=row[6],
+                last_error=row[7],
+                response_status=row[8],
+                created_at=row[9],
+                delivered_at=row[10],
+                event_type=row[11],
+            )
+
     def pause_agent_run(self, *, paused_by: Optional[str], id: str) -> Optional[models.AgentRun]:
         row = self._conn.execute(sqlalchemy.text(PAUSE_AGENT_RUN), {"p1": paused_by, "p2": id}).first()
         if row is None:
@@ -6480,6 +6711,9 @@ class Querier:
         for row in result:
             yield row[0]
 
+    def purge_idempotency_keys(self, *, created_at: datetime.datetime) -> None:
+        self._conn.execute(sqlalchemy.text(PURGE_IDEMPOTENCY_KEYS), {"p1": created_at})
+
     def purge_node_tokens(self, *, expires_at: datetime.datetime) -> None:
         self._conn.execute(sqlalchemy.text(PURGE_NODE_TOKENS), {"p1": expires_at})
 
@@ -6513,6 +6747,9 @@ class Querier:
             target=row[2],
             expires_at=row[3],
         )
+
+    def release_idempotency_key(self, *, owner: str, key: str) -> None:
+        self._conn.execute(sqlalchemy.text(RELEASE_IDEMPOTENCY_KEY), {"p1": owner, "p2": key})
 
     def release_lease(self, *, name: str, holder: str) -> None:
         self._conn.execute(sqlalchemy.text(RELEASE_LEASE), {"p1": name, "p2": holder})
@@ -6952,6 +7189,9 @@ class Querier:
     def set_usage_label(self, *, sandbox_id: str, key: str, value: str) -> None:
         self._conn.execute(sqlalchemy.text(SET_USAGE_LABEL), {"p1": sandbox_id, "p2": key, "p3": value})
 
+    def set_user_onboarded(self, *, id: str) -> None:
+        self._conn.execute(sqlalchemy.text(SET_USER_ONBOARDED), {"p1": id})
+
     def set_vault_secret_schedule(self, *, expires_at: Optional[datetime.datetime], rotate_every_days: Optional[int], id: str) -> None:
         self._conn.execute(sqlalchemy.text(SET_VAULT_SECRET_SCHEDULE), {"p1": expires_at, "p2": rotate_every_days, "p3": id})
 
@@ -7325,6 +7565,7 @@ class Querier:
             avatar_url=row[4],
             created_at=row[5],
             updated_at=row[6],
+            onboarded_at=row[7],
         )
 
     def update_vault_secret_description(self, *, description: Optional[str], id: str) -> None:

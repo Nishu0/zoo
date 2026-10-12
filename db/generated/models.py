@@ -183,6 +183,18 @@ class Export(pydantic.BaseModel):
     finished_at: Optional[datetime.datetime]
 
 
+class IdempotencyKey(pydantic.BaseModel):
+    owner: str
+    key: str
+    method: str
+    path: str
+    request_hash: str
+    status: Optional[int]
+    content_type: Optional[str]
+    response: Optional[str]
+    created_at: datetime.datetime
+
+
 class Job(pydantic.BaseModel):
     id: str
     sandbox_id: str
@@ -519,6 +531,7 @@ class User(pydantic.BaseModel):
     avatar_url: Optional[str]
     created_at: datetime.datetime
     updated_at: datetime.datetime
+    onboarded_at: Optional[datetime.datetime]
 
 
 class VaultSecret(pydantic.BaseModel):
