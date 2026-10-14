@@ -4,10 +4,6 @@ import json
 import os
 import re
 import shlex
-import shutil
-import socket
-import subprocess
-import sys
 import threading
 import time
 from contextlib import contextmanager
@@ -20,8 +16,9 @@ from server import egress, objects
 from server.errors import ZooError
 from server.guest import guest_endpoint, guest_env, hub
 from server.jobs import Wait
-from server.ssh import alive, execute, open_client, output_of
-from server.vnc import VNC, Channel, authenticate, password_of
+from server.ssh import alive, execute, open_client, output_of, private_key
+from server.ssh import public_key as host_public_key
+from server.vnc import VNC, password_of
 
 PREFIX = "macos:"
 BASE_VM = os.environ.get("ZOO_MACOS_BASE", "zoo-macos-base")
@@ -32,21 +29,19 @@ HOME = f"/Users/{USER}"
 ENV_FILE = f"{HOME}/.zoo/env"
 MAX_VMS = 2
 HOST_PATH = 'export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"; '
-LOCAL = "local://"
 SAFE_RULE = re.compile(r"^[A-Za-z0-9.:/_-]+$")
 ROOT = os.path.dirname(os.path.dirname(__file__))
-# zoo-guest for the VM, built by `make guest-darwin`; without it the VM's tools stay on SSH
 GUEST_BINARY = os.environ.get("ZOO_GUEST_DARWIN_BINARY", os.path.join(ROOT, "guest", "dist", "zoo-guest-darwin-arm64"))
 GUEST_LABEL = "com.zoo.guest"
 GUEST_PLIST = f"{HOME}/Library/LaunchAgents/{GUEST_LABEL}.plist"
 
 EGRESS_DIR = "$HOME/.zoovm/egress"
-EGRESS_BINARY = "$HOME/.zoovm/bin/zoo-guest"
+EGRESS_BINARY = "$HOME/.zoovm/bin/zoo-egress"
+EGRESS_BUILD = os.path.join(ROOT, "egress", "dist", "zoo-egress-darwin-arm64")
 
 hosts: dict[str, paramiko.SSHClient] = {}
 guests: dict[str, paramiko.SSHClient] = {}
-# root SSH sessions into VMs, or None for a base VM set up before guest-setup.sh allowed root logins
-roots: dict[str, paramiko.SSHClient | None] = {}
+roots: dict[str, paramiko.SSHClient] = {}
 urls: dict[str, str] = {}
 lock = threading.Lock()
 # one boot at a time per Mac, so two can't both see a free slot and start a third VM
@@ -70,48 +65,9 @@ def parse(runtime_id: str) -> tuple[str, str]:
     return server_id, name
 
 
-def is_local(server_id: str) -> bool:
-    url(server_id)
-    return urls[server_id] == LOCAL
-
-
-def local_available() -> bool:
-    return sys.platform == "darwin"
-
-
-def local_zoovm() -> bool:
-    dirs = [os.path.expanduser("~/.local/bin"), "/opt/homebrew/bin", "/usr/local/bin", os.environ.get("PATH", "")]
-    return local_available() and shutil.which("zoovm", path=os.pathsep.join(dirs)) is not None
-
-
-def ensure_local_server(user_id: str, workspace_id: str, db) -> None:
-    from db.generated.query import CreateServerParams
-
-    if not local_zoovm():
-        return
-    if any(s.docker_url == LOCAL for s in db.list_servers_by_workspace(workspace_id=workspace_id)):
-        return
-    import uuid
-
-    db.create_server(
-        CreateServerParams(
-            id=str(uuid.uuid4()),
-            name="This Mac",
-            docker_url=LOCAL,
-            bind_address="127.0.0.1",
-            created_by=user_id,
-            platform="macos",
-            capabilities="macos",
-            workspace_id=workspace_id,
-        )
-    )
-
-
-def connect(server_id: str, url: str) -> paramiko.SSHClient | None:
+def connect(server_id: str, url: str) -> paramiko.SSHClient:
     with lock:
         urls[server_id] = url
-        if url == LOCAL:
-            return None
         if alive(hosts.get(server_id)):
             return hosts[server_id]
         client = open_client(server_id, url)
@@ -144,24 +100,10 @@ def forget(server_id: str):
 
 
 def run(server_id: str, command: str, stdin: bytes | None = None, timeout: float = 60):
-    if is_local(server_id):
-        try:
-            done = subprocess.run(
-                ["/bin/bash", "-c", HOST_PATH + command],
-                input=stdin or b"",
-                capture_output=True,
-                timeout=timeout,
-                check=False,
-            )
-        except subprocess.TimeoutExpired:
-            raise TimeoutError(f"command timed out after {timeout}s")
-        return done.returncode, done.stdout, done.stderr
     return execute(host(server_id), HOST_PATH + command, stdin, timeout)
 
 
 def open_socket(server_id: str, address: tuple[str, int]):
-    if is_local(server_id):
-        return socket.create_connection(address, timeout=15)
     return host(server_id).get_transport().open_channel("direct-tcpip", address, ("127.0.0.1", 0), timeout=15)
 
 
@@ -171,14 +113,11 @@ def check(server_id: str, command: str, stdin: bytes | None = None, timeout: flo
 
 def probe(server_id: str, url: str) -> dict:
     try:
-        if url == LOCAL:
-            if not local_available():
-                raise RuntimeError("local:// only works when the API runs on the Mac itself")
-            urls[server_id] = url
-        else:
-            connect(server_id, url)
+        connect(server_id, url)
         check(server_id, "command -v zoovm")
         os_version = check(server_id, "sw_vers -productVersion").strip()
+        if int(os_version.split(".")[0]) < 14 or check(server_id, "uname -m").strip() != "arm64":
+            raise ZooError("not_supported", "macOS hosts require Apple Silicon and macOS 14 or later.")
         cpus, memory = check(server_id, "sysctl -n hw.ncpu hw.memsize").split()
         running = len(running_vms(server_id))
     except Exception as e:
@@ -186,7 +125,7 @@ def probe(server_id: str, url: str) -> dict:
         return {"online": False, "error": str(e)[:500]}
     return {
         "online": True,
-        "name": "this Mac" if url == LOCAL else urlparse(url).hostname,
+        "name": urlparse(url).hostname,
         "os": f"macOS {os_version}",
         "cpus": int(cpus),
         "memory_total": int(memory),
@@ -200,7 +139,7 @@ def running_vms(server_id: str) -> set[str]:
     return {r["name"] for r in json.loads(check(server_id, "zoovm list") or "[]") if r["state"] == "running"}
 
 
-def start(sandbox_id: str, server, env: dict[str, str], admin: bool = False) -> tuple[str, str]:
+def start(sandbox_id: str, server, env: dict[str, str], admin: bool = False) -> str:
     """Clones the base VM on first boot, runs it headless with a VNC server, and waits for SSH in the guest. Waits
     in the job queue (Wait) while the Mac already runs Apple's limit of macOS VMs."""
     server_id, name = server.id, vm_name(sandbox_id)
@@ -233,17 +172,15 @@ def start(sandbox_id: str, server, env: dict[str, str], admin: bool = False) -> 
                     "clone_seconds": round(time.monotonic() - started, 2),
                 },
             )
-        if name in running:
-            # a retried boot adopts the VM an earlier attempt started
-            url = check(server_id, f"zoovm vnc {name}").strip()
-        else:
-            url = boot(server_id, name)
+        # a retried boot adopts the VM an earlier attempt started
+        if name not in running:
+            boot(server_id, name)
     wait_for_guest(rid)
     set_admin(rid, admin)
     write_env(rid, env, ssh=True)
     hub.bind(rid, sandbox_id)
     install_guest(rid, sandbox_id)
-    return rid, url
+    return rid
 
 
 def vm_dir(name: str) -> str:
@@ -254,16 +191,6 @@ def base_of(rid: str) -> str | None:
     """The version of the base VM this sandbox was cloned from, or None for a clone older than base versions."""
     server_id, name = parse(rid)
     return run(server_id, f"cat {vm_dir(name)}/zoo-base 2>/dev/null")[1].decode(errors="replace").strip() or None
-
-
-def responsive(rid: str) -> bool:
-    """Whether the VM still draws: its VNC server answers with a frame."""
-    try:
-        with vnc(rid) as v:
-            v.screenshot()
-        return True
-    except Exception:
-        return False
 
 
 def boot(server_id: str, name: str) -> str:
@@ -296,16 +223,25 @@ def guest_client(rid: str) -> paramiko.SSHClient:
     # The guest sits on the Mac's private NAT network, reachable only from the Mac itself
     # (directly or through its SSH connection). Each clone gets fresh host keys, so there is nothing to pin.
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(ip, username=USER, sock=tunnel, timeout=15, banner_timeout=15, auth_timeout=15)
+    client.connect(
+        ip,
+        username=USER,
+        sock=tunnel,
+        pkey=private_key(),
+        allow_agent=False,
+        look_for_keys=False,
+        timeout=15,
+        banner_timeout=15,
+        auth_timeout=15,
+    )
     client.get_transport().set_keepalive(30)
     guests[rid] = client
     return client
 
 
-def root_client(rid: str) -> paramiko.SSHClient | None:
-    """An SSH session as root (guest-setup.sh installs the API's key for root), so the guest user needn't have sudo.
-    None for a base VM set up before that, whose guest user keeps passwordless sudo for Zoo's root commands."""
-    if rid in roots and (roots[rid] is None or alive(roots[rid])):
+def root_client(rid: str) -> paramiko.SSHClient:
+    """The root session installed by guest-setup.sh for bootstrap and privileged policy changes."""
+    if rid in roots and alive(roots[rid]):
         return roots[rid]
     server_id, name = parse(rid)
     ip = check(server_id, f"zoovm ip {name}").strip()
@@ -313,11 +249,19 @@ def root_client(rid: str) -> paramiko.SSHClient | None:
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     try:
         client.connect(
-            ip, username="root", sock=open_socket(server_id, (ip, 22)), timeout=15, banner_timeout=15, auth_timeout=15
+            ip,
+            username="root",
+            sock=open_socket(server_id, (ip, 22)),
+            pkey=private_key(),
+            allow_agent=False,
+            look_for_keys=False,
+            timeout=15,
+            banner_timeout=15,
+            auth_timeout=15,
         )
     except paramiko.AuthenticationException:
-        roots[rid] = None
-        return None
+        client.close()
+        raise ZooError("guest_unavailable", "the macOS guest has no root bootstrap key", "Run the base VM setup.")
     transport = client.get_transport()
     if transport is not None:
         transport.set_keepalive(30)
@@ -327,10 +271,7 @@ def root_client(rid: str) -> paramiko.SSHClient | None:
 
 def set_admin(rid: str, admin: bool):
     """The guest user is an administrator with passwordless sudo only in an admin sandbox; otherwise an agent can't
-    undo the VM's own pf rules or app policy. Needs the root session: an older base VM's user stays admin, since
-    taking sudo away would leave Zoo without root there."""
-    if root_client(rid) is None:
-        return
+    undo the VM's own pf rules or app policy."""
     if admin:
         script = (
             f"dseditgroup -o checkmember -m {USER} admin >/dev/null || dseditgroup -o edit -a {USER} -t user admin\n"
@@ -365,12 +306,9 @@ def guest(
     the VM up before its guest runs, and what only root can do."""
     command = f"cd {HOME} && {script}"
     if not root and not ssh:
-        return connected(rid).exec_run(["/bin/sh", "-c", command], stdin=stdin or b"", timeout=timeout)
+        return connected(rid).run(["/bin/sh", "-c", command], stdin=stdin or b"", timeout=timeout)
     if root:
-        client = root_client(rid)
-        if client is not None:
-            return execute(client, command, stdin, timeout)
-        command = f"sudo -n sh -c {shlex.quote(command)}"
+        return execute(root_client(rid), command, stdin, timeout)
     return execute(guest_client(rid), command, stdin, timeout)
 
 
@@ -403,10 +341,14 @@ def write_env(rid: str, env: dict[str, str], ssh: bool = False):
 
 def install_guest(rid: str, sandbox_id: str, timeout: float = 15):
     """Copies zoo-guest into the VM when it changed, writes its config, and (re)starts it as a LaunchAgent in the
-    auto-logged-in user's session. Every boot does this, so clones of an older base VM pick the guest up too."""
+    auto-logged-in user's session."""
     env = guest_env(sandbox_id, remote=True)
     if not env or not os.path.exists(GUEST_BINARY):
-        return
+        raise ZooError(
+            "guest_unavailable",
+            "the macOS guest build or connection address is missing",
+            "Build zoo-guest and configure the gateway address.",
+        )
     with open(GUEST_BINARY, "rb") as f:
         binary = f.read()
     path = f"{HOME}/.zoo/bin/zoo-guest"
@@ -452,6 +394,10 @@ def install_guest(rid: str, sandbox_id: str, timeout: float = 15):
     deadline = time.monotonic() + timeout
     while hub.for_sandbox(sandbox_id) is None and time.monotonic() < deadline:
         time.sleep(0.25)
+    if hub.for_sandbox(sandbox_id) is None:
+        raise ZooError(
+            "guest_unavailable", "the macOS guest did not connect", "Check the guest log and gateway address."
+        )
 
 
 def stop(rid: str):
@@ -574,17 +520,6 @@ def vnc(rid: str):
         channel.close()
 
 
-def authenticated_channel(rid: str):
-    channel, password = vnc_channel(rid)
-    try:
-        authenticate(Channel(channel), password)
-    except Exception:
-        channel.close()
-        raise
-    channel.settimeout(None)
-    return channel
-
-
 # a pattern per profile app for `pgrep -f`; the bracket keeps pgrep from matching the shell that runs it
 APP_PROCESSES = {
     "safari": "[S]afari.app/Contents/MacOS/Safari",
@@ -668,14 +603,14 @@ def guest_rule() -> list[str]:
 
 
 def ensure_egress(server_id: str):
-    """Runs the Mac's egress daemon (guest/egress.go), copying this API's build over when it changed. Its pf rules
+    """Runs the Mac's standalone egress daemon, copying this API's build over when it changed. Its pf rules
     stay loaded when it stops, so filtered VMs fail closed rather than open. The bracket in the process pattern
     keeps pkill and pgrep from matching the shell that runs them."""
     if run(server_id, "sudo -n /sbin/pfctl -s info >/dev/null")[0] != 0:
         raise RuntimeError(
             "network policy on macOS needs passwordless sudo for /sbin/pfctl on the Mac (see macos/README.md)"
         )
-    with open(GUEST_BINARY, "rb") as f:
+    with open(EGRESS_BUILD, "rb") as f:
         binary = f.read()
     digest = hashlib.sha256(binary).hexdigest()
     installed = run(server_id, f'shasum -a 256 "{EGRESS_BINARY}" 2>/dev/null')[1].split()[:1]
@@ -683,14 +618,14 @@ def ensure_egress(server_id: str):
         check(
             server_id,
             f'mkdir -p "$(dirname "{EGRESS_BINARY}")" && cat > "{EGRESS_BINARY}.new" && chmod 755 "{EGRESS_BINARY}.new" '
-            f'&& mv "{EGRESS_BINARY}.new" "{EGRESS_BINARY}" && (pkill -f "zoo-guest.-egres[s]" || true)',
+            f'&& mv "{EGRESS_BINARY}.new" "{EGRESS_BINARY}" && (pkill -f "zoo-egres[s].*-dir" || true)',
             stdin=binary,
             timeout=120,
         )
     check(
         server_id,
-        f'mkdir -p "{EGRESS_DIR}" && chmod 700 "{EGRESS_DIR}" && (pgrep -f "zoo-guest.-egres[s]" >/dev/null || '
-        f'nohup "{EGRESS_BINARY}" -egress "{EGRESS_DIR}" -log "$HOME/.zoovm/egress.log" >/dev/null 2>&1 < /dev/null &)',
+        f'mkdir -p "{EGRESS_DIR}" && chmod 700 "{EGRESS_DIR}" && (pgrep -f "zoo-egres[s].*-dir" >/dev/null || '
+        f'nohup "{EGRESS_BINARY}" -dir "{EGRESS_DIR}" -log "$HOME/.zoovm/egress.log" >/dev/null 2>&1 < /dev/null &)',
     )
 
 
@@ -705,7 +640,6 @@ def apply_apps(rid: str, effects: dict[str, str]):
 
 
 INSTALL_LOG = "~/.zoovm/install.log"
-PUBLIC_KEYS = ["id_ed25519.pub", "id_ecdsa.pub", "id_rsa.pub"]
 SETUP_SCRIPT = os.path.join(ROOT, "macos", "guest-setup.sh")
 
 
@@ -747,6 +681,11 @@ def base_ready(server_id: str) -> bool:
         return False
     try:
         ok = guest(base_id(server_id), "true", timeout=5, ssh=True)[0] == 0
+        if ok:
+            sandbox_id = f"base-{server_id}"
+            hub.bind(base_id(server_id), sandbox_id)
+            install_guest(base_id(server_id), sandbox_id)
+            connected(base_id(server_id), "a11y").call("a11y", {"max_nodes": 1}, timeout=5)
     except Exception:
         guests.pop(base_id(server_id), None)
         return False
@@ -790,12 +729,7 @@ def base_stop(server_id: str):
 
 
 def public_key() -> str:
-    for name in PUBLIC_KEYS:
-        path = os.path.expanduser(f"~/.ssh/{name}")
-        if os.path.exists(path):
-            with open(path) as f:
-                return f.read().strip()
-    raise RuntimeError("the API has no SSH public key in ~/.ssh")
+    return host_public_key()
 
 
 def base_setup(server_id: str):

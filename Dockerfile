@@ -16,13 +16,11 @@ RUN apt-get update && apt-get install -y \
     xfce4-terminal \
     xvfb \
     x11vnc \
-    novnc \
     supervisor \
     firefox-esr \
     dbus-x11 \
     at-spi2-core \
-    imagemagick \
-    xdotool \
+    earlyoom \
     nftables \
     curl \
     ca-certificates \
@@ -32,15 +30,26 @@ RUN apt-get update && apt-get install -y \
     procps \
     && rm -rf /var/lib/apt/lists/*
 
+# no thumbnailer or power manager in a sandbox; caches built here, not at each first boot
+RUN apt-get purge -y tumbler xfce4-power-manager xfce4-power-manager-plugins \
+    && apt-get autoremove -y && rm -rf /var/lib/apt/lists/* \
+    && fc-cache -f \
+    && for theme in /usr/share/icons/*/; do if [ -f "$theme/index.theme" ]; then gtk-update-icon-cache -f "$theme"; fi; done
+
+# the panel's default layout, so it starts without asking which one to use
+RUN mkdir -p /etc/xdg/xfce4/xfconf/xfce-perchannel-xml \
+    && cp /etc/xdg/xfce4/panel/default.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml
+
+# Firefox without first-run pages, update checks or default-browser prompts
+COPY firefox-policies.json /usr/lib/firefox-esr/distribution/policies.json
+
 RUN useradd -m -s /bin/bash zoo
+# a profile made at build, so the first launch doesn't make one
+RUN su zoo -c "HOME=/home/zoo firefox-esr --headless -CreateProfile default" >/dev/null 2>&1
 
 COPY --from=guest /zoo-guest /usr/local/bin/zoo-guest
 COPY supervisord.conf /etc/supervisor/conf.d/desktop.conf
 COPY sandbox-entrypoint.sh /usr/local/bin/sandbox-entrypoint
 RUN chmod 755 /usr/local/bin/sandbox-entrypoint
-
-# the API reaches x11vnc through the guest's tunnel and stops publishing 6080 (server/docker.py)
-LABEL zoo.guest.tunnel=1
-EXPOSE 6080
 
 CMD ["/usr/local/bin/sandbox-entrypoint"]

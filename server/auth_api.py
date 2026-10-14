@@ -10,17 +10,22 @@ import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import asyncpg
 import jwt
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from db.async_connection import async_db
+from db.async_generated.query import EnsureWorkspaceQuotaParams as AsyncQuotaParams
 from db.connection import IntegrityError, db_manager
 from db.generated.models import User
 from db.generated.query import CreateAPIKeyParams, CreateUserParams, Querier
 from logger.logger import logger
 from server import labels, quotas
+from server.cache import cache
 from server.limits import API_KEY, LOGIN_PER_EMAIL, LOGIN_PER_IP, SIGNUP_PER_IP, client_ip
+from server.writer import writer
 from utils.hash import PaswwordUtils
 from utils.time import to_stamp
 
@@ -113,6 +118,44 @@ def personal_workspace(user: User, db: Querier) -> str:
 
 def hash_key(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()
+
+
+async def sandbox_labels_async(sandbox_id: str) -> dict[str, str]:
+    async def load():
+        async with async_db.session() as db:
+            sandbox = await db.get_sandbox(id=sandbox_id)
+            found = {row.key: row.value async for row in db.list_sandbox_labels(sandbox_id=sandbox_id)}
+        return {"workspace_id": sandbox.workspace_id if sandbox else None, "labels": found}
+
+    return (await cache.get("sandbox_labels", sandbox_id, load))["labels"]
+
+
+async def personal_workspace_async(user) -> str:
+    slug = f"personal-{user.id}"
+    try:
+        async with async_db.session() as db:
+            workspace = await db.get_workspace_by_slug(slug=slug)
+            if workspace is not None:
+                return workspace.id
+            made = await db.create_workspace(id=str(uuid.uuid4()), name="Personal", slug=slug, created_by=user.id)
+            assert made is not None
+            await db.add_workspace_member(workspace_id=made.id, user_id=user.id, role="owner")
+            await db.ensure_workspace_quota(
+                AsyncQuotaParams(
+                    workspace_id=made.id,
+                    max_running_sandboxes=int(quotas.RUNNING) if quotas.RUNNING else None,
+                    max_cpus=float(quotas.CPUS) if quotas.CPUS else None,
+                    max_memory_mb=int(quotas.MEMORY) if quotas.MEMORY else None,
+                    max_storage_gb=int(quotas.STORAGE) if quotas.STORAGE else None,
+                )
+            )
+            return made.id
+    except asyncpg.UniqueViolationError:
+        async with async_db.session() as db:
+            workspace = await db.get_workspace_by_slug(slug=slug)
+            if workspace is None:
+                raise
+            return workspace.id
 
 
 class AuthRequst(BaseModel):
@@ -347,14 +390,75 @@ class AuthApi:
             raise HTTPException(status_code=404, detail="workspace not found")
         return Member(**user.model_dump(), workspace_id=workspace_id, role=membership.role)
 
-    def current_user(
+    async def user_from_token_async(self, token: str, workspace: str | None = None) -> Member | None:
+        is_key = token.startswith(API_KEY_PREFIX)
+        if is_key:
+            identity = hash_key(token)
+            subject = ""
+        else:
+            try:
+                assert self.secret is not None
+                claims = jwt.decode(token, self.secret, algorithms=[JWT_ALGORITHM])
+            except jwt.PyJWTError:
+                return None
+            subject = claims.get("sub")
+            if not isinstance(subject, str):
+                return None
+            identity = subject
+
+        async def load():
+            async with async_db.session() as db:
+                key = await db.get_api_key_by_hash(key_hash=identity) if is_key else None
+                if is_key and key is None:
+                    return None
+                user = await db.get_user(id=key.created_by if key is not None else subject)
+                if user is None:
+                    return None
+            workspace_id = key.workspace_id if key is not None else workspace or await personal_workspace_async(user)
+
+            async def load_membership():
+                async with async_db.session() as db:
+                    return await db.get_workspace_member(workspace_id=workspace_id, user_id=user.id)
+
+            membership = await cache.get("membership", f"{workspace_id}:{user.id}", load_membership)
+            if membership is None or membership.status != "active":
+                return None
+            role = (
+                ("viewer" if key.read_only or membership.role == "viewer" else "member")
+                if key is not None
+                else membership.role
+            )
+            member = Member(
+                **user.model_dump(),
+                workspace_id=workspace_id,
+                role=role,
+                key_id=key.id if key is not None else None,
+                key_sandbox_id=key.sandbox_id if key is not None else None,
+                key_labels=labels.parse_selector(key.label_selector) if key is not None else None,
+            )
+            if key is not None and (
+                key.last_used_at is None or (datetime.now(UTC) - key.last_used_at).total_seconds() > 60
+            ):
+                writer.enqueue("key_touch", (key.id, datetime.now(UTC)))
+            return {"workspace_id": workspace_id, "member": member, "expires_at": key.expires_at if key else None}
+
+        result = await cache.get("api_key" if is_key else "session_member", f"{identity}:{workspace or ''}", load)
+        if result is None or result["expires_at"] is not None and result["expires_at"] <= datetime.now(UTC):
+            return None
+        member = result["member"]
+        if is_key:
+            if workspace is not None and workspace != member.workspace_id:
+                raise HTTPException(status_code=403, detail="this API key belongs to another workspace")
+            API_KEY.check(member.key_id)
+        return member
+
+    async def current_user(
         self,
         request: Request,
         creds: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
-        db: Querier = Depends(db_manager.get_client),
         x_zoo_workspace: str | None = Header(default=None),
     ) -> Member:
-        user = self.user_from_token(creds.credentials, db, x_zoo_workspace or None)
+        user = await self.user_from_token_async(creds.credentials, x_zoo_workspace or None)
         if user is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -362,6 +466,7 @@ class AuthApi:
                 headers={"WWW-Authenticate": "Bearer"},
             )
         route = getattr(request.scope.get("route"), "path", request.url.path)
+        route = route.removeprefix("/v1")
         method = request.method
         writes = method not in ("GET", "HEAD") and not route.startswith(SELF_CHECKED)
         if writes and not user.can("member") and route not in VIEWER_WRITES:
@@ -378,7 +483,7 @@ class AuthApi:
             sandbox_id = request.path_params.get("sandbox_id")
             if sandbox_id is not None:
                 # as if it weren't there, like a sandbox in another workspace
-                if not labels.matches(labels.of(db, sandbox_id), user.key_labels):
+                if not labels.matches(await sandbox_labels_async(sandbox_id), user.key_labels):
                     raise HTTPException(status_code=404, detail="sandbox not found")
             elif (method, route) not in LABEL_KEY_ROUTES:
                 raise HTTPException(status_code=403, detail="this API key only reaches its labelled sandboxes")

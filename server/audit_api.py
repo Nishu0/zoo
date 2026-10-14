@@ -8,7 +8,6 @@ and scheduled backups, records itself with `system` (actor null, metadata.source
 
 Admins read the log with GET /audit-logs, filtered and paged, and export it as CSV."""
 
-import asyncio
 import base64
 import csv
 import io
@@ -23,10 +22,10 @@ from pydantic import BaseModel
 
 from db.connection import db_manager
 from db.generated.query import CreateAuditLogParams, ListAuditLogsParams, ListAuditLogsRow, Querier
-from logger.logger import logger
 from server import pages
 from server.auth_api import AuthApi, Member, require
 from server.limits import client_ip
+from server.writer import writer
 from utils.time import to_stamp
 
 EXPORT_PAGE = 1000
@@ -59,19 +58,18 @@ class AuditPage(BaseModel):
 
 def system(workspace_id: str, action: str, resource_type: str, resource_id: str | None, **metadata):
     """Records work no request started (idle stops, scheduled backups)."""
-    with db_manager.session() as db:
-        db.create_audit_log(
-            CreateAuditLogParams(
-                id=str(uuid.uuid4()),
-                workspace_id=workspace_id,
-                actor_id=None,
-                sandbox_id=resource_id if resource_type == "sandboxes" else None,
-                action=action,
-                resource_type=resource_type,
-                resource_id=resource_id,
-                metadata=json.dumps({"source": "system", **metadata}),
-            )
+    writer.audit(
+        CreateAuditLogParams(
+            id=str(uuid.uuid4()),
+            workspace_id=workspace_id,
+            actor_id=None,
+            sandbox_id=resource_id if resource_type == "sandboxes" else None,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            metadata=json.dumps({"source": "system", **metadata}),
         )
+    )
 
 
 def cursor_after(row: ListAuditLogsRow) -> str:
@@ -128,18 +126,8 @@ class AuditApi:
             resource_id=next(iter(params.values()), None),
             metadata=json.dumps(metadata),
         )
-        try:
-            await asyncio.to_thread(self.write, row)
-        except Exception as e:
-            # the write already happened; a lost entry is logged rather than failing it after the fact
-            logger.error("audit log write failed", extra={"action": row.action, "error": repr(e)})
+        writer.audit(row)
         return response
-
-    def write(self, row: CreateAuditLogParams):
-        with db_manager.session() as db:
-            # the workspace may be gone: the request deleted it
-            if db.get_workspace(id=row.workspace_id) is not None:
-                db.create_audit_log(row)
 
     def page(
         self,

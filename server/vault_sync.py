@@ -18,9 +18,9 @@ from dataclasses import dataclass
 
 from db.generated.query import Querier
 from logger.logger import logger
-from server import docker, metrics
+from server import metrics
 from server.guest import hub
-from server.runtime import VMS
+from server.runtime import SECRETS_DIR, VMS, write_secrets
 from server.security import secret_values, secrets_changed
 
 
@@ -50,9 +50,9 @@ def deliver(push: Push):
         return
     guest = hub.for_sandbox(push.sandbox_id)
     if guest is not None and guest.has("files"):
-        guest.call("write", {"path": f"{docker.SECRETS_DIR}/env.json", "mode": 0o600}, json.dumps(push.values).encode())
+        guest.call("write", {"path": f"{SECRETS_DIR}/env.json", "mode": 0o600}, json.dumps(push.values).encode())
     else:
-        docker.write_secrets(push.runtime_id, push.values)
+        write_secrets(push.runtime_id, push.values)
 
 
 def push_now(pushes: list[Push]) -> list[tuple[str, str]]:

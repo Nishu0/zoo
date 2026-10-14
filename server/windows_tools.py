@@ -1,4 +1,4 @@
-"""Tools for Windows sandboxes. Screen, mouse and keyboard go over VNC (server/vnc_tools.py); everything else goes
+"""Tools for Windows sandboxes. Screen, mouse and keyboard go through the gateway (server/registry.py); everything else goes
 through zoo-guest in the desktop session: window tools through its windows service, and app, shell and file tools as
 PowerShell."""
 

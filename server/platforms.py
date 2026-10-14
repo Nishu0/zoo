@@ -1,8 +1,7 @@
 """Which sandboxes each kind of host can run.
 
-A server is a host machine. Its platform is the host's OS, and its capabilities are the sandbox OSes it can run:
-every host runs sandboxes of its own OS, and Macs and Windows machines with Docker also run Linux sandboxes.
-The scheduler only places a sandbox on a server whose capabilities include the sandbox's OS.
+Registered servers are macOS and Windows hosts reached through zoo-node. Each runs sandboxes of its own OS.
+Linux sandboxes run on the installation's configured Docker or Kubernetes runtime.
 """
 
 import os
@@ -19,30 +18,31 @@ class Platform:
     requirements: str
 
 
+LINUX_PLATFORM = Platform(
+    "linux",
+    "Linux",
+    "This installation",
+    ("desktop", "browser", "code"),
+    ("linux",),
+    "Configured Docker or Kubernetes runtime; KVM and Kata Containers required",
+)
+
 PLATFORMS = {
-    "linux": Platform(
-        "linux",
-        "Linux",
-        "Linux server",
-        ("desktop", "browser", "code"),
-        ("linux",),
-        "Ubuntu or Debian, amd64 or arm64; KVM for VM isolation (otherwise runc)",
-    ),
     "macos": Platform(
         "macos",
         "macOS",
         "Mac",
         ("macos",),
-        ("macos", "linux"),
-        "Apple Silicon, macOS 13 or later, Remote Login on; Docker to also run Linux sandboxes",
+        ("macos",),
+        "Apple Silicon, macOS 14 or later, zoo-node and zoovm",
     ),
     "windows": Platform(
         "windows",
         "Windows",
         "Windows machine",
         ("windows",),
-        ("windows", "linux"),
-        "Windows 10/11 Pro, Enterprise or Education, or Server, with Hyper-V; Docker to also run Linux sandboxes",
+        ("windows",),
+        "Windows 10/11 Pro, Enterprise or Education, or Server, with Hyper-V and zoo-node",
     ),
 }
 
@@ -57,13 +57,15 @@ def parse(capabilities: str) -> set[str]:
     return {c for c in capabilities.split(",") if c}
 
 
-def capabilities_of(platform: str, docker: bool) -> str:
-    """The sandbox OSes a host can run, given its platform and whether it has a usable Docker."""
-    return ",".join(o for o in PLATFORMS[platform].runs if o != "linux" or platform == "linux" or docker)
+def capabilities_of(platform: str) -> str:
+    """The sandbox OSes a registered node host can run."""
+    return ",".join(PLATFORMS[platform].runs)
 
 
 def install_command(platform: str, public_key: str, api_url: str) -> str:
-    """The one line to paste on a new host. It checks the host, installs what it needs and authorizes our key."""
+    """Sets up a node host and authorizes the control plane's SSH identity."""
+    if platform not in PLATFORMS:
+        raise ValueError("node hosts must be macos or windows")
     if platform == "windows":
         return (
             f'powershell -ExecutionPolicy Bypass -c "& ([scriptblock]::Create((irm {INSTALL_URL}/install-node.ps1)))'

@@ -3,7 +3,7 @@
 The API uploads the helper scripts in windows/ to ~\\.zoovm on the host. Each guest runs TightVNC (screen, mouse and
 keyboard, tunnelled through the host's SSH connection) and zoo-guest in the desktop session, which serves every other
 tool. The guest has no SSH server: the host gives each VM its guest identity and zoo-guest updates through Hyper-V's
-Guest Service Interface (zoovm push), and zoo-guest dials the API at ZOO_GUEST_REMOTE_URL.
+Guest Service Interface (zoovm push), and zoo-guest dials the public API's guest endpoint.
 """
 
 import base64
@@ -15,7 +15,6 @@ import os
 import re
 import threading
 import time
-from contextlib import contextmanager
 
 import paramiko
 from cryptography.hazmat.decrepit.ciphers.algorithms import TripleDES
@@ -24,9 +23,8 @@ from cryptography.hazmat.primitives.ciphers import Cipher, modes
 from logger.logger import logger
 from server import egress, objects
 from server.errors import ZooError
-from server.guest import guest_endpoint, guest_env, hub
+from server.guest import GuestError, guest_endpoint, guest_env, hub
 from server.ssh import alive, execute, open_client, output_of
-from server.vnc import VNC, Channel, authenticate
 
 PREFIX = "windows:"
 BASE_VM = os.environ.get("ZOO_WINDOWS_BASE", "zoo-windows-base")
@@ -43,6 +41,7 @@ HELPER_DIR = os.path.join(ROOT, "windows")
 GUEST_BINARY = os.environ.get(
     "ZOO_GUEST_WINDOWS_BINARY", os.path.join(ROOT, "guest", "dist", "zoo-guest-windows-amd64.exe")
 )
+EGRESS_BUILD = os.path.join(ROOT, "egress", "dist", "zoo-egress-windows-amd64.exe")
 # zoo-guest in the VM: setup.ps1 installs it in the base VM, the host copies each VM its guest.env (zoovm push)
 GUEST_DIR = r"C:\ProgramData\zoo"
 GUEST_EXE = rf"{GUEST_DIR}\bin\zoo-guest.exe"
@@ -273,7 +272,7 @@ def exists(server_id: str, name: str) -> bool:
     return zoovm(server_id, "get", name)[0] == 0
 
 
-def start(sandbox_id: str, server, env: dict[str, str]) -> tuple[str, str]:
+def start(sandbox_id: str, server, env: dict[str, str]) -> str:
     """Clones the base VM's latest template on first boot, starts it, gives it its guest identity through Hyper-V,
     and waits until its zoo-guest connects."""
     require_guest_url()
@@ -309,23 +308,13 @@ def start(sandbox_id: str, server, env: dict[str, str]) -> tuple[str, str]:
     update_guest(rid, sandbox_id)
     set_vnc_password(rid)
     write_env(rid, env)
-    return rid, f"vnc://{guest_ip(rid)}:{VNC_PORT}"
+    return rid
 
 
 def base_of(rid: str) -> str | None:
     """The version of the template this sandbox was cloned from, or None for a clone older than template versions."""
     server_id, name = parse(rid)
     return zoovm(server_id, "base", name)[1].decode(errors="replace").strip() or None
-
-
-def responsive(rid: str) -> bool:
-    """Whether the VM still draws: its VNC server answers with a frame."""
-    try:
-        with vnc(rid) as v:
-            v.screenshot()
-        return True
-    except Exception:
-        return False
 
 
 def guest_ip(rid: str) -> str:
@@ -340,11 +329,7 @@ def tunnel(rid: str, port: int, address: str | None = None):
 
 
 def require_guest_url():
-    if guest_endpoint() is None:
-        raise RuntimeError(
-            "Windows sandboxes need ZOO_GUEST_REMOTE_URL: an address of the API the VMs can reach, for example "
-            "wss://zoo.example.com/guest/connect"
-        )
+    guest_endpoint()
 
 
 def connected(rid: str, service: str = "exec"):
@@ -361,7 +346,7 @@ def connected(rid: str, service: str = "exec"):
 
 def guest(rid: str, script: str, data: bytes = b"", timeout: float = 60):
     """Runs a PowerShell script in the guest through zoo-guest, in the desktop session with the user's elevated token."""
-    return connected(rid).exec_run(POWERSHELL_ARGV, stdin=payload(script, data, cwd=HOME), timeout=timeout)
+    return connected(rid).run(POWERSHELL_ARGV, stdin=payload(script, data, cwd=HOME), timeout=timeout)
 
 
 def guest_check(rid: str, script: str, data: bytes = b"", timeout: float = 60) -> str:
@@ -374,7 +359,7 @@ def guest_json(rid: str, script: str, timeout: float = 60):
 
 def guest_raw(rid: str, argv: list[str], stdin: bytes | None = None, timeout: float = 60):
     """Runs a program in the guest without PowerShell, for tools like tar that stream binary data."""
-    return connected(rid).exec_run(argv, stdin=stdin or b"", timeout=timeout)
+    return connected(rid).run(argv, stdin=stdin or b"", timeout=timeout)
 
 
 def desktop(rid: str, script: str, timeout: float = 30) -> str:
@@ -447,7 +432,7 @@ def wait_for_guest(sandbox_id: str, timeout: float = 600):
     while hub.for_sandbox(sandbox_id) is None:
         if time.monotonic() > deadline:
             raise RuntimeError(
-                "the Windows guest agent didn't connect: check that the VM reaches ZOO_GUEST_REMOTE_URL and read "
+                "the Windows guest agent didn't connect: check that the VM reaches ZOO_API_URL and read "
                 f"{GUEST_DIR}\\guest.log in the VM. A base VM built before zoo-guest replaced SSH has no guest: "
                 "reinstall it"
             )
@@ -466,10 +451,18 @@ def update_guest(rid: str, sandbox_id: str, timeout: float = 60):
         return
     server_id, name = parse(rid)
     push(server_id, name, upload_vm_guest(server_id), GUEST_EXE + ".new")
-    previous = connected(rid, "update")
-    previous.call("update", {}, timeout=30)
+    result, _ = connected(rid, "update").call("update", {}, timeout=30)
+    replacement_pid = int(result["pid"])
     deadline = time.monotonic() + timeout
-    while hub.for_sandbox(sandbox_id) in (None, previous):
+    while True:
+        try:
+            reported_pid = guest_check(
+                rid, '(Get-CimInstance Win32_Process -Filter "ProcessId = $PID").ParentProcessId', timeout=10
+            ).strip()
+            if reported_pid == str(replacement_pid):
+                return
+        except (GuestError, ZooError):
+            pass
         if time.monotonic() > deadline:
             raise RuntimeError("the Windows guest agent didn't come back after its update")
         time.sleep(0.25)
@@ -695,35 +688,6 @@ def is_running(rid: str) -> bool:
     return name in running_vms(server_id)
 
 
-def vnc_channel(rid: str):
-    """Connects to the guest's VNC server through the host's SSH connection."""
-    if rid not in vnc_set:
-        set_vnc_password(rid)
-    channel = tunnel(rid, VNC_PORT)
-    channel.settimeout(30)
-    return channel, vnc_password(rid)
-
-
-@contextmanager
-def vnc(rid: str):
-    channel, password = vnc_channel(rid)
-    try:
-        yield VNC(channel, password)
-    finally:
-        channel.close()
-
-
-def authenticated_channel(rid: str):
-    channel, password = vnc_channel(rid)
-    try:
-        authenticate(Channel(channel), password)
-    except Exception:
-        channel.close()
-        raise
-    channel.settimeout(None)
-    return channel
-
-
 def windows_path(path: str) -> str:
     if '"' in path:
         raise ValueError("paths can't contain double quotes")
@@ -821,13 +785,13 @@ $hostIp
 
 ENSURE_EGRESS = r"""
 $bin = Join-Path $env:USERPROFILE '.zoovm\bin'
-$exe = Join-Path $bin 'zoo-guest.exe'
+$exe = Join-Path $bin 'zoo-egress.exe'
 $dir = __DIR__
 New-Item -ItemType Directory -Force -Path $bin, $dir | Out-Null
 $data = Read-ZooInput
 if ($data.Length -gt 0) {
     Stop-ScheduledTask -TaskName __TASK__ -ErrorAction SilentlyContinue
-    Get-Process -Name zoo-guest -ErrorAction SilentlyContinue | Where-Object Path -eq $exe | Stop-Process -Force
+    Get-Process -Name zoo-egress -ErrorAction SilentlyContinue | Where-Object Path -eq $exe | Stop-Process -Force
     [IO.File]::WriteAllBytes($exe, $data)
 }
 if (-not (Get-NetFirewallRule -DisplayName 'zoo egress' -ErrorAction SilentlyContinue)) {
@@ -836,7 +800,7 @@ if (-not (Get-NetFirewallRule -DisplayName 'zoo egress' -ErrorAction SilentlyCon
 }
 if (-not (Get-ScheduledTask -TaskName __TASK__ -ErrorAction SilentlyContinue)) {
     $action = New-ScheduledTaskAction -Execute $exe `
-        -Argument ('-egress "{0}" -log "{1}"' -f $dir, (Join-Path $env:USERPROFILE '.zoovm\egress.log'))
+        -Argument ('-dir "{0}" -log "{1}"' -f $dir, (Join-Path $env:USERPROFILE '.zoovm\egress.log'))
     $trigger = New-ScheduledTaskTrigger -AtStartup
     $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Highest
     $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries `
@@ -873,13 +837,13 @@ def ps_list(values: list[str]) -> str:
 
 
 def ensure_egress(server_id: str):
-    """Runs the host's egress daemon (guest/egress.go) as a scheduled task, copying this API's build over when it
+    """Runs the host's standalone egress daemon as a scheduled task, copying this API's build over when it
     changed."""
-    with open(GUEST_BINARY, "rb") as f:
+    with open(EGRESS_BUILD, "rb") as f:
         binary = f.read()
     installed = check(
         server_id,
-        "$exe = Join-Path $env:USERPROFILE '.zoovm\\bin\\zoo-guest.exe'\n"
+        "$exe = Join-Path $env:USERPROFILE '.zoovm\\bin\\zoo-egress.exe'\n"
         "if (Test-Path -LiteralPath $exe) { (Get-FileHash -Algorithm SHA256 -LiteralPath $exe).Hash }",
     )
     if installed.strip().lower() == hashlib.sha256(binary).hexdigest():

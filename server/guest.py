@@ -1,42 +1,29 @@
-"""The API end of zoo-guest, the agent inside each Linux sandbox (see guest/).
-
-The guest dials /guest/connect, proves which sandbox it is with a per-sandbox token, and then serves tool calls over
-that one websocket. Tools ask the hub for a sandbox's guest and fall back to docker exec when it has none, so
-sandboxes booted before the guest existed keep working."""
+"""Gateway-backed guest calls, terminals and tunnels. Python never accepts guest connections."""
 
 import asyncio
+import contextlib
 import hashlib
 import hmac
-import itertools
 import json
 import logging
 import os
 import struct
-import threading
 import time
 import uuid
-from collections.abc import Callable
-from typing import Any, cast
-from urllib.parse import urlparse
-
-import websockets
-from fastapi import WebSocket
+from collections.abc import AsyncIterator
+from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from db.connection import db_manager
-from server import gateway
+from server.errors import ZooError
+from server.gateway_client import OwnershipChanged, client
+from server.gatewaypb import gateway_pb2 as protocol
 
 VERSION = 1
-HELLO_TIMEOUT = 10
-# what the guest dials: sandboxes on the API's own docker host use ZOO_GUEST_URL, sandboxes on remote servers can't
-# resolve that name and use ZOO_GUEST_REMOTE_URL. Unset leaves those sandboxes on the fallback path.
-# x11vnc's port inside a desktop sandbox, reached through a guest tunnel rather than a published port
 VNC_PORT = 5900
-# frames the guest pushes for an open stream rather than as a reply; the second set ends the stream
-STREAM_OPS = {"pty_data", "pty_exit", "tunnel_data", "tunnel_close"}
 STREAM_ENDS = {"pty_exit", "tunnel_close"}
-LOCAL_URL = os.environ.get("ZOO_GUEST_URL", "")
-REMOTE_URL = os.environ.get("ZOO_GUEST_REMOTE_URL", "")
-
+QUEUE_SIZE = 64
+STATUS_TTL = 1
 logger = logging.getLogger(__name__)
 
 
@@ -45,107 +32,111 @@ class GuestError(RuntimeError):
 
 
 def token(sandbox_id: str) -> str:
-    # derived rather than stored, so guests reconnect after an API restart
     key = (os.environ.get("ZOO_SECRETS_KEY") or os.environ["JWT_SECRET"]).encode()
     return hmac.new(key, f"zoo-guest:{sandbox_id}".encode(), hashlib.sha256).hexdigest()
 
 
-# access_url of a desktop whose VNC is reached through its guest, with no published port
-TUNNEL_URL = "guest://vnc"
+def remote_guest_url() -> str:
+    try:
+        target = urlsplit(os.environ.get("ZOO_API_URL", ""))
+        if (
+            target.scheme not in ("http", "https")
+            or not target.hostname
+            or target.username is not None
+            or target.query
+            or target.fragment
+        ):
+            raise ValueError("invalid public API URL")
+        if target.port is not None and not 1 <= target.port <= 65535:
+            raise ValueError("invalid public API port")
+    except ValueError as error:
+        raise ZooError(
+            "unavailable", "ZOO_API_URL is required for VM guests", "Set a public HTTP(S) API URL."
+        ) from error
+    scheme = "wss" if target.scheme == "https" else "ws"
+    return urlunsplit((scheme, target.netloc, target.path.rstrip("/") + "/guest/connect", "", ""))
 
 
 def guest_env(sandbox_id: str, remote: bool) -> dict[str, str]:
-    url = REMOTE_URL if remote else LOCAL_URL
-    if not url:
-        return {}
+    if remote:
+        url = remote_guest_url()
+    elif os.environ.get("ZOO_RUNTIME", "docker") == "docker":
+        url = "ws://gateway:8001/guest/connect"
+    elif os.environ.get("ZOO_RUNTIME") == "kube":
+        from server import kube
+
+        url = kube.guest_url()
+    else:
+        raise ZooError("bad_request", "ZOO_RUNTIME must be docker or kube")
     return {"ZOO_GUEST_URL": url, "ZOO_GUEST_TOKEN": token(sandbox_id), "ZOO_SANDBOX_ID": sandbox_id}
 
 
-def guest_endpoint() -> tuple[str, int] | None:
-    """The host and port VM guests dial, which a VM's network policy must always allow."""
-    target = urlparse(REMOTE_URL)
-    if not target.hostname:
-        return None
+def guest_endpoint() -> tuple[str, int]:
+    target = urlsplit(remote_guest_url())
+    assert target.hostname is not None
     return target.hostname, target.port or (443 if target.scheme == "wss" else 80)
 
 
 def pack(header: dict, payload: bytes = b"") -> bytes:
-    """A frame: 4-byte big-endian header length, JSON header, raw payload (file data, screenshots, output)."""
-    h = json.dumps(header, separators=(",", ":")).encode()
-    return struct.pack(">I", len(h)) + h + payload
+    encoded = json.dumps(header, separators=(",", ":")).encode()
+    return struct.pack(">I", len(encoded)) + encoded + payload
 
 
 def unpack(frame: bytes) -> tuple[dict, bytes]:
     if len(frame) < 4:
         raise ValueError("short frame")
-    (n,) = struct.unpack(">I", frame[:4])
-    if n > len(frame) - 4:
+    length = struct.unpack(">I", frame[:4])[0]
+    if length > len(frame) - 4:
         raise ValueError("header overruns frame")
-    return json.loads(frame[4 : 4 + n]), frame[4 + n :]
+    return json.loads(frame[4 : 4 + length]), frame[4 + length :]
+
+
+def reply(header_json: bytes, payload: bytes) -> tuple[dict, bytes]:
+    header = json.loads(header_json)
+    if not isinstance(header, dict):
+        raise GuestError("invalid guest reply")
+    if not header.get("ok"):
+        raise GuestError(header.get("error") or "guest error")
+    return header.get("result") or {}, payload
 
 
 class Guest:
-    """One connected guest. Tools call it from worker threads; its requests run on the loop that serves it."""
+    def __init__(self, sandbox_id: str, status: dict):
+        self.sandbox_id = sandbox_id
+        self.streams: dict[str, GuestStream] = {}
+        self.update_status(status)
 
-    def __init__(self, websocket: WebSocket, hello: dict):
-        self.websocket = websocket
-        self.loop = asyncio.get_running_loop()
-        self.version = hello.get("version")
-        self.os = hello.get("os", "")
-        self.services = set(hello.get("services") or [])
-        self.metrics: dict[str, Any] | None = None
-        # when it last sent anything; a guest with the metrics service sends every 10 seconds
-        self.seen = time.monotonic()
-        self.ids = itertools.count(1)
-        self.pending: dict[int, asyncio.Future] = {}
-        # terminal stream id -> what receives its pty_data and pty_exit frames
-        self.streams: dict[str, Callable[[dict, bytes], None]] = {}
+    @property
+    def loop(self):
+        return client.loop
+
+    def update_status(self, status: dict):
+        self.version = status.get("version")
+        self.os = status.get("os", "")
+        self.services = set(status.get("services") or [])
+        self.metrics = status.get("metrics")
+        self.seen = time.monotonic() - float(status.get("quiet") or 0)
 
     def has(self, service: str) -> bool:
         return service in self.services
 
     async def request(self, op: str, args: dict, payload: bytes, timeout: float) -> tuple[dict, bytes]:
-        request_id = next(self.ids)
-        future = self.loop.create_future()
-        self.pending[request_id] = future
-        try:
-            await self.websocket.send_bytes(pack({"id": request_id, "op": op, "args": args}, payload))
-            return await asyncio.wait_for(future, timeout)
-        finally:
-            self.pending.pop(request_id, None)
+        found = await client.guest_call(self.sandbox_id, op, args, payload, timeout)
+        return reply(found.header_json, found.payload)
 
     def call(self, op: str, args: dict, payload: bytes = b"", timeout: float = 600) -> tuple[dict, bytes]:
-        return asyncio.run_coroutine_threadsafe(self.request(op, args, payload, timeout), self.loop).result()
+        return client.sync(self.request(op, args, payload, timeout))
 
     async def call_async(self, op: str, args: dict, payload: bytes = b"", timeout: float = 30) -> tuple[dict, bytes]:
-        """call() for coroutines, from any event loop."""
-        return await asyncio.wrap_future(
-            asyncio.run_coroutine_threadsafe(self.request(op, args, payload, timeout), self.loop)
-        )
+        return await self.request(op, args, payload, timeout)
 
     async def notify(self, op: str, args: dict, payload: bytes = b""):
-        """Sends a frame the guest doesn't answer; the guest applies them in the order they're sent."""
-        frame = pack({"op": op, "args": args}, payload)
-        await asyncio.wrap_future(asyncio.run_coroutine_threadsafe(self.websocket.send_bytes(frame), self.loop))
+        stream = self.streams.get(args.get("stream", ""))
+        if stream is None:
+            raise GuestError("guest stream is closed")
+        await stream.send(op, args, payload)
 
-    def resolve(self, header: dict, payload: bytes):
-        future = self.pending.get(header.get("id", 0))
-        if future is None or future.done():
-            return
-        if header.get("ok"):
-            future.set_result((header.get("result") or {}, payload))
-        else:
-            future.set_exception(GuestError(header.get("error") or "guest error"))
-
-    def disconnected(self):
-        for future in self.pending.values():
-            if not future.done():
-                future.set_exception(GuestError("guest disconnected"))
-        for deliver in list(self.streams.values()):
-            deliver({"op": "pty_exit", "exit_code": None, "error": "guest disconnected"}, b"")
-        self.streams.clear()
-
-    def exec_run(
+    def run(
         self,
         argv: list[str],
         env: dict[str, str] | None = None,
@@ -165,118 +156,233 @@ class Guest:
     def write(self, path: str, data: bytes):
         self.call("write", {"path": path}, data)
 
-    def screenshot(self, display: str, format: str, scale: float, quality: int) -> bytes:
-        args = {"display": display, "format": format, "scale": scale, "quality": quality}
-        return self.call("screenshot", args, timeout=30)[1]
-
-    def screen_diff(self, display: str, session: str, format: str, scale: float, quality: int) -> tuple[dict, bytes]:
-        args = {"display": display, "session": session, "format": format, "scale": scale, "quality": quality}
-        return self.call("screen_diff", args, timeout=30)
-
-    def wait_until_stable(self, display: str, timeout: float, quiet_ms: int, threshold: float) -> dict:
-        args = {"display": display, "timeout_ms": int(timeout * 1000), "quiet_ms": quiet_ms, "threshold": threshold}
-        return self.call("wait_until_stable", args, timeout=timeout + 10)[0]
-
     def probe_tunnel(self, port: int) -> bool:
-        """Whether a tunnel to the port opens, for waiting on a service in the sandbox to come up."""
-        stream = uuid.uuid4().hex
-        try:
-            self.call("tunnel_open", {"stream": stream, "port": port}, timeout=10)
-        except Exception:
-            return False
-        # whatever the port sends before the close arrives for no stream and is dropped
-        frame = pack({"op": "tunnel_close", "args": {"stream": stream}})
-        asyncio.run_coroutine_threadsafe(self.websocket.send_bytes(frame), self.loop).result()
-        return True
+        async def probe():
+            tunnel = Tunnel(self)
+            try:
+                await asyncio.wait_for(tunnel.open(port), 10)
+                return True
+            except (GuestError, ZooError, TimeoutError):
+                return False
+            finally:
+                await tunnel.close()
+
+        return client.sync(probe())
 
 
-class Terminal:
-    """A shell on a pseudo-terminal in the sandbox. Output and the exit arrive on `events` on the loop that opened
-    it, as ("data", bytes) and then ("exit", exit code or None)."""
-
-    def __init__(self, guest: Guest):
+class GuestStream:
+    def __init__(self, guest: Guest, operation: str):
         self.guest = guest
+        self.operation = operation
         self.stream = uuid.uuid4().hex
-        self.loop = asyncio.get_running_loop()
-        self.events: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
+        self.outgoing: asyncio.Queue[protocol.Frame] = asyncio.Queue(QUEUE_SIZE)
+        self.opened: asyncio.Future | None = None
+        self.task: asyncio.Task | None = None
+        self.closed = False
 
-    def deliver(self, header: dict, payload: bytes):
-        event = ("data", payload) if header.get("op") == "pty_data" else ("exit", header.get("exit_code"))
-        self.loop.call_soon_threadsafe(self.events.put_nowait, event)
-
-    async def open(self, cols: int, rows: int, argv: list[str] | None = None):
-        # registered before asking, since output can arrive ahead of the reply
-        self.guest.streams[self.stream] = self.deliver
+    async def start_stream(self, args: dict):
+        if self.task is not None or self.closed:
+            raise GuestError("guest stream is already opened or closed")
+        self.opened = asyncio.get_running_loop().create_future()
+        initial = protocol.Frame(
+            sandbox_id=self.guest.sandbox_id,
+            header_json=json.dumps({"id": 1, "op": self.operation, "args": {"stream": self.stream, **args}}).encode(),
+        )
+        self.guest.streams[self.stream] = self
+        self.task = asyncio.create_task(self.run(initial), name=f"guest-{self.operation}-{self.stream}")
         try:
-            await self.guest.call_async(
-                "pty_open", {"stream": self.stream, "argv": argv or [], "cols": cols, "rows": rows}
-            )
+            await asyncio.wait_for(asyncio.shield(self.opened), 30)
         except BaseException:
-            self.guest.streams.pop(self.stream, None)
+            await self.close()
             raise
 
-    async def write(self, data: bytes):
-        await self.guest.notify("pty_input", {"stream": self.stream}, data)
+    async def frames(self, initial: protocol.Frame) -> AsyncIterator[protocol.Frame]:
+        yield initial
+        while True:
+            yield await self.outgoing.get()
 
-    async def resize(self, cols: int, rows: int):
-        await self.guest.notify("pty_resize", {"stream": self.stream, "cols": cols, "rows": rows})
+    async def run(self, initial: protocol.Frame):
+        try:
+            for attempt in range(2):
+                try:
+                    async with contextlib.aclosing(
+                        client.guest_stream(self.guest.sandbox_id, self.frames(initial))
+                    ) as stream:
+                        async for frame in stream:
+                            header = json.loads(frame.header_json)
+                            if header.get("id") == 1:
+                                reply(frame.header_json, frame.payload)
+                                if self.opened is not None and not self.opened.done():
+                                    self.opened.set_result(None)
+                            else:
+                                self.deliver(header, frame.payload)
+                                if header.get("op") in STREAM_ENDS:
+                                    return
+                    return
+                except OwnershipChanged as error:
+                    if attempt or not error.before_dispatch:
+                        raise
+                    await client.refresh()
+        except Exception as error:
+            if self.opened is not None and not self.opened.done():
+                self.opened.set_exception(error)
+            logger.debug("guest stream ended", exc_info=True)
+        finally:
+            self.closed = True
+            self.guest.streams.pop(self.stream, None)
+            if self.opened is not None and not self.opened.done():
+                self.opened.set_exception(GuestError("guest stream closed before opening"))
+            self.ended()
+
+    async def send(self, op: str, args: dict, payload: bytes):
+        if self.closed:
+            raise GuestError("guest stream is closed")
+        frame = protocol.Frame(
+            sandbox_id=self.guest.sandbox_id, header_json=json.dumps({"op": op, "args": args}).encode(), payload=payload
+        )
+        try:
+            async with asyncio.timeout(5):
+                await self.outgoing.put(frame)
+        except TimeoutError as error:
+            await self.close()
+            raise ZooError("unavailable", "guest stream writer is backpressured") from error
 
     async def close(self):
-        if self.guest.streams.pop(self.stream, None) is not None:
+        self.closed = True
+        self.guest.streams.pop(self.stream, None)
+        if self.task is not None and self.task is not asyncio.current_task():
+            self.task.cancel()
             try:
-                await self.guest.notify("pty_kill", {"stream": self.stream})
-            except Exception:
-                logger.debug("terminal already gone", exc_info=True)
-
-
-class Tunnel:
-    """A byte stream to a port on the sandbox's loopback. read() returns b"" once either end closes it."""
-
-    def __init__(self, guest: Guest):
-        self.guest = guest
-        self.stream = uuid.uuid4().hex
-        self.loop = asyncio.get_running_loop()
-        self.received: asyncio.Queue[bytes] = asyncio.Queue()
+                async with asyncio.timeout(5):
+                    await self.task
+            except (asyncio.CancelledError, TimeoutError):
+                pass
+        self.ended()
+        if self.opened is not None and self.opened.done() and not self.opened.cancelled():
+            self.opened.exception()
 
     def deliver(self, header: dict, payload: bytes):
-        data = payload if header.get("op") == "tunnel_data" else b""
-        self.loop.call_soon_threadsafe(self.received.put_nowait, data)
+        raise NotImplementedError
+
+    def ended(self):
+        raise NotImplementedError
+
+
+class Terminal(GuestStream):
+    def __init__(self, guest: Guest):
+        super().__init__(guest, "pty_open")
+        self.events: asyncio.Queue[tuple[str, Any]] = asyncio.Queue(QUEUE_SIZE)
+        self.exited = False
+
+    async def open(self, cols: int, rows: int, argv: list[str] | None = None):
+        await super().start_stream({"argv": argv or [], "cols": cols, "rows": rows})
+
+    def deliver(self, header: dict, payload: bytes):
+        if header.get("op") == "pty_data":
+            try:
+                self.events.put_nowait(("data", payload))
+            except asyncio.QueueFull as error:
+                raise ZooError("unavailable", "terminal reader is backpressured") from error
+        elif header.get("op") == "pty_exit":
+            self.ended(header.get("exit_code"))
+
+    def ended(self, code: int | None = None):
+        if not self.exited:
+            self.exited = True
+            if self.events.full():
+                self.events.get_nowait()
+            self.events.put_nowait(("exit", code))
+
+    async def write(self, data: bytes):
+        await self.send("pty_input", {"stream": self.stream}, data)
+
+    async def resize(self, cols: int, rows: int):
+        await self.send("pty_resize", {"stream": self.stream, "cols": cols, "rows": rows}, b"")
+
+
+class Tunnel(GuestStream):
+    def __init__(self, guest: Guest):
+        super().__init__(guest, "tunnel_open")
+        self.received: asyncio.Queue[bytes] = asyncio.Queue(QUEUE_SIZE)
+        self.exited = False
 
     async def open(self, port: int):
-        # registered before asking, since the port can speak first (an RFB banner) ahead of the reply
-        self.guest.streams[self.stream] = self.deliver
-        try:
-            await self.guest.call_async("tunnel_open", {"stream": self.stream, "port": port})
-        except BaseException:
-            self.guest.streams.pop(self.stream, None)
-            raise
+        await super().start_stream({"port": port})
+
+    def deliver(self, header: dict, payload: bytes):
+        if header.get("op") == "tunnel_data":
+            try:
+                self.received.put_nowait(payload)
+            except asyncio.QueueFull as error:
+                raise ZooError("unavailable", "tunnel reader is backpressured") from error
+        elif header.get("op") == "tunnel_close":
+            self.ended()
+
+    def ended(self):
+        if not self.exited:
+            self.exited = True
+            if self.received.full():
+                self.received.get_nowait()
+            self.received.put_nowait(b"")
 
     async def read(self) -> bytes:
+        if self.exited and self.received.empty():
+            return b""
         return await self.received.get()
 
     async def write(self, data: bytes):
-        await self.guest.notify("tunnel_write", {"stream": self.stream}, data)
-
-    async def close(self):
-        if self.guest.streams.pop(self.stream, None) is not None:
-            try:
-                await self.guest.notify("tunnel_close", {"stream": self.stream})
-            except Exception:
-                logger.debug("tunnel already gone", exc_info=True)
+        await self.send("tunnel_write", {"stream": self.stream}, data)
 
 
 class Hub:
     def __init__(self):
         self.guests: dict[str, Guest] = {}
         self.runtimes: dict[str, str] = {}
+        self.statuses: dict[str, tuple[float, dict]] = {}
 
     def bind(self, runtime_id: str, sandbox_id: str):
         self.runtimes[runtime_id] = sandbox_id
 
-    def for_runtime(self, runtime_id: str) -> Guest | None:
-        """The guest serving a container, or None to use the fallback path."""
-        if not self.guests and not gateway.enabled():
+    async def status_async(self, sandbox_id: str) -> dict:
+        client.owner(sandbox_id)
+        cached = self.statuses.get(sandbox_id)
+        if cached is not None and time.monotonic() - cached[0] < STATUS_TTL:
+            return cached[1]
+        status = await client.guest_status(sandbox_id)
+        if not status.connected:
+            await self.drop_async(sandbox_id)
+            found = {"connected": False}
+        else:
+            found = {
+                "connected": True,
+                "version": status.version,
+                "os": status.os,
+                "services": list(status.services),
+                "metrics": json.loads(status.metrics_json) if status.metrics_json else None,
+                "quiet": status.quiet_seconds,
+                "heartbeat": status.heartbeat,
+            }
+        self.statuses[sandbox_id] = (time.monotonic(), found)
+        return found
+
+    def status(self, sandbox_id: str) -> dict:
+        return client.sync(self.status_async(sandbox_id))
+
+    async def for_sandbox_async(self, sandbox_id: str) -> Guest | None:
+        status = await self.status_async(sandbox_id)
+        if not status["connected"]:
             return None
+        guest = self.guests.get(sandbox_id)
+        if guest is None:
+            guest = self.guests[sandbox_id] = Guest(sandbox_id, status)
+        else:
+            guest.update_status(status)
+        return guest
+
+    def for_sandbox(self, sandbox_id: str) -> Guest | None:
+        return client.sync(self.for_sandbox_async(sandbox_id))
+
+    def sandbox_of(self, runtime_id: str) -> str | None:
         sandbox_id = self.runtimes.get(runtime_id)
         if sandbox_id is None:
             with db_manager.session() as db:
@@ -284,46 +390,17 @@ class Hub:
             if sandbox is None:
                 return None
             sandbox_id = self.runtimes[runtime_id] = sandbox.id
-        guest = self.for_sandbox(sandbox_id)
-        if guest is None:
-            return None
-        try:
-            if asyncio.get_running_loop() is guest.loop:
-                # a blocking call from the guest's own loop would deadlock it
-                return None
-        except RuntimeError:
-            pass
-        return guest
+        return sandbox_id
 
-    def status(self, sandbox_id: str) -> dict:
-        guest = self.guests.get(sandbox_id)
-        if guest is None:
-            return {"connected": False}
-        return {
-            "connected": True,
-            "version": guest.version,
-            "os": guest.os,
-            "services": sorted(guest.services),
-            "metrics": guest.metrics,
-        }
+    def for_runtime(self, runtime_id: str) -> Guest | None:
+        sandbox_id = self.sandbox_of(runtime_id)
+        return None if sandbox_id is None else self.for_sandbox(sandbox_id)
 
     def heartbeat(self, sandbox_id: str, within: float = 45) -> bool:
-        """Whether the sandbox's guest is connected and, when it reports metrics, has been heard from lately."""
-        guest = self.guests.get(sandbox_id)
-        return guest is not None and (not guest.has("metrics") or time.monotonic() - guest.seen < within)
-
-    def for_sandbox(self, sandbox_id: str) -> Guest | None:
-        return self.guests.get(sandbox_id)
-
-    def wait_for_vnc(self, sandbox_id: str, timeout: float = 30) -> bool:
-        """Waits for the sandbox's guest to connect and reach x11vnc, which is when its desktop can be viewed."""
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            guest = self.for_sandbox(sandbox_id)
-            if guest is not None and guest.has("tunnel") and guest.probe_tunnel(VNC_PORT):
-                return True
-            time.sleep(0.25)
-        return False
+        status = self.status(sandbox_id)
+        return bool(status.get("connected")) and (
+            "metrics" not in status.get("services", []) or status["quiet"] < within
+        )
 
     def wait_for_guest(self, sandbox_id: str, timeout: float = 30) -> bool:
         deadline = time.monotonic() + timeout
@@ -333,164 +410,40 @@ class Hub:
             time.sleep(0.25)
         return False
 
-    def drop(self, sandbox_id: str):
-        guest = self.guests.get(sandbox_id)
+    def wait_for_vnc(self, sandbox_id: str, timeout: float = 30) -> bool:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            guest = self.for_sandbox(sandbox_id)
+            if guest is not None and guest.has("tunnel") and guest.probe_tunnel(VNC_PORT):
+                return True
+            time.sleep(0.25)
+        return False
+
+    def wait_for_desktop(self, sandbox_id: str, timeout: float = 30) -> bool:
+        """Whether the sandbox's desktop came up in time: its VNC server answers and a window manager runs."""
+        deadline = time.monotonic() + timeout
+        if not self.wait_for_vnc(sandbox_id, timeout):
+            return False
+        guest = self.for_sandbox(sandbox_id)
+        if guest is None:
+            return False
+        left = max(0.0, deadline - time.monotonic())
+        result, _ = guest.call("desktop_ready", {"display": ":1", "timeout_ms": int(left * 1000)}, timeout=left + 5)
+        return bool(result.get("ready"))
+
+    async def drop_async(self, sandbox_id: str):
+        self.statuses.pop(sandbox_id, None)
+        guest = self.guests.pop(sandbox_id, None)
         if guest is not None:
-            asyncio.run_coroutine_threadsafe(guest.websocket.close(), guest.loop)
-
-    async def serve(self, websocket: WebSocket):
-        sandbox_id = websocket.headers.get("x-zoo-sandbox", "")
-        auth = websocket.headers.get("authorization", "")
-        if not sandbox_id or not hmac.compare_digest(auth.encode(), f"Bearer {token(sandbox_id)}".encode()):
-            await websocket.close(code=1008, reason="unauthorized")
-            return
-        await websocket.accept()
-        try:
-            hello, _ = unpack(await asyncio.wait_for(websocket.receive_bytes(), HELLO_TIMEOUT))
-        except Exception:
-            await websocket.close(code=1002, reason="expected hello")
-            return
-        if hello.get("op") != "hello" or hello.get("version") != VERSION:
-            await websocket.close(code=1008, reason=f"unsupported guest version; the API speaks {VERSION}")
-            return
-        guest = Guest(websocket, hello)
-        previous = self.guests.get(sandbox_id)
-        self.guests[sandbox_id] = guest
-        if previous is not None:
-            previous.disconnected()
-        logger.info("guest connected", extra={"sandbox_id": sandbox_id, "services": sorted(guest.services)})
-        try:
-            while True:
-                header, payload = unpack(await websocket.receive_bytes())
-                guest.seen = time.monotonic()
-                op = header.get("op")
-                if op == "metrics":
-                    guest.metrics = header.get("data")
-                elif op in STREAM_OPS:
-                    deliver = guest.streams.get(header.get("stream", ""))
-                    if op in STREAM_ENDS:
-                        guest.streams.pop(header.get("stream", ""), None)
-                    if deliver is not None:
-                        deliver(header, payload)
-                else:
-                    guest.resolve(header, payload)
-        except Exception:
-            logger.debug("guest connection ended", extra={"sandbox_id": sandbox_id}, exc_info=True)
-        finally:
-            guest.disconnected()
-            if self.guests.get(sandbox_id) is guest:
-                del self.guests[sandbox_id]
-            logger.info("guest disconnected", extra={"sandbox_id": sandbox_id})
-
-
-class RelaySocket:
-    """A gateway relay (a websockets client connection) under the names a Guest sends with."""
-
-    def __init__(self, connection):
-        self.connection = connection
-
-    async def send_bytes(self, data: bytes):
-        await self.connection.send(data)
-
-    async def close(self):
-        await self.connection.close()
-
-
-class RemoteHub(Hub):
-    """The guests of a process that reaches them through the gateway (server/gateway.py). Each guest in use gets one
-    relay, a websocket to the gateway that speaks the guest protocol; the Guest on this side works as if the guest
-    were connected here. Relays run on a loop of their own, so callers on any loop or thread can use them."""
-
-    def __init__(self):
-        super().__init__()
-        self.loop: asyncio.AbstractEventLoop | None = None
-        self.started = threading.Lock()
-        self.status_of = gateway.Cached()
-
-    def background(self) -> asyncio.AbstractEventLoop:
-        with self.started:
-            if self.loop is None:
-                loop = asyncio.new_event_loop()
-                threading.Thread(target=loop.run_forever, daemon=True, name="guest-relays").start()
-                self.loop = loop
-            return self.loop
-
-    def for_sandbox(self, sandbox_id: str) -> Guest | None:
-        guest = self.guests.get(sandbox_id)
-        if guest is not None:
-            return guest
-        if not self.status_of(f"/internal/guests/{sandbox_id}").get("connected"):
-            return None
-        try:
-            return asyncio.run_coroutine_threadsafe(self.open(sandbox_id), self.background()).result(15)
-        except Exception as e:
-            logger.warning("guest relay failed", extra={"sandbox_id": sandbox_id, "error": str(e)})
-            return None
-
-    async def open(self, sandbox_id: str) -> Guest:
-        if sandbox_id in self.guests:
-            return self.guests[sandbox_id]
-        connection = await websockets.connect(
-            gateway.ws_url(f"/internal/guests/{sandbox_id}/relay"),
-            additional_headers=gateway.headers(),
-            max_size=None,
-            open_timeout=10,
-        )
-        try:
-            first = await asyncio.wait_for(connection.recv(), HELLO_TIMEOUT)
-            hello, _ = unpack(first if isinstance(first, bytes) else first.encode())
-        except BaseException:
-            await connection.close()
-            raise
-        guest = Guest(cast(Any, RelaySocket(connection)), hello)
-        self.liveness(guest, hello)
-        self.guests[sandbox_id] = guest
-        asyncio.create_task(self.read(sandbox_id, guest, connection))
-        return guest
-
-    @staticmethod
-    def liveness(guest: Guest, frame: dict):
-        guest.metrics = frame.get("metrics")
-        guest.seen = time.monotonic() - float(frame.get("quiet") or 0)
-
-    async def read(self, sandbox_id: str, guest: Guest, connection):
-        try:
-            async for frame in connection:
-                header, payload = unpack(frame if isinstance(frame, bytes) else frame.encode())
-                op = header.get("op")
-                if op == "metrics":
-                    self.liveness(guest, header)
-                elif op in STREAM_OPS:
-                    deliver = guest.streams.get(header.get("stream", ""))
-                    if op in STREAM_ENDS:
-                        guest.streams.pop(header.get("stream", ""), None)
-                    if deliver is not None:
-                        deliver(header, payload)
-                else:
-                    guest.resolve(header, payload)
-        except Exception:
-            logger.debug("guest relay closed", extra={"sandbox_id": sandbox_id}, exc_info=True)
-        finally:
-            guest.disconnected()
-            if self.guests.get(sandbox_id) is guest:
-                del self.guests[sandbox_id]
-
-    def status(self, sandbox_id: str) -> dict:
-        found = self.status_of(f"/internal/guests/{sandbox_id}")
-        if not found.get("connected"):
-            return {"connected": False}
-        return {k: v for k, v in found.items() if k != "heartbeat"}
-
-    def heartbeat(self, sandbox_id: str, within: float = 45) -> bool:
-        guest = self.guests.get(sandbox_id)
-        if guest is not None:
-            return super().heartbeat(sandbox_id, within)
-        return bool(self.status_of(f"/internal/guests/{sandbox_id}").get("heartbeat"))
+            await asyncio.gather(*(stream.close() for stream in list(guest.streams.values())))
 
     def drop(self, sandbox_id: str):
-        guest = self.guests.get(sandbox_id)
-        if guest is not None:
-            asyncio.run_coroutine_threadsafe(guest.websocket.close(), guest.loop)
+        client.sync(self.drop_async(sandbox_id))
+
+    async def shutdown(self):
+        await asyncio.gather(*(self.drop_async(identity) for identity in list(self.guests)))
+        self.runtimes.clear()
+        self.statuses.clear()
 
 
-hub = RemoteHub() if gateway.enabled() else Hub()
+hub = Hub()

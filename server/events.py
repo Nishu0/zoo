@@ -4,17 +4,23 @@ Database triggers (db/migrations, zoo_event) write each event in the transaction
 the zoo_event channel with the workspace's id:
 
 - sandbox.state: a sandbox's status changed ({status, previous, error})
+- server.state: a server changed, its node reported, or its connection changed ({server_id})
+- pool.state: pool settings or inventory changed ({server_id, kind})
+- snapshot.state / job.state: a sandbox's snapshot or job changed
+- webhook.delivery: a delivery was created or attempted ({webhook_id, delivery_id, status, attempts})
+- kubernetes.state: a requirements check completed
 
 GET /events pages through them; GET /events/stream follows them as server-sent events, each with its seq as the
 event id, so a client that reconnects with Last-Event-ID gets what it missed. Webhooks (server/webhooks.py) get the
-same events. API keys for one sandbox, or for some labels, see only their sandboxes' events. Events are kept
+same events except webhook.delivery, which is only for SSE to avoid recursive deliveries. API keys for one
+sandbox, or for some labels, see only their sandboxes' events. Events are kept
 ZOO_EVENT_RETENTION_DAYS (7 by default)."""
 
 import asyncio
 import json
 import os
 from collections.abc import AsyncIterator
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import psycopg
 from fastapi import APIRouter, Depends, Header, Query
@@ -22,10 +28,10 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from db.connection import db_manager
-from db.generated.models import Event
+from db.generated.models import Event, Server
 from db.generated.query import ListEventsParams, ListLateEventsParams, Querier
 from logger.logger import logger
-from server import idempotency, labels, workers
+from server import idempotency, labels, metrics, workers
 from server.auth_api import AuthApi, Member
 from server.jobs import stamp
 from utils.time import to_stamp
@@ -62,6 +68,18 @@ def event_response(event: Event) -> EventResponse:
         sandbox_id=event.sandbox_id,
         data=json.loads(event.data),
         created_at=to_stamp(event.created_at),
+    )
+
+
+def server_state(db: Querier, server: Server, online: bool | None = None) -> None:
+    data: dict = {"server_id": server.id}
+    if online is not None:
+        data["online"] = online
+    db.emit_event(
+        workspace_id=server.workspace_id,
+        sandbox_id=None,
+        type="server.state",
+        data=json.dumps(data),
     )
 
 
@@ -126,6 +144,7 @@ async def follow(user: Member, after: int, sandbox_id: str | None, type: str | N
 
     def frame(row: Event) -> str:
         sent[row.seq] = row.created_at
+        metrics.event_delivery.record((datetime.now(UTC) - row.created_at).total_seconds(), {"channel": "sse"})
         return f"id: {row.seq}\nevent: {row.type}\ndata: {event_response(row).model_dump_json()}\n\n"
 
     async with await psycopg.AsyncConnection.connect(db_manager.url, autocommit=True) as conn:

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import secrets
@@ -6,6 +7,7 @@ from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from db.async_connection import async_db
 from db.connection import db_manager
 from db.generated.models import Sandbox
 from db.generated.query import CreateAuditLogParams, Querier
@@ -64,6 +66,21 @@ def encrypt(value: str, db: Querier, scope: str) -> str:
 
 def decrypt(token: str) -> str:
     return decrypt_bytes(token.encode()).decode()
+
+
+async def decrypt_async(token: str) -> str:
+    if not token.startswith("zk1:"):
+        raise InvalidToken
+    key_id, encrypted = token[4:].split(":", 1)
+    cipher = _data_keys.get(key_id)
+    if cipher is None:
+        async with async_db.session() as db:
+            row = await db.get_secret_key(id=key_id)
+        if row is None:
+            raise InvalidToken
+        cipher = Fernet(await asyncio.to_thread(kms.unwrap, row.wrapped))
+        _data_keys[key_id] = cipher
+    return cipher.decrypt(encrypted.encode()).decode()
 
 
 def encrypt_bytes(data: bytes, db: Querier, scope: str) -> bytes:

@@ -1,15 +1,13 @@
 import asyncio
 from datetime import UTC, datetime
 
-import docker
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from db.connection import db_manager
 from db.generated.query import Querier
-from server import kube
+from server import runtime
 from server.auth_api import AuthApi, Member
-from server.docker import docker_client as client
 from server.guest import hub
 
 
@@ -34,21 +32,9 @@ def cpu(stats):
     return round((cpu_delta / system_delta) * online_cpus * 100, 2)
 
 
-def collect_container(container):
-    attrs = container.attrs
-    state = attrs.get("State", {})
-    config = attrs.get("Config", {})
-    name = container.name
-
+def collect_container(stats: dict):
     result = {
-        "id": container.id,
-        "name": name,
-        "image": config.get("Image", "unknown"),
-        "status": state.get("Status", "unknown"),
-        "health": state.get("Health", {}).get("Status", "unknown"),
-        "restart_count": attrs.get("RestartCount", 0),
-        "exit_code": state.get("ExitCode", 0),
-        "started_at": state.get("StartedAt"),
+        "status": "running",
         "cpu_percent": 0,
         "memory_usage": 0,
         "memory_limit": 0,
@@ -61,12 +47,7 @@ def collect_container(container):
         "collected_at": datetime.now(UTC).isoformat(),
     }
 
-    if result["status"] != "running":
-        return result
-
     try:
-        stats = container.stats(stream=False)
-
         memory = stats.get("memory_stats", {})
         memory_usage = memory.get("usage", 0)
         cache = memory.get("stats", {}).get("inactive_file", 0)
@@ -159,17 +140,16 @@ class MonitoringApi:
         ) -> MonitoringResponse:
             sandboxes = list(db.list_sandboxes_by_workspace(workspace_id=user.workspace_id))
             try:
-                info = await asyncio.to_thread(kube.host_info if kube.enabled() else client.info)
+                info = await asyncio.to_thread(runtime.local_info)
                 running = [
                     s
                     for s in sandboxes
                     if s.status == "running" and s.runtime_id and s.kind not in ("macos", "windows")
                 ]
                 containers = await asyncio.gather(*[asyncio.to_thread(self._collect, s.runtime_id) for s in running])
-            except docker.errors.DockerException as exc:
-                raise HTTPException(status_code=503, detail=f"docker unavailable: {exc}")
-            except kube.KubeError as exc:
-                raise HTTPException(status_code=503, detail=f"kubernetes unavailable: {exc}")
+            except runtime.RUNTIME_ERRORS as exc:
+                name = "kubernetes" if runtime.is_kube() else "docker"
+                raise HTTPException(status_code=503, detail=f"{name} unavailable: {exc}")
 
             # docker stats only reach containers on this host; a sandbox's guest reports from anywhere
             containers = [c if c is not None else guest_usage(s.id) for s, c in zip(running, containers)]
@@ -203,10 +183,8 @@ class MonitoringApi:
             )
 
     def _collect(self, container_id: str):
-        if kube.owns(container_id):
-            # a pod's usage comes from its guest (guest_usage)
-            return None
         try:
-            return collect_container(client.containers.get(container_id))
-        except docker.errors.NotFound:
+            stats = runtime.local_stats(container_id)
+            return stats if runtime.is_kube() or stats is None else collect_container(stats)
+        except runtime.NOT_FOUND_ERRORS:
             return None

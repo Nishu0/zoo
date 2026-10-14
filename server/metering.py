@@ -19,11 +19,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from db.connection import db_manager
-from db.generated.query import AddUsageParams, Querier
+from db.generated.query import Querier
 from logger.logger import logger
 from server import labels, sizes, workers
 from server.auth_api import AuthApi, Member, require
 from server.jobs import stamp
+from server.writer import writer
 from utils.time import to_stamp
 
 METER_SECONDS = 60
@@ -33,12 +34,7 @@ MAX_DAYS = 366
 
 
 def add(db: Querier, workspace_id: str, sandbox_id: str, metric: str, quantity: float, at: datetime | None = None):
-    if quantity:
-        db.add_usage(
-            AddUsageParams(
-                workspace_id=workspace_id, sandbox_id=sandbox_id, metric=metric, quantity=quantity, at=at or stamp()
-            )
-        )
+    writer.usage(workspace_id, sandbox_id, metric, quantity, at or stamp())
 
 
 def meter():

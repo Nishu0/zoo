@@ -6,6 +6,7 @@ import uvicorn
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from db.async_connection import async_db
 from db.connection import db_manager
 from logger.logger import logger
 from mcp_tools.server import build_mcp
@@ -13,30 +14,34 @@ from server import (
     backups,
     errors,
     events,
-    gateway,
     health,
     idempotency,
     metering,
-    nodes,
     objects,
+    requirements,
     webhooks,
     workers,
 )
 from server.admin_api import AdminApi
 from server.audit_api import AuditApi
 from server.auth_api import AuthApi
+from server.cache import cache
 from server.events import EventsApi
+from server.gateway_client import client
+from server.guest import hub
 from server.metering import UsageApi
 from server.monitor import MonitoringApi
+from server.nodes import hub as node_hub
 from server.nodes_api import NodesApi
 from server.policy_api import SandboxPolicyApi
 from server.sandbox_api import SandboxApi
-from server.servers_api import ServersApi, prepull_images
+from server.servers_api import ServersApi
 from server.telemetry import setup_telemetry
 from server.vault_api import VaultApi, remind
 from server.viewer_api import ViewerApi
 from server.webhooks import WebhooksApi
 from server.workspaces_api import WorkspacesApi
+from server.writer import writer
 
 
 async def housekeeping():
@@ -53,40 +58,55 @@ class Server:
     def __init__(self, port=8000):
         @asynccontextmanager
         async def lifespan(app: FastAPI):
-            with db_manager.session() as db:
-                if workers.works():
-                    prepull_images(list(db.list_all_servers()))
-            # every process holds its own node streams, since each reaches hosts through them, unless a gateway
-            # holds them for all (server/gateway.py)
-            node_server = None
-            if os.environ.get("ZOO_NODE_PORT") != "off" and not gateway.enabled():
-                node_server, _ = await asyncio.to_thread(nodes.serve)
             background: list[asyncio.Task] = []
-            if workers.works():
-                background = [
-                    asyncio.create_task(self.sandbox_api.watch()),
-                    asyncio.create_task(self.sandbox_api.pool.run()),
-                    asyncio.create_task(self.sandbox_api.expire_loop()),
-                    asyncio.create_task(backups.loop(self.sandbox_api)),
-                    asyncio.create_task(housekeeping()),
-                    asyncio.create_task(events.purge_loop()),
-                    asyncio.create_task(webhooks.loop()),
-                    asyncio.create_task(metering.loop()),
-                ]
-                jobs = asyncio.create_task(self.sandbox_api.jobs.run())
-            else:
-                jobs = None
-            async with self.mcp.session_manager.run():
-                yield
-            # drain: unfinished jobs are requeued and resume on the next start
-            for task in background:
-                task.cancel()
-            await asyncio.gather(*background, return_exceptions=True)
-            await self.sandbox_api.jobs.shutdown()
-            if jobs is not None:
-                jobs.cancel()
-            if node_server is not None:
-                await asyncio.to_thread(nodes.stop, node_server)
+            jobs = None
+            await client.start()
+            try:
+                await async_db.start()
+                await writer.start()
+                await cache.start()
+                failed = await asyncio.to_thread(requirements.failures)
+                if failed:
+                    raise RuntimeError("\n".join(failed))
+                if workers.works():
+                    background = [
+                        asyncio.create_task(self.sandbox_api.watch()),
+                        asyncio.create_task(self.sandbox_api.pool.run()),
+                        asyncio.create_task(self.sandbox_api.expire_loop()),
+                        asyncio.create_task(self.sandbox_api.pause_loop()),
+                        asyncio.create_task(backups.loop(self.sandbox_api)),
+                        asyncio.create_task(housekeeping()),
+                        asyncio.create_task(events.purge_loop()),
+                        asyncio.create_task(webhooks.loop()),
+                        asyncio.create_task(metering.loop()),
+                    ]
+                    jobs = asyncio.create_task(self.sandbox_api.jobs.run())
+                async with self.mcp.session_manager.run():
+                    yield
+            finally:
+                try:
+                    await self.servers_api.shutdown()
+                    for task in background:
+                        task.cancel()
+                    await asyncio.gather(*background, return_exceptions=True)
+                    await self.sandbox_api.jobs.shutdown()
+                    if jobs is not None:
+                        jobs.cancel()
+                        await asyncio.gather(jobs, return_exceptions=True)
+                finally:
+                    try:
+                        await asyncio.gather(hub.shutdown(), node_hub.shutdown())
+                    finally:
+                        try:
+                            await writer.close()
+                        finally:
+                            try:
+                                await client.shutdown()
+                            finally:
+                                try:
+                                    await cache.close()
+                                finally:
+                                    await async_db.close()
 
         self.app = FastAPI(lifespan=lifespan)
         setup_telemetry(self.app)
@@ -107,11 +127,9 @@ class Server:
         db_manager.init_db()
         objects.require()
 
-        # the versioned API; /healthz, /readyz, /embed, /mcp, /guest/connect and /internal/* stay unprefixed
+        # the versioned API; probes, embedded viewers and MCP stay unprefixed
         v1 = APIRouter(prefix="/v1")
         health.register(self.app)
-        if workers.ROLE == "gateway":
-            gateway.register(self.app)
         self.auth_api = AuthApi(v1)
         self.sandbox_api = SandboxApi(v1, self.auth_api, self.app)
         self.policy_api = SandboxPolicyApi(v1, self.auth_api, self.sandbox_api)
@@ -131,11 +149,14 @@ class Server:
         self.app.mount("/mcp", self.mcp.streamable_http_app(streamable_http_path="/"))
 
     def start(self, import_string: str = "main:app"):
+        reload = os.environ.get("RELOAD", "1") == "1"
         uvicorn.run(
             import_string,
             host=os.environ.get("HOST", "127.0.0.1"),
             port=int(os.environ.get("PORT", self.port)),
-            reload=os.environ.get("RELOAD", "1") == "1",
+            reload=reload,
+            # one process when reloading from source; uvicorn can't do both
+            workers=None if reload else int(os.environ.get("ZOO_API_WORKERS") or os.cpu_count() or 1),
             # long-lived connections (desktop viewers, agent streams) get this long to close before shutdown
             timeout_graceful_shutdown=15,
         )

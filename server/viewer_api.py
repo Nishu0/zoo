@@ -1,9 +1,9 @@
 """Viewer links: signed URLs to a sandbox's screen, to embed in another app or to share with an end user or a support
-person. A view link only watches: the proxy drops its input (server/vnc.py, Gate), whatever the page does. A control
+person. A view link only watches: the gateway drops its input, whatever the page does. A control
 link's input reaches the sandbox.
 
 A link is a random token; only its SHA-256 is stored. GET /embed/{token} is a page with nothing but the screen,
-which only the origins in ZOO_EMBED_ORIGINS may frame (none when unset); its websocket is /embed/{token}/ws.
+which only the origins in ZOO_EMBED_ORIGINS may frame (none when unset); its websocket is /v1/embed/{token}/ws.
 Revoking a link, or its expiry, disconnects its viewers within LINK_CHECK_SECONDS."""
 
 import asyncio
@@ -24,15 +24,15 @@ from db.generated.query import CreateViewerLinkParams, Querier
 from logger.logger import logger
 from server.auth_api import AuthApi, Member, require
 from server.jobs import stamp
+from server.registry import has_screen
 from server.sandbox_api import SandboxApi
-from server.vnc import Gate
 from utils.time import to_stamp
 
 MAX_HOURS = int(os.environ.get("ZOO_MAX_VIEWER_LINK_HOURS", "24"))
 # who may put /embed pages in a frame: space- or comma-separated origins, as CSP frame-ancestors takes them
 EMBED_ORIGINS = os.environ.get("ZOO_EMBED_ORIGINS", "").replace(",", " ").split()
 TOKEN_PREFIX = "zv_"
-NOVNC = "https://cdn.jsdelivr.net/npm/@novnc/novnc@1.6.0/core/rfb.js"
+RFB_CLIENT = "https://cdn.jsdelivr.net/npm/@novnc/novnc@1.6.0/core/rfb.js"
 
 
 def hash_token(token: str) -> str:
@@ -98,7 +98,7 @@ class ViewerApi:
         self.app = app
         self.auth = auth
         self.sandboxes = sandboxes
-        # routes that are not part of the versioned API (/embed/{token}...)
+        # the embed page is not part of the versioned API (/embed/{token})
         self.unversioned = unversioned
         self._register_routes()
 
@@ -170,7 +170,7 @@ class ViewerApi:
                 return HTMLResponse(GONE, status_code=404, headers=headers)
             return HTMLResponse(page(token, link.mode), headers=headers)
 
-        @self.unversioned.get("/embed/{token}/state", response_model=EmbedStateResponse)
+        @self.app.get("/embed/{token}/state", response_model=EmbedStateResponse)
         def embed_state(token: str) -> EmbedStateResponse:
             with db_manager.session() as db:
                 link = self.link(token, db)
@@ -180,7 +180,7 @@ class ViewerApi:
                 sandbox_status=sandbox.status if sandbox is not None else "deleted",
             )
 
-        self.unversioned.websocket("/embed/{token}/ws")(self.screen)
+        self.app.websocket("/embed/{token}/ws")(self.screen)
 
     def link(self, token: str, db: Querier) -> ViewerLink:
         link = db.get_live_viewer_link(token_hash=hash_token(token))
@@ -205,11 +205,10 @@ class ViewerApi:
         if link is None:
             await websocket.close(code=1008, reason="this link was revoked or has expired")
             return
-        if sandbox is None or sandbox.status != "running" or not sandbox.access_url:
+        if sandbox is None or sandbox.status != "running" or not has_screen(sandbox.kind):
             await websocket.close(code=1008, reason="sandbox not available")
             return
-        gate = Gate(view_only=link.mode == "view")
-        await self.sandboxes.screen(websocket, sandbox, gate, lambda: live(link.id))
+        await self.sandboxes.screen(websocket, sandbox, link.mode == "view", lambda: live(link.id))
 
 
 GONE = """<!doctype html><meta charset="utf-8"><title>Link expired</title>
@@ -234,14 +233,13 @@ def page(token: str, mode: str) -> str:
 <body><div id="screen"></div><div id="status">Connecting…</div>
 <script id="config" type="application/json">{config}</script>
 <script type="module">
-import RFB from "{NOVNC}";
+import RFB from "{RFB_CLIENT}";
 const {{ token, mode }} = JSON.parse(document.getElementById("config").textContent);
-const base = location.pathname.replace(/\\/$/, "");
 const status = document.getElementById("status");
 const tell = (type, extra = {{}}) => parent !== window && parent.postMessage({{ source: "zoo", type, ...extra }}, "*");
 
 function connect() {{
-  const url = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + base + "/ws";
+  const url = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + '/v1/embed/'+token+'/ws';
   const rfb = new RFB(document.getElementById("screen"), url);
   rfb.scaleViewport = true;
   rfb.background = "#000";

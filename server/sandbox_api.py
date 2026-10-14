@@ -4,12 +4,14 @@ import contextlib
 import inspect
 import json
 import os
+import secrets
 import time
 import uuid
-from collections.abc import Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
-import websockets
+import psycopg
 from fastapi import (
     APIRouter,
     Depends,
@@ -23,6 +25,7 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
+from db.async_connection import async_db
 from db.connection import db_manager
 from db.generated.models import Job, Sandbox, SandboxImageVersion
 from db.generated.query import (
@@ -35,35 +38,34 @@ from db.generated.query import (
 from logger.logger import logger
 from server import (
     audit_api,
-    docker,
-    kube,
     labels,
     macos,
     metrics,
-    nodes,
     objects,
     pages,
     quotas,
+    runtime,
     sizes,
     tickets,
+    vm_control,
     windows,
     workers,
 )
 from server.auth_api import AuthApi, Member, require, require_sandbox
-from server.docker import IMAGE, copy_volume, default_image, run_container, wait_for_vnc, write_secrets
+from server.cache import cache
 from server.errors import ZooError
-from server.executions import ExecutionLog
-from server.guest import TUNNEL_URL, VNC_PORT, Terminal, Tunnel, guest_env, hub
+from server.gateway_client import client
+from server.guest import Terminal, guest_env, hub
 from server.images import MEDIA_TYPES
 from server.jobs import WAITING, Jobs
 from server.platforms import PLATFORMS, os_of, parse
 from server.pool import Pool
-from server.proxy import forward_client_to_target, forward_target_to_client
-from server.registry import KINDS, TOOLS, open_url
+from server.registry import KINDS, TOOLS, has_screen, open_url, responsive
 from server.runtime import (
+    IMAGE,
     VMS,
-    authenticated_channel,
     connect,
+    default_image,
     export_home,
     import_dir,
     import_home,
@@ -73,26 +75,28 @@ from server.runtime import (
     remove_snapshot,
     remove_volume,
     restore_snapshot,
+    run_container,
     snapshot,
+    write_secrets,
 )
 from server.schema import ExecRequest, ExecResponse
 from server.security import (
     VNC_PASSWORD,
+    _booted,
     audit,
     decrypt,
+    decrypt_async,
     decrypt_bytes,
     enforce,
     ensure_vnc_password,
     forget_secrets,
     redact,
-    redaction_values,
     remember_secrets,
     secret_env,
-    vnc_password,
 )
 from server.telemetry import tracer
 from server.tools import FileSystem, ShellTools
-from server.vnc import NO_AUTH, VERSION, Buffered, Gate, authenticate_async
+from server.writer import writer
 from utils.time import to_stamp
 
 IMAGE_SLUG = "zoo-sandbox"
@@ -147,34 +151,40 @@ BROWSER_HOME = os.environ.get("ZOO_BROWSER_HOME", "https://duckduckgo.com")
 BOOT_DEADLINE = {"linux": 3 * 60, "vm": 10 * 60}
 # a macOS or Windows VM that neither draws nor sends its guest heartbeat for this long is restarted
 HANG_SECONDS = 60
+# how long a create may spend handing warm sandboxes over before it gives up
+WARM_CEILING = 10
+# a provisioning sandbox with no job this long after its last change was left by a create that died
+STRANDED_SECONDS = 60
+# a stopped Linux sandbox stays paused this long, then is deleted down to its volume
+PAUSE_MINUTES = float(os.environ.get("ZOO_PAUSE_MINUTES", "30"))
+# below this share of free memory on a node, its paused sandboxes are deleted first, oldest first
+PRESSURE_SHARE = 0.1
+SWEEP_SECONDS = 10
 
 
-def vnc_up(host: str | None, port: int | None) -> bool:
-    """Whether a published desktop port answers; run_container always gives both for one."""
-    return host is not None and port is not None and wait_for_vnc(host, port)
+async def relay_screen(websocket: WebSocket, identity: str, view_only: bool):
+    """Relays an accepted viewer websocket to a VNC session in the gateway (a sandbox's, or "base:<server id>"),
+    which plays the VNC server to the viewer and drops a view-only viewer's input."""
+
+    async def received() -> AsyncIterator[bytes]:
+        while True:
+            message = await websocket.receive()
+            if message["type"] == "websocket.disconnect":
+                return
+            yield message.get("bytes") or (message.get("text") or "").encode()
+
+    try:
+        async for data in client.viewer_stream(identity, view_only, received()):
+            await websocket.send_bytes(data)
+    except Exception as e:
+        logger.error("viewer error", extra={"screen": identity, "error": repr(e)})
+    finally:
+        if websocket.client_state.name != "DISCONNECTED":
+            await websocket.close()
 
 
 def boot_deadline(kind: str) -> int:
     return BOOT_DEADLINE["vm" if kind in VMS else "linux"]
-
-
-async def offer_no_auth(websocket: WebSocket) -> bytes:
-    """Plays the VNC server's side of the handshake to the browser, offering no auth because the API has already
-    authenticated upstream. Returns what the browser sent past it (its ClientInit) for the caller to pass on."""
-
-    async def receive() -> bytes:
-        message = await websocket.receive()
-        if message["type"] == "websocket.disconnect":
-            raise ConnectionError("viewer disconnected")
-        return message.get("bytes") or (message.get("text") or "").encode()
-
-    viewer = Buffered(receive)
-    await websocket.send_bytes(VERSION)
-    await viewer.read(12)
-    await websocket.send_bytes(bytes([1, NO_AUTH]))
-    await viewer.read(1)
-    await websocket.send_bytes((0).to_bytes(4, "big"))
-    return viewer.data
 
 
 class CreateSandboxRequest(BaseModel):
@@ -227,6 +237,7 @@ class LifecycleRequest(BaseModel):
 
 class MoveSandboxRequest(BaseModel):
     server_id: str | None = None
+    node_name: str | None = Field(default=None, min_length=1, max_length=253)
 
 
 class JobResponse(BaseModel):
@@ -251,6 +262,8 @@ class SandboxResponse(BaseModel):
     created_at: str
     # the runtime host didn't answer the last health check; the sandbox may still be fine
     unreachable: bool = False
+    # stopped but frozen in place: the next start resumes it instantly, until the pause sweeper deletes it
+    resumable: bool = False
     # the boot, stop, delete or move in progress, if any
     job: JobResponse | None = None
     # the image a Linux sandbox boots from; it stays on it across upgrades until restarted on the new one
@@ -303,21 +316,6 @@ EXPIRE_SECONDS = 60
 LINK_CHECK_SECONDS = 15
 
 
-def local_memory() -> int | None:
-    """This machine's available memory, on Linux; None elsewhere (Docker Desktop's VM has its own). On Kubernetes,
-    the most any sandbox node has left unrequested."""
-    if kube.enabled():
-        return kube.free_memory()
-    try:
-        with open("/proc/meminfo") as f:
-            for line in f:
-                if line.startswith("MemAvailable:"):
-                    return int(line.split()[1]) * 1024
-    except OSError:
-        pass
-    return None
-
-
 class SnapshotRequest(BaseModel):
     name: str = Field(default="", max_length=100)
 
@@ -356,6 +354,7 @@ def to_response(
         started_at=to_stamp(sandbox.started_at),
         created_at=to_stamp(sandbox.created_at),
         unreachable=sandbox.unreachable_since is not None,
+        resumable=sandbox.status == "stopped" and sandbox.paused_at is not None,
         job=JobResponse(
             **{k: getattr(job, k) for k in JobResponse.model_fields if k not in ("waiting", "deadline")},
             deadline=to_stamp(job.deadline),
@@ -392,7 +391,7 @@ class SandboxApi:
         self.viewers: set[asyncio.Task] = set()
         self.probed: dict[str, float] = {}
         self.pool = Pool()
-        self.executions = ExecutionLog()
+        self.executions = writer
         self.jobs.register("boot", self.boot, attempts=3, backoff=(5, 15), failed=self.boot_failed)
         self.jobs.register("stop", self.stop, attempts=3, backoff=(5, 15), failed=self.lifecycle_failed("stop"))
         self.jobs.register(
@@ -432,18 +431,14 @@ class SandboxApi:
             return pages.Page(data=[to_response(s, db, labelled.get(s.id, {})) for s in rows], next_cursor=after)
 
         @self.app.post("/sandboxes", response_model=SandboxResponse, status_code=201)
-        def create_sandbox(payload: CreateSandboxRequest, user: Member = Depends(current_user)) -> SandboxResponse:
-            with db_manager.session() as db:
-                sandbox = self.create(payload, user, db)
-                response = to_response(sandbox, db)
-            self.jobs.kick()
-            return response
+        async def create_sandbox(
+            payload: CreateSandboxRequest, user: Member = Depends(current_user)
+        ) -> SandboxResponse:
+            return await self.create_async(payload, user)
 
         @self.app.get("/sandboxes/{sandbox_id}", response_model=SandboxResponse)
-        def get_sandbox(
-            sandbox_id: str, user: Member = Depends(current_user), db: Querier = Depends(db_manager.get_client)
-        ) -> SandboxResponse:
-            return to_response(self.owned(sandbox_id, user, db), db)
+        async def get_sandbox(sandbox_id: str, user: Member = Depends(current_user)) -> SandboxResponse:
+            return await self.response_async(sandbox_id, user)
 
         @self.app.patch("/sandboxes/{sandbox_id}", response_model=SandboxResponse)
         def update_sandbox(
@@ -525,7 +520,7 @@ class SandboxApi:
                     self.jobs.enqueue(db, sandbox.id, "stop", restart=True)
                 else:
                     db.update_sandbox_status(status="provisioning", id=sandbox.id)
-                    self.jobs.enqueue(db, sandbox.id, "boot", boot_deadline(sandbox.kind))
+                    self.jobs.enqueue(db, sandbox.id, "boot", boot_deadline(sandbox.kind), upgrade=True)
                 response = to_response(self.owned(sandbox.id, user, db), db)
             self.jobs.kick()
             return response
@@ -550,16 +545,23 @@ class SandboxApi:
                 sandbox = self.idle(sandbox_id, user, db)
                 if sandbox.status in ("running", "provisioning"):
                     raise HTTPException(status_code=409, detail="stop the sandbox before moving it")
-                # Linux snapshots live in object storage and go wherever the sandbox does; VM and CSI ones don't
-                host_bound = sandbox.kind in VMS or docker.csi(self.server_of(sandbox, db))
-                if host_bound and any(True for _ in db.list_snapshots_by_sandbox(sandbox_id=sandbox.id)):
-                    raise HTTPException(
-                        status_code=409,
-                        detail="delete this sandbox's snapshots before moving it: they stay on its current server",
-                    )
-                target = self.place(payload.server_id, user, db, sandbox.kind, size=sizes.of(sandbox))
-                if target != sandbox.server_id:
-                    self.jobs.enqueue(db, sandbox.id, "move", target=target)
+                if sandbox.kind not in VMS:
+                    if not runtime.is_kube():
+                        raise ZooError("not_supported", "Docker sandboxes run on one host and cannot be moved.")
+                    if payload.server_id is not None or payload.node_name is None:
+                        raise ZooError("bad_request", "Kubernetes moves require node_name, not a registered server.")
+                    self.jobs.enqueue(db, sandbox.id, "move", target=payload.node_name)
+                else:
+                    if payload.node_name is not None:
+                        raise ZooError("bad_request", "VM moves require server_id.")
+                    if any(True for _ in db.list_snapshots_by_sandbox(sandbox_id=sandbox.id)):
+                        raise HTTPException(
+                            status_code=409,
+                            detail="delete this sandbox's snapshots before moving it: they stay on its current server",
+                        )
+                    target = self.place(payload.server_id, user, db, sandbox.kind, size=sizes.of(sandbox))
+                    if target != sandbox.server_id:
+                        self.jobs.enqueue(db, sandbox.id, "move", target=target)
                 response = to_response(sandbox, db)
             self.jobs.kick()
             return response
@@ -593,12 +595,13 @@ class SandboxApi:
             return ExecResponse(sandbox_id=sandbox_id, **result)
 
         @self.app.post("/sandboxes/{sandbox_id}/exec/stream")
-        def execute_streamed(
+        async def execute_streamed(
             sandbox_id: str, exec_req: ExecRequest, user: Member = Depends(current_user)
         ) -> StreamingResponse:
             """Runs a command and streams its output as server-sent events: `stdout` and `stderr` ({"data": text})
             as it arrives, then `exit` ({"exit_code", "timed_out"}). Linux sandboxes only."""
-            return StreamingResponse(self.stream_exec(user, sandbox_id, exec_req), media_type="text/event-stream")
+            frames = await self.stream_exec(user, sandbox_id, exec_req)
+            return StreamingResponse(frames, media_type="text/event-stream")
 
         @self.app.get("/sandboxes/{sandbox_id}/files/content")
         async def download_file(
@@ -629,10 +632,10 @@ class SandboxApi:
             return await asyncio.to_thread(FileSystem.write_bytes, runtime_id, path, data)
 
         @self.app.get("/sandboxes/{sandbox_id}/guest")
-        def guest_status(
+        async def guest_status(
             sandbox_id: str, user: Member = Depends(current_user), db: Querier = Depends(db_manager.get_client)
         ) -> dict:
-            return hub.status(self.owned(sandbox_id, user, db).id)
+            return await hub.status_async(self.owned(sandbox_id, user, db).id)
 
         @self.app.get("/sandboxes/{sandbox_id}/executions", response_model=pages.Page[ToolExecutionResponse])
         def list_executions(
@@ -642,7 +645,7 @@ class SandboxApi:
             db: Querier = Depends(db_manager.get_client),
         ) -> pages.Page[ToolExecutionResponse]:
             sandbox = self.owned(sandbox_id, user, db)
-            self.executions.flush()
+            self.executions.flush_sync()
             rows, after = pages.collect(
                 lambda at, id, limit: db.page_tool_executions(
                     sandbox_id=sandbox.id, before_at=at, before_id=id, row_limit=limit
@@ -761,19 +764,18 @@ class SandboxApi:
             sandbox_id: str, user: Member = Depends(current_user), db: Querier = Depends(db_manager.get_client)
         ) -> VncTicketResponse:
             sandbox = self.running(sandbox_id, user, db)
-            if not sandbox.access_url:
+            if not has_screen(sandbox.kind):
                 raise HTTPException(status_code=400, detail="this sandbox has no screen")
             return VncTicketResponse(ticket=tickets.issue(user.id, f"sandbox:{sandbox.id}"))
 
         self.app.websocket("/sandboxes/{sandbox_id}/ws")(self.proxy)
-        self.unversioned.websocket("/guest/connect")(hub.serve)
 
         @self.app.post("/sandboxes/{sandbox_id}/terminal-ticket", response_model=VncTicketResponse)
-        def terminal_ticket(
+        async def terminal_ticket(
             sandbox_id: str, user: Member = Depends(current_user), db: Querier = Depends(db_manager.get_client)
         ) -> VncTicketResponse:
             sandbox = self.allowed(sandbox_id, user, db, "shell", "exec")
-            guest = hub.for_sandbox(sandbox.id)
+            guest = await hub.for_sandbox_async(sandbox.id)
             if guest is None or not guest.has("pty"):
                 raise HTTPException(
                     status_code=409, detail="the terminal needs the sandbox's guest agent; restart the sandbox"
@@ -796,6 +798,73 @@ class SandboxApi:
         """Whether the user may use the sandbox: an active member, not a viewer, of its workspace."""
         member = db.get_workspace_member(workspace_id=sandbox.workspace_id, user_id=user_id)
         return member is not None and member.status == "active" and member.role != "viewer"
+
+    async def state_async(self, sandbox_id: str) -> dict | None:
+        async def load():
+            async with async_db.session() as db:
+                found = await db.get_sandbox(id=sandbox_id)
+                if found is None:
+                    return None
+                sandbox = Sandbox.model_validate(found.model_dump())
+                sandbox_labels = {row.key: row.value async for row in db.list_sandbox_labels(sandbox_id=sandbox_id)}
+                permissions = {
+                    (row.permission, row.action): row.effect
+                    async for row in db.list_sandbox_permissions(sandbox_id=sandbox_id)
+                }
+                policy = await db.get_sandbox_network_policy(sandbox_id=sandbox_id)
+                rules = [row async for row in db.list_sandbox_network_rules(policy_id=policy.id)] if policy else []
+                job = await db.get_active_job(sandbox_id=sandbox_id)
+                encrypted = [row.ciphertext async for row in db.list_sandbox_vault_secrets(sandbox_id=sandbox_id)]
+                async for row in db.list_sandbox_secrets(sandbox_id=sandbox_id):
+                    if row.enabled:
+                        secret = await db.get_sandbox_secret(id=row.id)
+                        if secret is not None:
+                            encrypted.append(secret.secret_ref)
+            password = json.loads(sandbox.config or "{}").get(VNC_PASSWORD)
+            if password:
+                encrypted.append(password)
+            attached = await asyncio.gather(*(decrypt_async(value) for value in encrypted))
+            return {
+                "workspace_id": sandbox.workspace_id,
+                "sandbox": sandbox,
+                "labels": sandbox_labels,
+                "permissions": permissions,
+                "policy": policy,
+                "rules": rules,
+                "job": job,
+                "secrets": [*_booted.get(sandbox_id, []), *attached],
+            }
+
+        return await cache.get("sandbox", sandbox_id, load)
+
+    async def owned_async(self, sandbox_id: str, user: Member) -> tuple[Sandbox, dict]:
+        state = await self.state_async(sandbox_id)
+        if state is None or state["workspace_id"] != user.workspace_id or state["sandbox"].status == "deleted":
+            raise HTTPException(status_code=404, detail="sandbox not found")
+        require_sandbox(user, sandbox_id)
+        if not labels.matches(state["labels"], user.key_labels):
+            raise HTTPException(status_code=404, detail="sandbox not found")
+        return state["sandbox"], state
+
+    async def response_async(self, sandbox_id: str, user: Member) -> SandboxResponse:
+        sandbox, state = await self.owned_async(sandbox_id, user)
+        response = to_response(sandbox, sandbox_labels=state["labels"])
+        job = state["job"]
+        if job is not None:
+            response.job = JobResponse(
+                **{key: getattr(job, key) for key in JobResponse.model_fields if key not in {"waiting", "deadline"}},
+                deadline=to_stamp(job.deadline),
+                waiting=(job.last_error or "").startswith(WAITING),
+            )
+        return response
+
+    async def allowed_async(self, sandbox_id: str, user: Member, permission: str, action: str) -> tuple[Sandbox, dict]:
+        sandbox, state = await self.owned_async(sandbox_id, user)
+        if sandbox.status != "running" or sandbox.runtime_id is None:
+            raise HTTPException(status_code=409, detail=f"sandbox is {sandbox.status}")
+        if state["permissions"].get((permission, action), "allow") != "allow":
+            raise HTTPException(status_code=403, detail=f"{permission}.{action} is denied for this sandbox")
+        return sandbox, state
 
     def allowed(self, sandbox_id: str, user: Member, db: Querier, permission: str, action: str) -> Sandbox:
         sandbox = self.running(sandbox_id, user, db)
@@ -831,43 +900,14 @@ class SandboxApi:
         size: sizes.Size = sizes.DEFAULT,
     ) -> str | None:
         platform = os_of(kind)
-        if platform == "macos":
-            macos.ensure_local_server(user.id, user.workspace_id, db)
         servers = [
             s for s in db.list_servers_by_workspace(workspace_id=user.workspace_id) if platform in parse(s.capabilities)
         ]
         if platform in VMS:
             return self.place_vm(platform, server_id, servers, db, queue)
-        if server_id == AUTO:
-            roomy = self.roomiest(servers, size.memory_bytes, include_local=True)
-            if roomy is not False:
-                return roomy
-            load = {s.id: 0 for s in servers}
-            local = 0
-            for sb in db.list_all_sandboxes():
-                if sb.status == "running":
-                    if sb.server_id in load:
-                        load[sb.server_id] += 1
-                    elif sb.server_id is None:
-                        local += 1
-            best = min(load, key=load.get, default=None)
-            return best if best is not None and load[best] < local else None
-        if server_id is not None and server_id not in {s.id for s in servers}:
-            raise HTTPException(status_code=404, detail="server not found")
-        return server_id
-
-    def roomiest(self, servers: list, need: int, include_local: bool = False) -> str | None | Literal[False]:
-        """The host with the most free memory, among those that report it (servers with a connected zoo-node, and
-        this machine on Linux) and have `need` bytes free. None means this machine; False means no reporting host
-        has room, so the caller falls back to counting sandboxes."""
-        free: dict[str | None, int] = {**nodes.free_memory([s.id for s in servers])}
-        local = local_memory() if include_local else None
-        if local is not None:
-            free[None] = local
-        roomy = {host: bytes_free for host, bytes_free in free.items() if bytes_free >= need}
-        if not roomy:
-            return False
-        return max(roomy, key=lambda host: roomy[host])
+        if server_id not in (None, AUTO):
+            raise ZooError("not_supported", "Linux sandboxes use the configured runtime, not a registered server.")
+        return None
 
     def place_vm(self, platform: str, server_id: str | None, servers: list, db: Querier, queue: bool = False) -> str:
         name, limit = PLATFORM_NAMES[platform], VMS[platform].MAX_VMS
@@ -884,10 +924,6 @@ class SandboxApi:
             if sb.server_id in load and sb.status in ("running", "provisioning"):
                 load[sb.server_id] += 1
         best = min(load, key=load.get)
-        under = [s for s in servers if load[s.id] < limit]
-        roomy = self.roomiest(under, VMS[platform].MEMORY_MB << 20)
-        if roomy:
-            return roomy
         if load[best] >= limit:
             if platform == "macos" and queue:
                 # it boots when a VM on that Mac stops (macos.start waits in the job queue)
@@ -962,6 +998,8 @@ class SandboxApi:
         pooled = self.pool.claim(db, payload.kind, server_id) if payload.size == sizes.DEFAULT else None
         sandbox_id = pooled.id if pooled else str(uuid.uuid4())
         config: dict[str, Any] = {"profiles": payload.profile_ids}
+        if payload.kind not in VMS and pooled is None:
+            config["home_claim"] = f"zoo-home-{sandbox_id}"
         if payload.admin:
             config["admin"] = True
         if pooled is not None:
@@ -973,7 +1011,7 @@ class SandboxApi:
                 image_version_id=version.id,
                 created_by=user.id,
                 name=payload.name or f"sandbox-{sandbox_id[:8]}",
-                runtime=payload.kind if payload.kind in VMS else "docker",
+                runtime=payload.kind if payload.kind in VMS else runtime.NAME,
                 resources="{}",
                 config=json.dumps(config),
             )
@@ -984,7 +1022,6 @@ class SandboxApi:
             db.update_sandbox_runtime(
                 runtime_id=pooled.runtime_id,
                 runtime_host=pooled.runtime_host,
-                access_url=pooled.access_url,
                 id=sandbox.id,
             )
         db.set_sandbox_placement(server_id=server_id, kind=payload.kind, id=sandbox.id)
@@ -1001,10 +1038,111 @@ class SandboxApi:
             name = db.get_vault_secret(id=secret_id).name
             audit(db, user, "secret.attach", "secret", secret_id, sandbox.id, name=name, sandbox=sandbox.name)
         sandbox = db.update_sandbox_status(status="provisioning", id=sandbox.id)
-        # the caller kicks the queue once this transaction commits
-        self.jobs.enqueue(db, sandbox.id, "boot", boot_deadline(sandbox.kind))
+        if sandbox is None:
+            raise HTTPException(status_code=500, detail="failed to create sandbox")
+        # a warm one is handed over in the request (create_async); the caller kicks the queue once this commits
+        if pooled is None:
+            self.jobs.enqueue(db, sandbox.id, "boot", boot_deadline(sandbox.kind))
         self.logger.info("sandbox created", extra={"sandbox_id": sandbox.id, "user_id": user.id})
         return sandbox
+
+    async def create_async(self, payload: CreateSandboxRequest, user: Member) -> SandboxResponse:
+        """Creates a sandbox. A warm one is claimed and handed over here, running when this returns; a failed
+        hand-off discards that pooled sandbox and claims another, until WARM_CEILING. With none pooled, the boot job
+        starts one cold."""
+        began = time.monotonic()
+        deadline = began + WARM_CEILING
+        while True:
+
+            def created() -> tuple[Sandbox, SandboxResponse]:
+                with db_manager.session() as db:
+                    found = self.create(payload, user, db)
+                    return found, to_response(found, db)
+
+            sandbox, response = await asyncio.to_thread(created)
+            if not json.loads(sandbox.config or "{}").get("pooled"):
+                self.jobs.kick()
+                return response
+            warm = {"kind": sandbox.kind, "warm": "true"}
+            try:
+                async with asyncio.timeout(max(0.0, deadline - time.monotonic())):
+                    await self.hand_off(sandbox)
+                metrics.sandbox_ready.record(time.monotonic() - began, warm)
+                metrics.sandbox_creates.add(1, {**warm, "outcome": "running"})
+                return await asyncio.to_thread(self.response_of, sandbox.id)
+            except Exception as e:
+                self.logger.warning("warm hand-off failed", extra={"sandbox_id": sandbox.id, "error": repr(e)})
+                await asyncio.to_thread(self.discard, sandbox)
+                if time.monotonic() >= deadline:
+                    metrics.sandbox_creates.add(1, {**warm, "outcome": "failed"})
+                    raise ZooError("create_failed", "no warm sandbox could be handed over in time") from e
+
+    async def hand_off(self, sandbox: Sandbox):
+        """Gives a claimed pooled sandbox to its owner: secrets, network and app policy and profiles, in parallel."""
+        runtime_id = sandbox.runtime_id
+        if not runtime_id or not await asyncio.to_thread(runtime.is_running, runtime_id):
+            raise RuntimeError("the pooled container is gone")
+        config = json.loads(sandbox.config or "{}")
+
+        def state():
+            with db_manager.session() as db:
+                secrets = secret_env(sandbox, db)
+                profiles = [db.get_profile(id=p) for p in config.get("profiles", [])]
+            stored = config.get(VNC_PASSWORD)
+            remember_secrets(sandbox.id, [*secrets.values(), decrypt(stored)] if stored else [*secrets.values()])
+            return secrets, profiles
+
+        def policy():
+            with db_manager.session() as db:
+                enforce(sandbox.model_copy(update={"status": "running"}), db)
+
+        secrets, profiles = await asyncio.to_thread(state)
+        if runtime.is_kube():
+            await asyncio.to_thread(runtime.resume, runtime_id)
+        steps = [asyncio.to_thread(policy)]
+        if secrets:
+            steps.append(asyncio.to_thread(write_secrets, runtime_id, secrets))
+        steps += [asyncio.to_thread(self.apply_profile, runtime_id, p) for p in profiles if p is not None]
+        await asyncio.gather(*steps)
+
+        def started():
+            with db_manager.session() as db:
+                found = db.set_sandbox_started(id=sandbox.id)
+                db.set_sandbox_reachable(id=sandbox.id)
+            return found
+
+        found = await asyncio.to_thread(started)
+        self.logger.info("sandbox running", extra={"sandbox_id": sandbox.id, "warm": True})
+        if runtime.is_kube():
+            try:
+                await asyncio.to_thread(self.bind, sandbox.id)
+            except Exception as e:
+                self.logger.error("vm-control binding failed", extra={"sandbox_id": sandbox.id, "error": str(e)})
+        if found is not None and found.kind == "browser":
+            try:
+                await asyncio.to_thread(open_url, runtime_id, BROWSER_HOME)
+            except Exception as e:
+                self.logger.error("browser launch failed", extra={"sandbox_id": sandbox.id, "error": str(e)})
+
+    def discard(self, sandbox: Sandbox):
+        """Drops a sandbox whose warm hand-off failed: its owner never had it."""
+        if sandbox.runtime_id:
+            try:
+                remove_container(sandbox.runtime_id)
+            except Exception as e:
+                self.logger.error(
+                    "discarding a pooled sandbox failed", extra={"sandbox_id": sandbox.id, "error": str(e)}
+                )
+        forget_secrets(sandbox.id)
+        with db_manager.session() as db:
+            db.delete_sandbox(id=sandbox.id)
+
+    def response_of(self, sandbox_id: str) -> SandboxResponse:
+        with db_manager.session() as db:
+            sandbox = db.get_sandbox(id=sandbox_id)
+            if sandbox is None:
+                raise ZooError("sandbox_not_found", "sandbox not found")
+            return to_response(sandbox, db)
 
     def halt(self, sandbox: Sandbox, db: Querier) -> Sandbox:
         if sandbox.runtime_id:
@@ -1021,6 +1159,21 @@ class SandboxApi:
             sandbox = db.get_sandbox(id=sandbox_id)
             if sandbox is None or sandbox.status != "provisioning":
                 return
+        if sandbox.paused_at is not None and sandbox.runtime_id and json.loads(job.args).get("upgrade"):
+            # an upgrade boots the new image: a paused one would resume on its old one
+            self.to_volume(sandbox)
+            sandbox = sandbox.model_copy(update={"runtime_id": None, "paused_at": None})
+        if sandbox.paused_at is not None and sandbox.runtime_id:
+            # still frozen in place: it resumes where it stopped, with the secrets changed meanwhile
+            self.thaw(sandbox)
+            with db_manager.session() as db:
+                secrets = secret_env(sandbox, db)
+                db.clear_sandbox_paused(id=sandbox.id)
+            write_secrets(sandbox.runtime_id, secrets)
+            remember_secrets(sandbox.id, [*_booted.get(sandbox.id, []), *secrets.values()])
+            self.mark_started(job)
+            return
+        with db_manager.session() as db:
             version = db.get_sandbox_image_version(id=sandbox.image_version_id)
             if version is None:
                 raise RuntimeError("the sandbox's image version is missing")
@@ -1047,24 +1200,20 @@ class SandboxApi:
         if sandbox.kind in VMS:
             admin = bool(json.loads(sandbox.config or "{}").get("admin"))
             return self.boot_vm(job, sandbox.kind, server, env, profiles, admin)
-        if self.warm(sandbox):
-            return self.adopt(job, sandbox, secrets, profiles)
         # the container is named after the sandbox, so a retry adopts the one an earlier attempt started
-        container_id, host, port = run_container(
+        container_id, host = run_container(
             f"zoo-sandbox-{sandbox_id}", image, sandbox_id, env, server, desktop, sizes.of(sandbox)
         )
         if container_id is not None:
             hub.bind(container_id, sandbox_id)
-        tunneled = desktop and port is None
-        access_url = TUNNEL_URL if tunneled else f"ws://{host}:{port}/websockify" if desktop else None
-        if not self.record_runtime(job, container_id, host, access_url):
+        if not self.record_runtime(job, container_id, host):
             return
         if secrets:
             write_secrets(container_id, secrets)
         for profile in profiles:
             if profile is not None:
                 self.apply_profile(container_id, profile)
-        if desktop and not (hub.wait_for_vnc(sandbox_id) if tunneled else vnc_up(host, port)):
+        if desktop and not hub.wait_for_desktop(sandbox_id):
             raise RuntimeError("desktop did not come up in time")
         sandbox = self.mark_started(job)
         if sandbox is not None and sandbox.kind == "browser":
@@ -1072,37 +1221,6 @@ class SandboxApi:
                 open_url(container_id, BROWSER_HOME)
             except Exception as e:
                 self.logger.error("browser launch failed", extra={"sandbox_id": sandbox_id, "error": str(e)})
-
-    def warm(self, sandbox: Sandbox) -> bool:
-        """Whether the sandbox was claimed from the pool and its pooled container is still up."""
-        if not (json.loads(sandbox.config or "{}").get("pooled") and sandbox.runtime_id):
-            return False
-        try:
-            if is_running(sandbox.runtime_id):
-                return True
-            remove_container(sandbox.runtime_id)
-        except Exception as e:
-            self.logger.warning("pooled container lost", extra={"sandbox_id": sandbox.id, "error": str(e)})
-        return False
-
-    def adopt(self, job: Job, sandbox: Sandbox, secrets: dict[str, str], profiles: list):
-        """Finishes a boot on a container from the warm pool, which is already up: only the owner's parts are left."""
-        runtime_id = sandbox.runtime_id
-        if not runtime_id:
-            raise RuntimeError("the pooled container is gone")
-        if kube.owns(runtime_id):
-            kube.resume(runtime_id)
-        if secrets:
-            write_secrets(runtime_id, secrets)
-        for profile in profiles:
-            if profile is not None:
-                self.apply_profile(runtime_id, profile)
-        started = self.mark_started(job)
-        if started is not None and started.kind == "browser":
-            try:
-                open_url(runtime_id, BROWSER_HOME)
-            except Exception as e:
-                self.logger.error("browser launch failed", extra={"sandbox_id": sandbox.id, "error": str(e)})
 
     def pin_image(self, sandbox_id: str, db: Querier) -> str:
         """The image the sandbox boots from: the default image of its first boot, so upgrading Zoo doesn't swap
@@ -1123,9 +1241,9 @@ class SandboxApi:
             raise RuntimeError(f"{name} sandboxes need a {name} server")
         options = {"admin": admin} if kind == "macos" else {}
         started = time.monotonic()
-        runtime_id, access_url = VMS[kind].start(job.sandbox_id, server, env, **options)
+        runtime_id = VMS[kind].start(job.sandbox_id, server, env, **options)
         seconds = round(time.monotonic() - started, 1)
-        if self.record_runtime(job, runtime_id, server.bind_address, access_url):
+        if self.record_runtime(job, runtime_id, server.bind_address):
             with db_manager.session() as db:
                 db.set_sandbox_boot(base_version=VMS[kind].base_of(runtime_id), boot_seconds=seconds, id=job.sandbox_id)
             self.logger.info(f"{name} VM booted", extra={"sandbox_id": job.sandbox_id, "boot_seconds": seconds})
@@ -1141,34 +1259,39 @@ class SandboxApi:
             return None
         return sandbox
 
-    def record_runtime(self, job: Job, runtime_id: str, host: str | None, access_url: str | None) -> bool:
+    def record_runtime(self, job: Job, runtime_id: str, host: str | None) -> bool:
         with db_manager.session() as db:
             sandbox = self.still_booting(job, db)
             if sandbox is not None:
-                db.update_sandbox_runtime(
-                    runtime_id=runtime_id, runtime_host=host, access_url=access_url, id=sandbox.id
-                )
+                db.update_sandbox_runtime(runtime_id=runtime_id, runtime_host=host, id=sandbox.id)
                 return True
-            # the runtime id was never recorded, so name the host for the removal
-            row = db.get_sandbox(id=job.sandbox_id)
-            server = db.get_server(id=row.server_id) if row is not None and row.server_id else None
-        if is_vm(runtime_id):
-            remove_container(runtime_id)
-        else:
-            docker.remove_container(runtime_id, docker.client_for(server))
+        remove_container(runtime_id)
         return False
 
     def mark_started(self, job: Job) -> Sandbox | None:
         with db_manager.session() as db:
-            if self.still_booting(job, db) is None:
+            booting = self.still_booting(job, db)
+            if booting is None:
                 return None
             sandbox = db.set_sandbox_started(id=job.sandbox_id)
+            if sandbox is None:
+                return None
             db.set_sandbox_reachable(id=sandbox.id)
+            # a sandbox's first start is its create's; later ones are restarts
+            if booting.started_at is None:
+                cold = {"kind": sandbox.kind, "warm": "false"}
+                metrics.sandbox_ready.record((datetime.now(UTC) - sandbox.created_at).total_seconds(), cold)
+                metrics.sandbox_creates.add(1, {**cold, "outcome": "running"})
             try:
                 enforce(sandbox, db)
             except Exception as e:
                 self.logger.error("policy enforcement failed", extra={"sandbox_id": sandbox.id, "error": str(e)})
         self.logger.info("sandbox running", extra={"sandbox_id": sandbox.id, "server_id": sandbox.server_id})
+        if runtime.is_kube() and sandbox.kind not in VMS:
+            try:
+                self.bind(sandbox.id)
+            except Exception as e:
+                self.logger.error("vm-control binding failed", extra={"sandbox_id": sandbox.id, "error": str(e)})
         return sandbox
 
     def boot_failed(self, job: Job, error: str):
@@ -1184,6 +1307,8 @@ class SandboxApi:
         with db_manager.session() as db:
             db.clear_sandbox_runtime(id=sandbox.id)
             db.set_sandbox_failed(error_message=error, id=sandbox.id)
+        if sandbox.started_at is None:
+            metrics.sandbox_creates.add(1, {"kind": sandbox.kind, "warm": "false", "outcome": "failed"})
 
     def lifecycle_failed(self, kind: str):
         def failed(job: Job, error: str):
@@ -1199,6 +1324,14 @@ class SandboxApi:
             sandbox = db.get_sandbox(id=job.sandbox_id)
         if sandbox is None or sandbox.status == "deleted":
             return
+        restart = json.loads(job.args).get("restart")
+        # a Linux sandbox is frozen in place first; the pause sweeper deletes it down to its volume later
+        if sandbox.runtime_id and sandbox.status == "running" and sandbox.kind not in VMS and not restart:
+            self.freeze(sandbox)
+            with db_manager.session() as db:
+                db.set_sandbox_reachable(id=sandbox.id)
+                db.set_sandbox_paused(id=sandbox.id)
+            return
         if sandbox.runtime_id:
             remove_container(sandbox.runtime_id)
         forget_secrets(sandbox.id)
@@ -1206,7 +1339,7 @@ class SandboxApi:
             db.clear_sandbox_runtime(id=sandbox.id)
             db.set_sandbox_reachable(id=sandbox.id)
             db.set_sandbox_stopped(id=sandbox.id)
-            if json.loads(job.args).get("restart"):
+            if restart:
                 db.update_sandbox_status(status="provisioning", id=sandbox.id)
                 self.jobs.enqueue(db, sandbox.id, "boot", boot_deadline(sandbox.kind))
 
@@ -1258,6 +1391,8 @@ class SandboxApi:
             if sandbox is None or sandbox.status != "stopped" or db.get_snapshot(id=snapshot_id) is None:
                 return
             server = self.server_of(sandbox, db)
+        if sandbox.paused_at is not None:
+            self.to_volume(sandbox)
         restore_snapshot(sandbox, snapshot_id, server)
 
     def move(self, job: Job):
@@ -1268,10 +1403,12 @@ class SandboxApi:
                 return
             source = self.server_of(sandbox, db)
             dest = db.get_server(id=target) if target else None
-        if sandbox.kind in VMS:
-            VMS[sandbox.kind].move(sandbox.id, source, dest)
-        else:
-            copy_volume(sandbox.id, source, dest)
+        if sandbox.kind not in VMS:
+            if sandbox.paused_at is not None:
+                self.to_volume(sandbox)
+            runtime.move_volume(sandbox.id, target)
+            return
+        runtime.move(sandbox, source, dest)
         with db_manager.session() as db:
             db.set_sandbox_placement(server_id=target, kind=sandbox.kind, id=sandbox.id)
 
@@ -1298,7 +1435,7 @@ class SandboxApi:
             self.logger.warning("sandbox host unreachable", extra={"sandbox_id": sandbox.id, "error": str(e)})
             return None
 
-    def reconcile(self, startup: bool = False):
+    def reconcile(self, startup: bool = False, server_id: str | None = None):
         with db_manager.session() as db:
             if startup:
                 for server in db.list_all_servers():
@@ -1317,6 +1454,10 @@ class SandboxApi:
         if startup:
             self.jobs.kick()
         for sandbox in sandboxes:
+            if sandbox.kind not in VMS:
+                continue
+            if server_id is not None and sandbox.server_id != server_id:
+                continue
             if sandbox.status != "running":
                 continue
             alive = self.alive(sandbox)
@@ -1352,7 +1493,7 @@ class SandboxApi:
         if sandbox.id not in self.suspects and now - self.probed.get(sandbox.id, 0) < HANG_SECONDS / 2:
             return False
         self.probed[sandbox.id] = now
-        if VMS[sandbox.kind].responsive(sandbox.runtime_id or ""):
+        if responsive(sandbox.runtime_id or ""):
             self.suspects.pop(sandbox.id, None)
             return False
         return now - self.suspects.setdefault(sandbox.id, now) >= HANG_SECONDS
@@ -1390,8 +1531,7 @@ class SandboxApi:
         task.add_done_callback(self.viewers.discard)
 
     def touch(self, sandbox_id: str):
-        with db_manager.session() as db:
-            db.touch_sandbox(id=sandbox_id)
+        writer.touch(sandbox_id)
 
     def expire(self):
         """Stops running sandboxes past their maximum lifetime or idle past their timeout, as POST /stop would."""
@@ -1400,10 +1540,24 @@ class SandboxApi:
             for row in expired:
                 db.cancel_sandbox_jobs(sandbox_id=row.id)
                 self.jobs.enqueue(db, row.id, "stop")
+            # a warm create whose API process died mid-hand-off left its sandbox provisioning with no job; a boot
+            # adopts the pooled container and finishes it
+            horizon = datetime.now(UTC) - timedelta(seconds=STRANDED_SECONDS)
+            stranded = [
+                sandbox
+                for sandbox in db.list_all_sandboxes()
+                if sandbox.status == "provisioning"
+                and sandbox.updated_at < horizon
+                and db.get_active_job(sandbox_id=sandbox.id) is None
+            ]
+            for sandbox in stranded:
+                self.jobs.enqueue(db, sandbox.id, "boot", boot_deadline(sandbox.kind))
+        for sandbox in stranded:
+            self.logger.warning("stranded create resumed", extra={"sandbox_id": sandbox.id})
         for row in expired:
             self.logger.info("sandbox expired", extra={"sandbox_id": row.id, "reason": row.reason})
             audit_api.system(row.workspace_id, f"stop ({row.reason})", "sandboxes", row.id, reason=row.reason)
-        if expired:
+        if expired or stranded:
             self.jobs.kick()
 
     async def expire_loop(self):
@@ -1416,11 +1570,148 @@ class SandboxApi:
                 self.logger.error("expiring sandboxes failed", extra={"error": repr(e)})
             await asyncio.sleep(EXPIRE_SECONDS)
 
-    async def watch(self, interval: int = 15):
-        await asyncio.to_thread(self.reconcile, True)
+    def freeze(self, sandbox: Sandbox):
+        """Pauses a running Linux sandbox whole: its Kata VM through vm-control (Kubernetes) or its container."""
+        assert sandbox.runtime_id is not None
+        if runtime.is_kube():
+            config = json.loads(sandbox.config or "{}")
+            state = vm_control.current_state(sandbox.id, sandbox.runtime_id, config)
+            vm_control.pause(
+                sandbox.id,
+                sandbox.runtime_id,
+                config,
+                operation_id=secrets.token_hex(16),
+                expected_revision=state.revision,
+            )
+        else:
+            runtime.pause(sandbox.runtime_id)
+
+    def thaw(self, sandbox: Sandbox):
+        assert sandbox.runtime_id is not None
+        if runtime.is_kube():
+            config = json.loads(sandbox.config or "{}")
+            state = vm_control.current_state(sandbox.id, sandbox.runtime_id, config)
+            vm_control.resume(
+                sandbox.id,
+                sandbox.runtime_id,
+                config,
+                operation_id=secrets.token_hex(16),
+                expected_revision=state.revision,
+            )
+        else:
+            runtime.resume(sandbox.runtime_id)
+
+    def bind(self, sandbox_id: str):
+        """Records a Kubernetes sandbox's Kata VM generation for vm-control, once per pod it boots in."""
+        with db_manager.session() as db:
+            sandbox = db.get_sandbox(id=sandbox_id)
+        if sandbox is None or not sandbox.runtime_id:
+            return
+        config = json.loads(sandbox.config or "{}")
+        if (config.get("vm_control") or {}).get("runtime_id") == sandbox.runtime_id:
+            return
+        config.pop("vm_control", None)
+        config["vm_control"] = vm_control.binding(sandbox.id, sandbox.runtime_id, config)
+        with db_manager.session() as db:
+            db.update_sandbox(name=sandbox.name, resources=sandbox.resources, config=json.dumps(config), id=sandbox.id)
+
+    async def pause_loop(self):
+        """Every SWEEP_SECONDS: deletes paused sandboxes past PAUSE_MINUTES, and under memory pressure the oldest
+        paused one on each pressured node, down to their volumes."""
         while True:
-            await asyncio.sleep(interval)
-            await asyncio.to_thread(self.reconcile)
+            try:
+                await asyncio.to_thread(self.sweep_paused)
+            except Exception as e:
+                self.logger.error("sweeping paused sandboxes failed", extra={"error": repr(e)})
+            await asyncio.sleep(SWEEP_SECONDS)
+
+    def sweep_paused(self):
+        with db_manager.session() as db:
+            paused = list(db.list_paused_sandboxes())
+        if not paused:
+            return
+        pressured = runtime.pressured_nodes(PRESSURE_SHARE)
+        horizon = datetime.now(UTC) - timedelta(minutes=PAUSE_MINUTES)
+        for sandbox in paused:
+            node = runtime.node_of(sandbox)
+            assert sandbox.paused_at is not None
+            if sandbox.paused_at <= horizon or node in pressured:
+                pressured.discard(node)
+                self.unpause_delete(sandbox.id)
+
+    def unpause_delete(self, sandbox_id: str):
+        """Deletes a paused sandbox's container or pod; it stays stopped on its volume, and starts cold."""
+        with db_manager.session() as db:
+            sandbox = db.get_sandbox(id=sandbox_id)
+            if sandbox is None or sandbox.status != "stopped" or sandbox.paused_at is None:
+                return
+            if db.get_active_job(sandbox_id=sandbox.id) is not None:
+                return
+        self.to_volume(sandbox)
+
+    def to_volume(self, sandbox: Sandbox):
+        """Deletes a paused sandbox's container or pod, leaving its volume, for the sweeper and for jobs that need
+        the volume free (restore, move)."""
+        if sandbox.runtime_id:
+            remove_container(sandbox.runtime_id)
+        forget_secrets(sandbox.id)
+        with db_manager.session() as db:
+            db.clear_sandbox_runtime(id=sandbox.id)
+        self.logger.info("paused sandbox deleted to its volume", extra={"sandbox_id": sandbox.id})
+
+    def runtime_event(self, event: dict):
+        cleanup = []
+        with db_manager.session() as db:
+            states = {item["runtime_id"]: item for item in event.get("sandboxes", [])}
+            if event.get("type") == "reconcile":
+                running = set(event["running_ids"])
+                rows = [
+                    sandbox
+                    for sandbox in db.list_all_sandboxes()
+                    if sandbox.kind not in VMS and sandbox.runtime_id not in running
+                ]
+            else:
+                sandbox = db.get_sandbox_by_runtime_id(runtime_id=event["runtime_id"])
+                rows = [sandbox] if sandbox is not None else []
+            for sandbox in rows:
+                if sandbox.status != "running" or db.get_active_job(sandbox_id=sandbox.id) is not None:
+                    continue
+                state = states.get(sandbox.runtime_id, event)
+                if sandbox.runtime_id:
+                    cleanup.append(sandbox.runtime_id)
+                db.clear_sandbox_runtime(id=sandbox.id)
+                db.set_sandbox_reachable(id=sandbox.id)
+                if state.get("status") == "failed":
+                    db.set_sandbox_failed(error_message=state.get("error") or "sandbox runtime failed", id=sandbox.id)
+                else:
+                    db.set_sandbox_stopped(id=sandbox.id)
+        for runtime_id in cleanup:
+            try:
+                remove_container(runtime_id)
+            except Exception as error:
+                self.logger.error("runtime cleanup failed", extra={"runtime_id": runtime_id, "error": str(error)})
+
+    async def watch_vms(self):
+        while True:
+            try:
+                async with await psycopg.AsyncConnection.connect(db_manager.url, autocommit=True) as conn:
+                    await conn.execute("LISTEN zoo_node_report")
+                    await asyncio.to_thread(self.reconcile)
+                    async for notice in conn.notifies():
+                        await asyncio.to_thread(self.reconcile, False, notice.payload)
+            except Exception as error:
+                self.logger.error("node report stream failed", extra={"error": str(error)})
+                await asyncio.sleep(1)
+
+    async def watch(self):
+        await asyncio.to_thread(self.reconcile, True)
+        vm_task = asyncio.create_task(self.watch_vms())
+        try:
+            async for event in runtime.events():
+                await asyncio.to_thread(self.runtime_event, event)
+        finally:
+            vm_task.cancel()
+            await asyncio.gather(vm_task, return_exceptions=True)
 
     async def run_tool(self, user: Member, sandbox_id: str, name: str, args: dict, channel: str) -> Any:
         tool = TOOLS.get(name)
@@ -1433,26 +1724,14 @@ class SandboxApi:
             inspect.signature(tool.fn).bind("", **args)
         except TypeError as e:
             raise HTTPException(status_code=422, detail=str(e))
-        with db_manager.session() as db:
-            sandbox = self.allowed(sandbox_id, user, db, tool.permission, tool.action)
-            allowed = KINDS.get(sandbox.kind)
-            if allowed is not None and tool.category not in allowed:
-                raise HTTPException(status_code=400, detail=f"{name} is not available in {sandbox.kind} sandboxes")
-            # docker exec sessions see the container env, which carries the x11vnc password
-            secrets = redaction_values(sandbox, db)
+        sandbox, state = await self.allowed_async(sandbox_id, user, tool.permission, tool.action)
+        allowed = KINDS.get(sandbox.kind)
+        if allowed is not None and tool.category not in allowed:
+            raise HTTPException(status_code=400, detail=f"{name} is not available in {sandbox.kind} sandboxes")
+        secrets = state["secrets"]
         execution_id = str(uuid.uuid4())
 
-        def started(db: Querier):
-            db.touch_sandbox(id=sandbox.id)
-            db.create_tool_execution(
-                id=execution_id,
-                sandbox_id=sandbox.id,
-                tool_name=name,
-                input=json.dumps(args)[:4000],
-            )
-            db.update_tool_execution_status(status="running", id=execution_id)
-
-        self.executions.write(started)
+        writer.execution(execution_id, sandbox.id, name, json.dumps(args)[:4000])
         began = time.monotonic()
         try:
             with tracer.start_as_current_span(
@@ -1470,7 +1749,7 @@ class SandboxApi:
             )
             metrics.error("tool", tool=name)
             error = redact(str(e), secrets)
-            self.executions.write(lambda db: db.fail_tool_execution(error_message=error[:4000], id=execution_id))
+            writer.finish(execution_id, "failed", error=error[:4000])
             # the sandbox failed it, not Zoo: its (redacted) error is the message
             raise ZooError("upstream_error", error)
         metrics.tool_duration.record(time.monotonic() - began, {"tool": name, "channel": channel, "outcome": "ok"})
@@ -1481,7 +1760,7 @@ class SandboxApi:
             output = json.dumps({**result, "image": f"<{len(result['image'])} bytes>"}, default=str)
         else:
             output = json.dumps(result, default=str)[:4000]
-        self.executions.write(lambda db: db.complete_tool_execution(output=output, id=execution_id))
+        writer.finish(execution_id, "completed", output=output)
         return result
 
     def linux_files(self, sandbox_id: str, user: Member, action: str) -> str:
@@ -1492,29 +1771,20 @@ class SandboxApi:
             raise ZooError("not_supported", f"file transfer isn't available in {sandbox.kind} sandboxes")
         return sandbox.runtime_id
 
-    def stream_exec(self, user: Member, sandbox_id: str, exec_req: ExecRequest) -> Iterator[str]:
+    async def stream_exec(self, user: Member, sandbox_id: str, exec_req: ExecRequest) -> Iterator[str]:
         tool = TOOLS["execute_command"]
         require(user, "member")
-        with db_manager.session() as db:
-            sandbox = self.allowed(sandbox_id, user, db, tool.permission, tool.action)
-            if is_vm(sandbox.runtime_id) or KINDS.get(sandbox.kind) is not None and "shell" not in KINDS[sandbox.kind]:
-                raise ZooError("not_supported", f"streamed exec isn't available in {sandbox.kind} sandboxes")
-            secrets = redaction_values(sandbox, db)
-            runtime_id = sandbox.runtime_id
+        sandbox, state = await self.allowed_async(sandbox_id, user, tool.permission, tool.action)
+        if is_vm(sandbox.runtime_id) or KINDS.get(sandbox.kind) is not None and "shell" not in KINDS[sandbox.kind]:
+            raise ZooError("not_supported", f"streamed exec isn't available in {sandbox.kind} sandboxes")
+        secrets = state["secrets"]
+        runtime_id = sandbox.runtime_id
         assert runtime_id is not None
         execution_id = str(uuid.uuid4())
 
-        def started(db: Querier):
-            db.touch_sandbox(id=sandbox.id)
-            db.create_tool_execution(
-                id=execution_id,
-                sandbox_id=sandbox.id,
-                tool_name="execute_command",
-                input=json.dumps({**exec_req.model_dump(), "stream": True})[:4000],
-            )
-            db.update_tool_execution_status(status="running", id=execution_id)
-
-        self.executions.write(started)
+        writer.execution(
+            execution_id, sandbox.id, "execute_command", json.dumps({**exec_req.model_dump(), "stream": True})[:4000]
+        )
         lines = ShellTools.stream_command(runtime_id, exec_req.command, exec_req.timeout)
 
         def frames() -> Iterator[str]:
@@ -1522,15 +1792,13 @@ class SandboxApi:
                 for stream, value in lines:
                     if stream == "exit":
                         output = json.dumps({"exit_code": value, "timed_out": value == 124})
-                        self.executions.write(
-                            lambda db, output=output: db.complete_tool_execution(output=output, id=execution_id)
-                        )
+                        writer.finish(execution_id, "completed", output=output)
                         yield f"event: exit\ndata: {output}\n\n"
                     else:
                         yield f"event: {stream}\ndata: {json.dumps({'data': redact(value, secrets)})}\n\n"
             except Exception as e:
                 error = redact(str(e), secrets)
-                self.executions.write(lambda db: db.fail_tool_execution(error_message=error[:4000], id=execution_id))
+                writer.finish(execution_id, "failed", error=error[:4000])
                 yield f"event: error\ndata: {json.dumps({'message': error})}\n\n"
 
         return frames()
@@ -1543,95 +1811,21 @@ class SandboxApi:
         with db_manager.session() as db:
             sandbox = db.get_sandbox(id=sandbox_id)
             usable = sandbox is not None and self.member_of(sandbox, user_id, db)
-        if sandbox is None or not usable or sandbox.status != "running" or not sandbox.access_url:
+        if sandbox is None or not usable or sandbox.status != "running" or not has_screen(sandbox.kind):
             await websocket.close(code=1008, reason="sandbox not available")
             return
-        await self.screen(websocket, sandbox, Gate(view_only=False))
+        await self.screen(websocket, sandbox, view_only=False)
 
-    async def screen(self, websocket: WebSocket, sandbox: Sandbox, gate: Gate, live: Callable[[], bool] | None = None):
-        """Serves a running sandbox's screen to a viewer that is allowed it, through `gate`. When `live` stops
-        returning True (a revoked or expired link), the viewer is disconnected."""
-        sandbox_id, access_url = sandbox.id, sandbox.access_url
-        if not access_url:
-            raise RuntimeError("the sandbox has no screen")
+    async def screen(
+        self, websocket: WebSocket, sandbox: Sandbox, view_only: bool, live: Callable[[], bool] | None = None
+    ):
+        """Relays a viewer to the sandbox's VNC session in the gateway, which plays the VNC server to it and drops a
+        view-only viewer's input. When `live` stops returning True (a revoked or expired link), the viewer is
+        disconnected."""
         await websocket.accept()
-        self.watch_viewer(websocket, sandbox_id)
-        self.watch_gate(websocket, sandbox_id, live)
-        if is_vm(sandbox.runtime_id):
-            await self.proxy_vnc(websocket, sandbox.runtime_id, gate)
-            return
-        # through the gateway this asks it over the network, so off the event loop
-        guest = await asyncio.to_thread(hub.for_sandbox, sandbox_id)
-        try:
-            if guest is not None and guest.has("tunnel"):
-                await self.proxy_tunnel(websocket, Tunnel(guest), sandbox, gate)
-                return
-            if sandbox.access_url == TUNNEL_URL:
-                raise ConnectionError("the sandbox's guest agent is not connected")
-            async with websockets.connect(access_url, max_size=None) as target:
-                # log in to x11vnc here and offer the browser no-auth, so the password never leaves the API
-                async def receive() -> bytes:
-                    message = await target.recv()
-                    return message if isinstance(message, bytes) else message.encode()
-
-                upstream = Buffered(receive)
-                await authenticate_async(upstream, target.send, vnc_password(sandbox))
-                init = gate.feed(await offer_no_auth(websocket))
-                if init:
-                    await target.send(init)
-                tasks = [
-                    asyncio.create_task(forward_client_to_target(websocket, target, gate)),
-                    asyncio.create_task(forward_target_to_client(target, websocket)),
-                ]
-                _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-                for task in pending:
-                    task.cancel()
-                await asyncio.gather(*pending, return_exceptions=True)
-        except Exception as e:
-            self.logger.error("sandbox proxy error", extra={"sandbox_id": sandbox_id, "error": repr(e)})
-        finally:
-            if websocket.client_state.name != "DISCONNECTED":
-                await websocket.close()
-
-    async def proxy_tunnel(self, websocket: WebSocket, tunnel: Tunnel, sandbox: Sandbox, gate: Gate):
-        """Bridges an accepted noVNC websocket to x11vnc through a guest tunnel, logging in as proxy() does."""
-        await tunnel.open(VNC_PORT)
-        try:
-
-            async def receive() -> bytes:
-                data = await tunnel.read()
-                if not data:
-                    raise ConnectionError("vnc server closed the connection")
-                return data
-
-            upstream = Buffered(receive)
-            await authenticate_async(upstream, tunnel.write, vnc_password(sandbox))
-            init = gate.feed(await offer_no_auth(websocket))
-            if init:
-                await tunnel.write(init)
-
-            async def client_to_vnc():
-                while True:
-                    message = await websocket.receive()
-                    if message["type"] == "websocket.disconnect":
-                        return
-                    data = gate.feed(message.get("bytes") or (message.get("text") or "").encode())
-                    if data:
-                        await tunnel.write(data)
-
-            async def vnc_to_client():
-                if upstream.data:
-                    await websocket.send_bytes(upstream.data)
-                while data := await tunnel.read():
-                    await websocket.send_bytes(data)
-
-            tasks = [asyncio.create_task(client_to_vnc()), asyncio.create_task(vnc_to_client())]
-            _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            for task in pending:
-                task.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
-        finally:
-            await tunnel.close()
+        self.watch_viewer(websocket, sandbox.id)
+        self.watch_gate(websocket, sandbox.id, live)
+        await relay_screen(websocket, sandbox.id, view_only)
 
     async def terminal(self, websocket: WebSocket, sandbox_id: str, ticket: str = "", cols: int = 80, rows: int = 24):
         """A shell in the sandbox for a browser terminal. The client sends keystrokes as binary frames and
@@ -1643,10 +1837,13 @@ class SandboxApi:
         with db_manager.session() as db:
             sandbox = db.get_sandbox(id=sandbox_id)
             usable = sandbox is not None and self.member_of(sandbox, user_id, db)
-        # through the gateway this asks it over the network, so off the event loop
-        guest = await asyncio.to_thread(hub.for_sandbox, sandbox_id)
         if sandbox is None or not usable or sandbox.status != "running":
             await websocket.close(code=1008, reason="sandbox not available")
+            return
+        try:
+            guest = await hub.for_sandbox_async(sandbox_id)
+        except ZooError as error:
+            await websocket.close(code=1011, reason=str(error)[:120])
             return
         if guest is None or not guest.has("pty"):
             await websocket.close(code=1011, reason="the sandbox's guest agent is not connected")
@@ -1692,50 +1889,7 @@ class SandboxApi:
         finally:
             for task in tasks:
                 task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
             await terminal.close()
-            if websocket.client_state.name != "DISCONNECTED":
-                await websocket.close()
-
-    async def proxy_vnc(self, websocket: WebSocket, runtime_id: str, gate: Gate | None = None):
-        """Bridges an accepted noVNC websocket to a macOS or Windows VM's VNC server over SSH. The proxy authenticates with the VM's
-        password itself and offers the browser no-auth, so the password never leaves the API."""
-        channel = None
-        gate = gate or Gate(view_only=False)
-
-        def send(data: bytes):
-            assert channel is not None
-            channel.sendall(data)
-
-        async def client_to_vm():
-            while True:
-                message = await websocket.receive()
-                if message["type"] == "websocket.disconnect":
-                    return
-                data = gate.feed(message.get("bytes") or (message.get("text") or "").encode())
-                if data:
-                    await asyncio.to_thread(send, data)
-
-        async def vm_to_client():
-            while True:
-                data = await asyncio.to_thread(channel.recv, 65536)
-                if not data:
-                    return
-                await websocket.send_bytes(data)
-
-        try:
-            channel = await asyncio.to_thread(authenticated_channel, runtime_id)
-            init = gate.feed(await offer_no_auth(websocket))
-            if init:
-                await asyncio.to_thread(channel.sendall, init)
-            tasks = [asyncio.create_task(client_to_vm()), asyncio.create_task(vm_to_client())]
-            _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            for task in pending:
-                task.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
-        except Exception as e:
-            self.logger.error("vnc proxy error", extra={"runtime_id": runtime_id, "error": repr(e)})
-        finally:
-            if channel is not None:
-                channel.close()
             if websocket.client_state.name != "DISCONNECTED":
                 await websocket.close()

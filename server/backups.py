@@ -145,7 +145,16 @@ def restore(key: str):
         path = os.path.join(tmp, "zoo.dump")
         objects.get_file(key, path)
         subprocess.run(
-            ["pg_restore", "--clean", "--if-exists", "--no-owner", f"--dbname={db_manager.url}", path], check=True
+            [
+                "pg_restore",
+                "--clean",
+                "--if-exists",
+                "--single-transaction",
+                "--no-owner",
+                f"--dbname={db_manager.url}",
+                path,
+            ],
+            check=True,
         )
 
 

@@ -23,6 +23,7 @@ import secrets
 import socket
 import time
 import uuid
+from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 import httpx
@@ -33,7 +34,7 @@ from db.connection import db_manager
 from db.generated.models import Webhook
 from db.generated.query import CreateWebhookParams, FinishWebhookDeliveryParams, Querier, UpdateWebhookParams
 from logger.logger import logger
-from server import labels, pages
+from server import labels, metrics, pages
 from server.auth_api import AuthApi, Member, require
 from server.events import event_response
 from server.jobs import stamp
@@ -300,6 +301,8 @@ def deliver_due() -> int:
                 code = response.status_code
                 if response.is_success:
                     status = "delivered"
+                    late = (datetime.now(UTC) - event.created_at).total_seconds()
+                    metrics.event_delivery.record(late, {"channel": "webhook"})
                 else:
                     error = f"HTTP {code}: {response.text[:300]}"
             except (httpx.HTTPError, ValueError) as e:

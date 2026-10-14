@@ -2,8 +2,7 @@
 
 ZOO_ROLE picks what a process runs: `all` (the default) serves the API and runs the background work, `api` only
 serves requests, and `worker` runs the background work (lifecycle jobs and the warm pool). Scale out with any
-number of `api` replicas and one `worker`. `gateway` holds the guest and node connections for the others, which
-set ZOO_GATEWAY to reach them (server/gateway.py).
+number of `api` replicas and one `worker`. The native Go gateway owns guest and node connections.
 """
 
 import os
@@ -14,8 +13,8 @@ from db.connection import db_manager
 from server.jobs import stamp
 
 ROLE = os.environ.get("ZOO_ROLE", "all")
-if ROLE not in ("all", "api", "worker", "gateway"):
-    raise RuntimeError(f"ZOO_ROLE must be all, api, worker or gateway, not {ROLE!r}")
+if ROLE not in ("all", "api", "worker"):
+    raise RuntimeError(f"ZOO_ROLE must be all, api or worker, not {ROLE!r}")
 # identifies this process in leases.holder
 WORKER_ID = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:6]}"
 

@@ -7,7 +7,15 @@ COPY guest/ ./
 RUN CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o /zoo-guest-darwin-arm64 . \
  && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -H windowsgui" -o /zoo-guest-windows-amd64.exe .
 
-# zoo-node for every host platform, which the API serves to installers and pushes to nodes on another version
+FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS egress
+WORKDIR /src
+COPY egress/go.mod egress/go.sum ./
+RUN go mod download
+COPY egress/ ./
+RUN CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o /zoo-egress-darwin-arm64 . \
+ && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -H windowsgui" -o /zoo-egress-windows-amd64.exe .
+
+# zoo-node for macOS and Windows, which the API serves to installers and pushes to nodes on another version
 FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS node
 WORKDIR /src
 COPY node/go.mod node/go.sum ./
@@ -15,7 +23,7 @@ RUN go mod download
 COPY node/ ./
 COPY pyproject.toml /pyproject.toml
 RUN version=$(sed -n 's/^version = "\(.*\)"/\1/p' /pyproject.toml) && mkdir -p /dist \
- && for t in linux/amd64 linux/arm64 darwin/arm64 windows/amd64; do \
+ && for t in darwin/arm64 windows/amd64; do \
       os=${t%/*}; arch=${t#*/}; ext=$([ "$os" = windows ] && echo .exe || true); \
       CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags="-s -w -X main.version=$version" -o /dist/zoo-node-$os-$arch$ext . ; \
     done && echo "$version" > /dist/VERSION
@@ -27,7 +35,6 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update && apt-get install -y --no-install-recommends curl openssh-client postgresql-client \
     && curl -fsSL --retry 5 --retry-all-errors https://github.com/pressly/goose/releases/download/v3.24.1/"goose_linux_$(dpkg --print-architecture | sed 's/amd64/x86_64/')" -o /usr/local/bin/goose \
     && chmod +x /usr/local/bin/goose \
-    && printf 'GlobalKnownHostsFile /etc/ssh/ssh_known_hosts /data/known_hosts\n' > /etc/ssh/ssh_config.d/zoo.conf \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -35,10 +42,10 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project
 COPY . .
 COPY --from=guest /zoo-guest-darwin-arm64 /zoo-guest-windows-amd64.exe guest/dist/
+COPY --from=egress /zoo-egress-darwin-arm64 /zoo-egress-windows-amd64.exe egress/dist/
 COPY --from=node /dist/ node/dist/
 
 ENV HOST=0.0.0.0 PORT=8000 RELOAD=0 ZOO_NETWORK=zoo
-# zoo-node streams (gRPC, mTLS): publish this port straight through, not behind the HTTP proxy
-EXPOSE 7443
+EXPOSE 8000
 # migrates Postgres at DATABASE_URL, then starts the API (scripts/start.sh)
 CMD ["sh", "scripts/start.sh"]

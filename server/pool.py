@@ -1,16 +1,18 @@
 """The warm pool: Linux sandboxes booted ahead of a create, with no owner, home data or secrets.
 
 Each pooled container is booted under the id its sandbox will have, so its name, home volume and guest token are
-already the sandbox's. A create claims one by taking that id; the boot job then adopts the running container,
-writes the secrets where the guest reads them (/run/zoo/env.json), applies profiles and policy, and the sandbox is
-running in about a second instead of a cold boot. Only new sandboxes are served: starting a stopped one still boots
+already the sandbox's. A create claims one by taking that id and hands it over in the request: the secrets where
+the guest reads them (/run/zoo/env.json), the owner's policy (a pooled one has no network until then) and profiles,
+in parallel, and the sandbox is running when the create returns. Only new sandboxes are served: starting a stopped one still boots
 a fresh container on its volume. On Kubernetes, pooled pods wait with their processes stopped (kube.pause).
 """
 
 import asyncio
 import json
+import math
 import secrets
 import threading
+import time
 import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
@@ -19,8 +21,8 @@ from db.connection import db_manager
 from db.generated.models import PoolSandbox
 from db.generated.query import CreatePoolSandboxParams, Querier
 from logger.logger import logger
-from server import docker, kube
-from server.guest import TUNNEL_URL, guest_env, hub
+from server import metrics, runtime
+from server.guest import guest_env, hub
 from server.security import SYSTEM, VNC_PASSWORD, decrypt, encrypt
 
 KINDS = ("desktop", "browser", "code")
@@ -28,10 +30,23 @@ MAX_SIZE = 10
 # a failed boot holds its pool back this long, so a broken image or host isn't booted in a loop
 FAILED_TTL = 300
 READY_TIMEOUT = 90
+# how often the pool refills; its size is at least the p99 of creates per kind in one such interval over the last hour
+REFILL_SECONDS = 10
 
 
 def pool_id(kind: str, server_id: str | None) -> str:
     return f"{kind}:{server_id or 'local'}"
+
+
+def demand(db: Querier) -> dict[str, int]:
+    """The p99 of creates per kind in one refill interval over the last hour; intervals with none count as 0."""
+    intervals = 3600 // REFILL_SECONDS
+    counts: dict[str, list[int]] = defaultdict(list)
+    for row in db.list_recent_creates(interval_seconds=REFILL_SECONDS):
+        if row.kind in KINDS:
+            counts[row.kind].append(int(row.creates))
+    rank = min(intervals, math.ceil(0.99 * intervals)) - 1
+    return {kind: min(MAX_SIZE, sorted([0] * (intervals - len(found)) + found)[rank]) for kind, found in counts.items()}
 
 
 def age(row) -> float:
@@ -55,7 +70,7 @@ class Pool:
     def claim(self, db: Querier, kind: str, server_id: str | None) -> PoolSandbox | None:
         if kind not in KINDS:
             return None
-        row = db.claim_pool_sandbox(kind=kind, server_id=server_id or "", image=docker.default_image(kind))
+        row = db.claim_pool_sandbox(kind=kind, server_id=server_id or "", image=runtime.default_image(kind))
         if row is not None:
             self.claimed[pool_id(kind, server_id)] += 1
             self.kick()
@@ -65,7 +80,7 @@ class Pool:
         if not self.inline:
             threading.Thread(target=self.fill, daemon=True).start()
 
-    async def run(self, interval: float = 10):
+    async def run(self, interval: float = REFILL_SECONDS):
         while True:
             await asyncio.to_thread(self.fill)
             await asyncio.sleep(interval)
@@ -81,8 +96,13 @@ class Pool:
             self.lock.release()
 
     def _fill(self):
+        runtime.refill_volumes()
         with db_manager.session() as db:
             sizes = {s.id: s.size for s in db.list_pool_settings()}
+            # the configured size is the minimum; recent demand raises it
+            for kind, wanted in demand(db).items():
+                key = pool_id(kind, None)
+                sizes[key] = max(sizes.get(key, 0), wanted)
             rows = list(db.list_pool_sandboxes())
             servers = {s.id: s for s in db.list_all_servers()}
         pools: dict[str, list[PoolSandbox]] = defaultdict(list)
@@ -98,7 +118,7 @@ class Pool:
                     self.discard(row, server)
                 else:
                     pools[pool_id(row.kind, row.server_id)].append(row)
-            elif row.image != docker.default_image(row.kind) or not self.alive(row):
+            elif row.image != runtime.default_image(row.kind) or not self.alive(row):
                 self.discard(row, server)
             else:
                 pools[pool_id(row.kind, row.server_id)].append(row)
@@ -130,23 +150,24 @@ class Pool:
 
     def alive(self, row: PoolSandbox) -> bool:
         try:
-            return bool(row.runtime_id) and docker.is_running(row.runtime_id)
+            return bool(row.runtime_id) and runtime.is_running(row.runtime_id)
         except Exception:
             # an unreachable host: keep the row and look again next time
             return True
 
     def start(self, kind: str, server):
-        config = {}
+        sandbox_id = str(uuid.uuid4())
+        config = {"home_claim": f"zoo-home-{sandbox_id}"}
         with db_manager.session() as db:
             if kind != "code":
                 # VNC authentication only uses the first 8 characters; no workspace owns the sandbox yet
                 config[VNC_PASSWORD] = encrypt(secrets.token_urlsafe(6), db, SYSTEM)
             row = db.create_pool_sandbox(
                 CreatePoolSandboxParams(
-                    id=str(uuid.uuid4()),
+                    id=sandbox_id,
                     kind=kind,
                     server_id=server.id if server else None,
-                    image=docker.default_image(kind),
+                    image=runtime.default_image(kind),
                     config=json.dumps(config),
                 )
             )
@@ -160,32 +181,29 @@ class Pool:
 
     def boot(self, row: PoolSandbox, server):
         desktop = row.kind != "code"
+        began = time.monotonic()
         try:
             env = guest_env(row.id, remote=server is not None)
             if desktop:
                 env["ZOO_VNC_PASSWORD"] = decrypt(json.loads(row.config)[VNC_PASSWORD])
-            runtime_id, host, port = docker.run_container(
-                f"zoo-sandbox-{row.id}", row.image, row.id, env, server, desktop
-            )
+            runtime_id, host = runtime.run_container(f"zoo-sandbox-{row.id}", row.image, row.id, env, server, desktop)
             hub.bind(runtime_id, row.id)
-            tunneled = desktop and port is None
-            access_url = TUNNEL_URL if tunneled else f"ws://{host}:{port}/websockify" if desktop else None
             with db_manager.session() as db:
-                db.set_pool_sandbox_runtime(runtime_id=runtime_id, runtime_host=host, access_url=access_url, id=row.id)
-            if tunneled:
-                ready = hub.wait_for_vnc(row.id, READY_TIMEOUT)
-            elif desktop:
-                published = host is not None and port is not None and docker.wait_for_vnc(host, port, READY_TIMEOUT)
-                ready = published and hub.wait_for_guest(row.id, READY_TIMEOUT)
+                db.set_pool_sandbox_runtime(runtime_id=runtime_id, runtime_host=host, id=row.id)
+            # no network until it is claimed; the hand-off applies its owner's policy
+            runtime.apply_network(runtime_id, "deny", False, [])
+            if desktop:
+                ready = hub.wait_for_desktop(row.id, READY_TIMEOUT)
             else:
                 ready = hub.wait_for_guest(row.id, READY_TIMEOUT)
             if not ready:
                 raise RuntimeError("did not come up in time")
-            if kube.owns(runtime_id):
+            if runtime.is_kube():
                 # a pod can't be paused, so its processes are: it keeps its memory and stops using CPU
-                kube.pause(runtime_id)
+                runtime.pause(runtime_id)
             with db_manager.session() as db:
                 db.set_pool_sandbox_idle(id=row.id)
+            metrics.pool_refill.record(time.monotonic() - began, {"kind": row.kind})
             logger.info("pool sandbox ready", extra={"sandbox_id": row.id, "kind": row.kind})
         except Exception as e:
             logger.error("pool boot failed", extra={"sandbox_id": row.id, "error": str(e)})
@@ -207,13 +225,13 @@ class Pool:
     def remove(self, row: PoolSandbox, server):
         try:
             if row.runtime_id:
-                docker.remove_container(row.runtime_id, docker.client_for(server))
+                runtime.remove_container(row.runtime_id)
             else:
-                docker.client_for(server).containers.get(f"zoo-sandbox-{row.id}").remove(force=True)
+                runtime.remove_named_container(f"zoo-sandbox-{row.id}")
         except Exception as e:
             logger.debug("pool container already gone", extra={"sandbox_id": row.id, "error": str(e)})
         try:
-            docker.remove_volume(row.id, server)
+            runtime.remove_volume_id(row.id, json.loads(row.config))
         except Exception as e:
             logger.warning("pool volume cleanup failed", extra={"sandbox_id": row.id, "error": str(e)})
 

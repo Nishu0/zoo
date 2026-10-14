@@ -1,47 +1,47 @@
-"""Linux sandboxes on Kubernetes: one Pod per sandbox, with a PersistentVolumeClaim for /home/zoo, under a
-RuntimeClass (Kata Containers by default, so each sandbox is its own VM) and zoo-guest inside, as on Docker.
+"""Linux sandboxes on Kubernetes: Kata pods with a PersistentVolumeClaim for /home/zoo.
 
-ZOO_KUBERNETES_NAMESPACE turns it on: the sandboxes Zoo runs on "this machine" then run as pods in that namespace,
-and servers added under Servers keep working as before. Zoo talks to the Kubernetes API itself, from inside the
-cluster with its service account or from outside with a kubeconfig (KUBECONFIG, ZOO_KUBERNETES_CONTEXT).
-
-The rest of the API reaches pods the way it reaches Docker containers (server/docker.py): a pod's runtime id is
-k8s:<namespace>/<pod>, `container()` returns a Pod with docker-py's exec_run, get_archive and put_archive (run
-through the pods/exec API), and `cluster` stands in for a Docker client where volumes and helper containers are
-concerned, so snapshots and moves between hosts work unchanged. Pods have no pause, so the warm pool keeps its pods
-running with every process stopped (SIGSTOP), and wakes them when a sandbox claims one."""
+Selected by server.runtime when ZOO_RUNTIME=kube. ZOO_NAMESPACE names the sandbox namespace. Access uses the
+service account inside the cluster or a kubeconfig outside it. Runtime ids are k8s:<namespace>/<pod>."""
 
 import base64
 import contextlib
+import hashlib
+import io
 import json
+import logging
+import math
 import os
 import re
 import shlex
+import socket
 import ssl
 import subprocess
+import tarfile
 import tempfile
 import threading
 import time
 import urllib.parse
 import uuid
 from collections.abc import Iterator
-from typing import Any, NamedTuple
+from datetime import UTC, datetime
+from typing import Any
 
-import docker.errors
 import httpx
 import yaml
 from websockets.exceptions import WebSocketException
 from websockets.sync.client import connect
 
+from db.connection import db_manager
+from server import objects
+from server.errors import ZooError
 from server.sizes import DEFAULT as DEFAULT_SIZE
 from server.sizes import Size
 
-NAMESPACE = os.environ.get("ZOO_KUBERNETES_NAMESPACE", "")
-RUNTIME_CLASS = os.environ.get("ZOO_KUBERNETES_RUNTIME_CLASS", "kata")
-STORAGE_CLASS = os.environ.get("ZOO_KUBERNETES_STORAGE_CLASS", "")
+NAMESPACE = os.environ.get("ZOO_NAMESPACE", "zoo")
+STORAGE_CLASS = os.environ.get("ZOO_STORAGE_CLASS", "zoo-local")
 HOME_SIZE = os.environ.get("ZOO_KUBERNETES_HOME_SIZE", "10Gi")
-# with a VolumeSnapshotClass, snapshots are CSI volume snapshots; without one, copies into a new claim
-SNAPSHOT_CLASS = os.environ.get("ZOO_KUBERNETES_SNAPSHOT_CLASS", "")
+SPARE_VOLUMES = int(os.environ.get("ZOO_SPARE_VOLUMES", "4"))
+SNAPSHOT_CLASS = os.environ.get("ZOO_SNAPSHOT_CLASS", "zoo-snapshots")
 EGRESS_NAMESPACE = os.environ.get("ZOO_KUBERNETES_EGRESS_NAMESPACE", "") or NAMESPACE
 EGRESS_SELECTOR = os.environ.get("ZOO_KUBERNETES_EGRESS_SELECTOR", "app.kubernetes.io/component=egress")
 PULL_SECRET = os.environ.get("ZOO_KUBERNETES_IMAGE_PULL_SECRET", "")
@@ -50,22 +50,28 @@ HELPER_IMAGE = os.environ.get("ZOO_KUBERNETES_HELPER_IMAGE", "")
 # Kata, KVM) works there. The kubelet's own sandbox image, so nodes already have it.
 PROBE_IMAGE = os.environ.get("ZOO_KUBERNETES_PROBE_IMAGE", "registry.k8s.io/pause:3.10")
 START_TIMEOUT = float(os.environ.get("ZOO_KUBERNETES_START_TIMEOUT", "600"))
-# what a sandbox gets, as on Docker (docker.run_container)
-# the share of a sandbox's CPUs its pod requests (the default 2 CPUs request 500m)
-CPU_REQUEST_SHARE = 0.25
+CPU_REQUEST = 0.1
+IDLE_MEMORY_MB_DESKTOP = int(os.environ.get("ZOO_IDLE_MEMORY_MB_DESKTOP", "700"))
+IDLE_MEMORY_MB_CODE = int(os.environ.get("ZOO_IDLE_MEMORY_MB_CODE", "250"))
 SHM = "1Gi"
 HOME = "/home/zoo"
 CONTAINER = "sandbox"
 EGRESS_DIR = "/run/zoo-egress"
 PREFIX = "k8s:"
 LABELS = {"app.kubernetes.io/managed-by": "zoo", "app.kubernetes.io/part-of": "zoo"}
+SPARE_NODE = "zoo.dev/spare-node"
 # waiting reasons that won't fix themselves
 STUCK = {"ErrImagePull", "ImagePullBackOff", "InvalidImageName", "CreateContainerConfigError", "CreateContainerError"}
 CHUNK = 64 * 1024
+logger = logging.getLogger(__name__)
 
 
-def enabled() -> bool:
-    return bool(NAMESPACE)
+def guest_url() -> str:
+    service = os.environ.get("ZOO_GATEWAY_SERVICE", "zoo-gateway")
+    if not service or not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?", service):
+        raise ZooError("unavailable", "ZOO_GATEWAY_SERVICE must name the Kubernetes gateway service")
+    host = service if "." in service else f"{service}.{NAMESPACE}.svc"
+    return f"ws://{host}:8001/guest/connect"
 
 
 def owns(runtime_id: str | None) -> bool:
@@ -78,6 +84,8 @@ def runtime_id(namespace: str, name: str) -> str:
 
 def parse_id(rid: str) -> tuple[str, str]:
     namespace, _, name = rid[len(PREFIX) :].partition("/")
+    if not owns(rid) or not namespace or not name:
+        raise ZooError("bad_request", "invalid Kubernetes runtime id", "Use k8s:<namespace>/<pod>.")
     return namespace, name
 
 
@@ -86,15 +94,62 @@ def pod_name(sandbox_id: str) -> str:
 
 
 def claim_name(sandbox_id: str) -> str:
-    # the Docker volume's name (docker.volume_name), so helpers address both the same way
     return f"zoo-home-{sandbox_id}"
 
 
-class ExecResult(NamedTuple):
-    """docker-py's exec_run result: output is bytes, or a (stdout, stderr) pair with demux."""
+def home_config(sandbox_id: str) -> dict:
+    with db_manager.session() as db:
+        sandbox = db.get_sandbox(id=sandbox_id)
+        if sandbox is None:
+            pooled = next((row for row in db.list_pool_sandboxes() if row.id == sandbox_id), None)
+            if pooled is None:
+                raise ZooError(
+                    "sandbox_not_found", "sandbox not found", "Create the sandbox before accessing its home."
+                )
+            config = {"image": pooled.image, **json.loads(pooled.config)}
+        else:
+            config = json.loads(sandbox.config)
+    if not isinstance(config.get("home_claim"), str) or not config["home_claim"]:
+        raise ZooError(
+            "unavailable", "sandbox has no home claim configured", "Set config.home_claim when creating the sandbox."
+        )
+    return config
 
-    exit_code: int
-    output: Any
+
+def home_claim(sandbox_id: str) -> str:
+    return home_config(sandbox_id)["home_claim"]
+
+
+def _cleanup_previous_home_claim(db, sandbox) -> dict:
+    config = json.loads(sandbox.config)
+    current = config.get("home_claim")
+    if not isinstance(current, str) or not current:
+        raise ZooError(
+            "unavailable", "sandbox has no home claim configured", "Set config.home_claim when creating the sandbox."
+        )
+    validated_home_claims(config)
+    if "previous_home_claim" not in config:
+        return config
+    previous = config["previous_home_claim"]
+    if not isinstance(previous, str) or not previous or previous == current:
+        raise ZooError(
+            "conflict",
+            "sandbox has an invalid previous home claim",
+            "Repair config.previous_home_claim before cleanup.",
+        )
+    delete_claim(NAMESPACE, previous, wait=True)
+    updated = db.clear_previous_home_claim(sandbox_id=sandbox.id, home_claim=current, previous_home_claim=previous)
+    if updated is None:
+        raise ZooError("conflict", "sandbox home changed during cleanup", "Retry cleanup of the previous home claim.")
+    return json.loads(updated.config)
+
+
+def cleanup_previous_home_claim(sandbox_id: str) -> dict:
+    with db_manager.session() as db:
+        sandbox = db.get_sandbox_for_update(id=sandbox_id)
+        if sandbox is None:
+            raise ZooError("sandbox_not_found", "sandbox not found", "The home claims remain available.")
+        return _cleanup_previous_home_claim(db, sandbox)
 
 
 class KubeError(RuntimeError):
@@ -104,16 +159,8 @@ class KubeError(RuntimeError):
         self.reason = reason
 
 
-class NotFound(KubeError, docker.errors.NotFound):
-    """A missing object; also docker-py's NotFound, which the Docker paths already handle."""
-
-    def __init__(self, status: int, message: str, reason: str = ""):
-        KubeError.__init__(self, status, message, reason)
-        self.response = None
-        self.explanation = message
-
-    def __str__(self) -> str:
-        return str(self.args[0])
+class NotFound(KubeError):
+    """A Kubernetes object does not exist."""
 
 
 # --- the API client ---
@@ -393,12 +440,215 @@ def snapshots_path(namespace: str, name: str = "") -> str:
     return f"/apis/snapshot.storage.k8s.io/v1/namespaces/{namespace}/volumesnapshots" + (f"/{name}" if name else "")
 
 
-# --- pods as docker-py containers ---
+def pod_event(obj: dict, deleted: bool = False) -> dict | None:
+    status = obj.get("status") or {}
+    phase = status.get("phase")
+    terminated = [
+        state["terminated"]
+        for container_status in [*(status.get("initContainerStatuses") or []), *(status.get("containerStatuses") or [])]
+        if "terminated" in (state := container_status.get("state") or {})
+    ]
+    failed = phase == "Failed" or any(state.get("exitCode", 0) != 0 for state in terminated)
+    sandbox_terminated = any(
+        container_status.get("name") == CONTAINER and "terminated" in (container_status.get("state") or {})
+        for container_status in status.get("containerStatuses") or []
+    )
+    stopped = deleted or obj["metadata"].get("deletionTimestamp") or phase == "Succeeded" or sandbox_terminated
+    if not failed and not stopped:
+        return None
+    metadata = obj["metadata"]
+    event = {
+        "type": "state",
+        "runtime_id": runtime_id(metadata.get("namespace") or NAMESPACE, metadata["name"]),
+        "sandbox_id": (metadata.get("labels") or {}).get("zoo.dev/sandbox"),
+        "status": "failed" if failed else "stopped",
+    }
+    if failed:
+        event["error"] = pod_problem(obj) or status.get("message") or status.get("reason") or "sandbox pod failed"
+    return event
+
+
+class KubeEvents(Iterator[dict]):
+    """A resumable sandbox pod watch with cancellable transport reads."""
+
+    def __init__(self, stop: threading.Event):
+        self.stop = stop
+        self.lock = threading.Lock()
+        self.network: Any = None
+        self.response: httpx.Response | None = None
+        self.client: httpx.Client | None = None
+        self.iterator = self._iterate()
+        self.cancellation = threading.Thread(target=self._cancel, name="kube-events-cancel", daemon=True)
+        self.cancellation.start()
+
+    def __next__(self) -> dict:
+        return next(self.iterator)
+
+    def close(self):
+        self.stop.set()
+        self._close_transport()
+
+    def _cancel(self):
+        self.stop.wait()
+        self._close_transport()
+
+    def _close_transport(self):
+        with self.lock:
+            network, self.network = self.network, None
+            response, self.response = self.response, None
+            client, self.client = self.client, None
+        if network is not None:
+            with contextlib.suppress(OSError):
+                network.get_extra_info("socket").shutdown(socket.SHUT_RDWR)
+            with contextlib.suppress(OSError):
+                network.close()
+        if response is not None:
+            with contextlib.suppress(httpx.HTTPError, OSError):
+                response.close()
+        if client is not None:
+            with contextlib.suppress(httpx.HTTPError, OSError):
+                client.close()
+
+    def _trace(self, name: str, info: dict):
+        if name not in {"connection.connect_tcp.complete", "connection.start_tls.complete"}:
+            return
+        with self.lock:
+            self.network = info["return_value"]
+        if self.stop.is_set():
+            self._close_transport()
+
+    def _check_response(self, response: httpx.Response):
+        if response.status_code < 400:
+            return
+        response.read()
+        try:
+            status = response.json()
+        except ValueError:
+            status = {"message": response.text}
+        error = NotFound if response.status_code == 404 else KubeError
+        raise error(response.status_code, status.get("message") or response.reason_phrase, status.get("reason", ""))
+
+    def _iterate(self) -> Iterator[dict]:
+        version = ""
+        delay = 1.0
+        path = pods_path(NAMESPACE)
+        selector = "app.kubernetes.io/component=sandbox"
+        try:
+            if self.stop.is_set():
+                return
+            api.load()
+            while not self.stop.is_set():
+                expired = False
+                try:
+                    client = httpx.Client(base_url=api.server, verify=api.context or False, timeout=4)
+                    with self.lock:
+                        self.client = client
+                    if self.stop.is_set():
+                        return
+                    if not version:
+                        response = client.get(
+                            path,
+                            params={"labelSelector": selector},
+                            headers=api.headers(),
+                            extensions={"trace": self._trace},
+                        )
+                        if self.stop.is_set():
+                            return
+                        self._check_response(response)
+                        listing = response.json()
+                        version = listing["metadata"]["resourceVersion"]
+                        inventory = []
+                        for obj in listing.get("items") or []:
+                            pod = Pod(NAMESPACE, obj["metadata"]["name"], obj)
+                            event = pod_event(obj)
+                            inventory.append(
+                                event
+                                if event is not None
+                                else {
+                                    "runtime_id": pod.id,
+                                    "sandbox_id": pod.labels.get("zoo.dev/sandbox"),
+                                    "status": "running" if pod.status == "running" else "stopped",
+                                }
+                            )
+                        if self.stop.is_set():
+                            return
+                        yield {
+                            "type": "reconcile",
+                            "running_ids": [item["runtime_id"] for item in inventory if item["status"] == "running"],
+                            "sandboxes": inventory,
+                        }
+                    if self.stop.is_set():
+                        return
+                    with client.stream(
+                        "GET",
+                        path,
+                        params={
+                            "labelSelector": selector,
+                            "watch": "true",
+                            "resourceVersion": version,
+                            "allowWatchBookmarks": "true",
+                            "timeoutSeconds": "300",
+                        },
+                        headers=api.headers(),
+                        timeout=httpx.Timeout(4, read=None),
+                        extensions={"trace": self._trace},
+                    ) as response:
+                        with self.lock:
+                            self.response = response
+                        if self.stop.is_set():
+                            return
+                        self._check_response(response)
+                        delay = 1.0
+                        for line in response.iter_lines():
+                            if self.stop.is_set():
+                                return
+                            if not line:
+                                continue
+                            frame = json.loads(line)
+                            obj = frame["object"]
+                            if frame["type"] == "ERROR":
+                                raise KubeError(
+                                    int(obj.get("code") or 0),
+                                    obj.get("message") or "pod watch failed",
+                                    obj.get("reason", ""),
+                                )
+                            version = (obj.get("metadata") or {}).get("resourceVersion") or version
+                            if frame["type"] not in {"ADDED", "MODIFIED", "DELETED"}:
+                                continue
+                            event = pod_event(obj, deleted=frame["type"] == "DELETED")
+                            if event is not None:
+                                yield event
+                except KubeError as error:
+                    if self.stop.is_set():
+                        return
+                    if error.status == 410:
+                        version = ""
+                        expired = True
+                    elif error.status in {401, 403, 404}:
+                        raise
+                    else:
+                        logger.warning("Kubernetes pod watch disconnected", extra={"error": str(error)})
+                except (httpx.HTTPError, OSError, ValueError) as error:
+                    if self.stop.is_set():
+                        return
+                    logger.warning("Kubernetes pod watch disconnected", extra={"error": str(error)})
+                finally:
+                    self._close_transport()
+                if expired:
+                    continue
+                if self.stop.wait(delay):
+                    return
+                delay = min(delay * 2, 30.0)
+        finally:
+            self.close()
+
+
+def events(stop: threading.Event) -> KubeEvents:
+    return KubeEvents(stop)
 
 
 def user_argv(argv: list[str], user: str | None, environment: dict | None, workdir: str | None) -> list[str]:
-    """docker exec's user, environment and working directory for a pods/exec command, which runs as the
-    container's user (root, in the sandbox images) in its working directory."""
+    """Wraps a pods/exec command with its user, environment and working directory."""
     if environment:
         argv = ["env", *[f"{k}={v}" for k, v in environment.items()], *argv]
     if user and user not in ("root", "0"):
@@ -409,7 +659,7 @@ def user_argv(argv: list[str], user: str | None, environment: dict | None, workd
 
 
 class Pod:
-    """A pod, with the parts of docker-py's Container the API uses."""
+    """A Kubernetes pod and its exec and archive operations."""
 
     def __init__(self, namespace: str, name: str, obj: dict | None = None):
         self.namespace = namespace
@@ -450,102 +700,95 @@ class Pod:
         return "exited" if self.obj.get("status", {}).get("phase") in ("Succeeded", "Failed") else "created"
 
     @property
-    def attrs(self) -> dict:
-        spec = next(
-            (c for c in self.obj["spec"]["containers"] if c["name"] == CONTAINER), self.obj["spec"]["containers"][0]
-        )
-        addrs = [a["ip"] for a in self.obj.get("status", {}).get("podIPs") or [] if a.get("ip")] or [self.ip]
-        return {
-            "Config": {
-                "Env": [f"{e['name']}={e.get('value', '')}" for e in spec.get("env") or []],
-                "Image": spec["image"],
-            },
-            "NetworkSettings": {
-                "Networks": {
-                    "pod": {"IPAddress": addrs[0], "GlobalIPv6Address": next((a for a in addrs if ":" in a), "")}
-                }
-            },
-        }
+    def environment(self) -> dict[str, str]:
+        spec = next(c for c in self.obj["spec"]["containers"] if c["name"] == self.container)
+        return {entry["name"]: entry.get("value", "") for entry in spec.get("env") or []}
 
-    def exec_run(
+    @property
+    def addresses(self) -> list[str]:
+        return sorted(
+            {entry["ip"] for entry in self.obj.get("status", {}).get("podIPs") or [] if entry.get("ip")}
+            | ({self.ip} if self.ip else set())
+        )
+
+    def execute(
         self,
         cmd,
         user: str | None = None,
         environment: dict | None = None,
         workdir: str | None = None,
-        demux: bool = False,
-        **_: Any,
-    ) -> ExecResult:
+    ) -> tuple[int, bytes, bytes]:
         argv = shlex.split(cmd) if isinstance(cmd, str) else list(cmd)
-        code, out, err, both = api.exec(
+        code, out, err, _ = api.exec(
             self.namespace, self.name, user_argv(argv, user, environment, workdir), self.container
         )
-        return ExecResult(code, (out or None, err or None) if demux else both)
+        return code, out, err
 
     @property
     def container(self) -> str:
         names = [c["name"] for c in self.obj["spec"]["containers"]]
         return CONTAINER if CONTAINER in names else names[0]
 
-    def get_archive(self, path: str) -> tuple[Iterator[bytes], dict]:
-        """A tar of `path`, named by its last part like docker's, streamed as the pod sends it."""
+    def read_archive(self, path: str) -> Iterator[bytes]:
+        """Streams a tar of path from the pod."""
         parent, base = os.path.split(path.rstrip("/") or "/")
         stream = api.exec_stream(
             self.namespace, self.name, ["tar", "-C", parent or "/", "-cf", "-", base], self.container
         )
 
-        def chunks() -> Iterator[bytes]:
-            errors = bytearray()
-            for channel, data in stream:
-                if channel == 1:
-                    yield data
-                elif channel == 2:
-                    errors.extend(data)
-                elif int(data) != 0:
-                    raise RuntimeError(errors.decode(errors="replace").strip() or f"tar exited with {int(data)}")
+        errors = bytearray()
+        for channel, data in stream:
+            if channel == 1:
+                yield data
+            elif channel == 2:
+                errors.extend(data)
+            elif int(data) != 0:
+                raise KubeError(0, errors.decode(errors="replace").strip() or f"tar exited with {int(data)}")
 
-        return chunks(), {"name": base}
-
-    def put_archive(self, path: str, data: bytes) -> bool:
+    def write_archive(self, path: str, data: bytes):
         script = f"head -c {len(data)} | tar -C {shlex.quote(path)} -xf -"
         code, _, err, _ = api.exec(self.namespace, self.name, ["sh", "-c", script], self.container, stdin=data)
         if code != 0:
-            raise RuntimeError(err.decode(errors="replace").strip() or f"tar exited with {code}")
-        return True
+            raise KubeError(0, err.decode(errors="replace").strip() or f"tar exited with {code}")
 
-    def remove(self, force: bool = True):
+    def remove(self):
         node = self.node
         delete_pod(self.namespace, self.name)
         if node and self.labels.get("app.kubernetes.io/component") == "sandbox":
             forget_policy(self.id, node)
 
-    def start(self):
-        """A helper pod is created when it starts, like a docker container from containers.create."""
-
 
 class HelperPod(Pod):
-    """A one-shot root pod with claims mounted, for work on a sandbox's home disk (docker.helper)."""
+    """A one-shot root pod with claims mounted for work on a sandbox's home disk."""
 
-    def __init__(self, namespace: str, image: str, volumes: dict[str, dict], labels: dict[str, str]):
+    def __init__(self, namespace: str, image: str, volumes: dict[str, str], labels: dict[str, str], node: str = ""):
         self.namespace = namespace
         self.name = f"zoo-helper-{uuid.uuid4().hex[:12]}"
         self.image = image
         self.volumes = volumes
         self.extra_labels = labels
+        self.target_node = node
         self.obj = {}
 
     def start(self):
-        node = ""
+        node = self.target_node
         mounts, volumes = [], []
-        for i, (claim, mount) in enumerate(self.volumes.items()):
+        for index, (claim, mount) in enumerate(self.volumes.items()):
             ensure_claim(self.namespace, claim)
-            mounts.append({"name": f"v{i}", "mountPath": mount["bind"]})
-            volumes.append({"name": f"v{i}", "persistentVolumeClaim": {"claimName": claim}})
-            # a claim a running sandbox holds can only be mounted on that sandbox's node
-            if claim.startswith("zoo-home-"):
-                sandbox = existing_pod(self.namespace, pod_name(claim[len("zoo-home-") :]))
-                node = node or (sandbox.node if sandbox is not None else "")
+            mounts.append({"name": f"v{index}", "mountPath": mount, "readOnly": mount == "/from"})
+            volumes.append(
+                {"name": f"v{index}", "persistentVolumeClaim": {"claimName": claim, "readOnly": mount == "/from"}}
+            )
+            selected = (api.get(claims_path(self.namespace, claim))["metadata"].get("annotations") or {}).get(
+                "volume.kubernetes.io/selected-node"
+            )
+            if node and selected and node != selected:
+                raise ZooError(
+                    "conflict", "home claim is bound to another node", "Use a new claim for the target node."
+                )
+            node = node or selected or ""
         spec: dict = {
+            "runtimeClassName": "kata",
             "restartPolicy": "Never",
             "automountServiceAccountToken": False,
             "enableServiceLinks": False,
@@ -571,52 +814,181 @@ class HelperPod(Pod):
         )
         self.obj = wait_running(self.namespace, self.name, START_TIMEOUT)
 
-    def remove(self, force: bool = True):
-        delete_pod(self.namespace, self.name, wait=False)
+    def remove(self):
+        delete_pod(self.namespace, self.name)
 
 
 def sanitize_labels(labels: dict[str, str]) -> dict[str, str]:
     return {re.sub(r"[^\w.-]", "-", k): re.sub(r"[^\w.-]", "-", v)[:63] for k, v in (labels or {}).items()}
 
 
-class Claim:
-    def __init__(self, namespace: str, name: str):
-        self.namespace = namespace
-        self.name = name
-
-    def remove(self, force: bool = True):
-        delete_claim(self.namespace, self.name)
-
-
-class Pods:
-    def get(self, name_or_id: str) -> Pod:
-        if owns(name_or_id):
-            return Pod(*parse_id(name_or_id))
-        return Pod(NAMESPACE, name_or_id)
-
-    def create(self, image: str, volumes: dict | None = None, labels: dict | None = None, **_: Any) -> HelperPod:
-        return HelperPod(NAMESPACE, HELPER_IMAGE or image, volumes or {}, labels or {})
-
-
-class Claims:
-    def get(self, name: str) -> Claim:
-        api.get(claims_path(NAMESPACE, name))
-        return Claim(NAMESPACE, name)
-
-
-class Cluster:
-    """The cluster where a Docker client would be (docker.client_for), for volumes and helper containers."""
-
-    def __init__(self):
-        self.containers = Pods()
-        self.volumes = Claims()
-
-
-cluster = Cluster()
-
-
 def container(rid: str) -> Pod:
     return Pod(*parse_id(rid))
+
+
+def local_server(server):
+    if server is not None:
+        raise ZooError(
+            "not_supported",
+            "Kubernetes sandboxes do not run on registered servers",
+            "Use the configured Kubernetes cluster.",
+        )
+
+
+def exec_command(
+    rid: str,
+    cmd: str | list[str],
+    user: str | None = "zoo",
+    environment: dict[str, str] | None = None,
+    workdir: str | None = None,
+) -> tuple[int, bytes, bytes]:
+    return container(rid).execute(cmd, user=user, environment=environment, workdir=workdir)
+
+
+def root_exec(rid: str, script: str) -> str:
+    code, out, err = exec_command(rid, ["sh", "-c", script], user="root")
+    if code != 0:
+        raise KubeError(0, (err or out).decode(errors="replace").strip() or f"exit code {code}")
+    return out.decode(errors="replace")
+
+
+def remove_container(rid: str):
+    with contextlib.suppress(NotFound):
+        container(rid).remove()
+
+
+def remove_named_container(name: str):
+    with contextlib.suppress(NotFound):
+        Pod(NAMESPACE, name).remove()
+
+
+def stop(rid: str):
+    remove_container(rid)
+
+
+def remove_volume(sandbox_id: str, server=None):
+    local_server(server)
+    with db_manager.session() as db:
+        sandbox = db.get_sandbox_for_update(id=sandbox_id)
+        if sandbox is not None:
+            config = _cleanup_previous_home_claim(db, sandbox)
+        else:
+            pooled = db.get_pool_sandbox_for_update(id=sandbox_id)
+            if pooled is None:
+                raise ZooError("sandbox_not_found", "sandbox not found", "Pass the persisted home config for cleanup.")
+            config = json.loads(pooled.config)
+        remove_home(config)
+
+
+def validated_home_claims(config: dict) -> list[str]:
+    values = [config.get("home_claim")]
+    if "previous_home_claim" in config:
+        values.insert(0, config["previous_home_claim"])
+    names: list[str] = []
+    for value in values:
+        if (
+            not isinstance(value, str)
+            or len(value) > 253
+            or not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*", value)
+            or value in names
+        ):
+            raise ZooError("conflict", "invalid home claim config", "Pass valid, distinct persisted home claim names.")
+        names.append(value)
+    return names
+
+
+def remove_home(config: dict):
+    names = validated_home_claims(config)
+    for name in names:
+        delete_claim(NAMESPACE, name, wait=True)
+
+
+def is_running(rid: str) -> bool:
+    try:
+        return container(rid).status == "running"
+    except NotFound:
+        return False
+
+
+def export_dir(rid: str, path: str) -> bytes:
+    return b"".join(container(rid).read_archive(path))
+
+
+def read_archive(rid: str, path: str) -> bytes:
+    return export_dir(rid, path)
+
+
+def write_archive(rid: str, path: str, data: bytes) -> bool:
+    container(rid).write_archive(path, data)
+    return True
+
+
+def import_dir(rid: str, parent: str, data: bytes):
+    root_exec(rid, f"mkdir -p {shlex.quote(parent)} && chown zoo:zoo {shlex.quote(parent)}")
+    container(rid).write_archive(parent, data)
+    root_exec(rid, f"chown -R zoo:zoo {shlex.quote(parent)}")
+
+
+def export_home(rid: str) -> Iterator[bytes]:
+    return container(rid).read_archive(HOME)
+
+
+def import_home(rid: str, data: bytes):
+    container(rid).write_archive("/home", data)
+    root_exec(rid, f"chown -R zoo:zoo {HOME}")
+
+
+APP_PROCESSES = {
+    "firefox": ("firefox", "firefox-esr", "firefox-bin"),
+    "chromium": ("chromium", "chromium-browse"),
+    "chrome": ("chrome", "google-chrome"),
+    "vscode": ("code",),
+}
+
+
+def app_running(rid: str, app: str) -> bool:
+    names = "|".join(APP_PROCESSES[app])
+    script = f'for f in /proc/[0-9]*/comm; do read -r name < "$f" 2>/dev/null && case "$name" in {names}) exit 0;; esac; done; exit 1'
+    code, out, err = exec_command(rid, ["sh", "-c", script], user="root")
+    if code not in (0, 1):
+        raise KubeError(0, (err or out).decode(errors="replace").strip() or f"exit code {code}")
+    return code == 0
+
+
+def tar_file(name: str, data: bytes, mode: int = 0o600) -> bytes:
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w") as archive:
+        entry = tarfile.TarInfo(name)
+        entry.size, entry.mode = len(data), mode
+        archive.addfile(entry, io.BytesIO(data))
+    return buffer.getvalue()
+
+
+def write_secrets(rid: str, values: dict[str, str]):
+    import_dir(rid, "/run/zoo", tar_file("env.json", json.dumps(values).encode()))
+
+
+def apply_apps(rid: str, effects: dict[str, str]):
+    if not effects:
+        return
+    root_exec(rid, "mkdir -p -m 700 /etc/zoo")
+    container(rid).write_archive("/etc/zoo", tar_file("apps.json", json.dumps(effects).encode()))
+    lines = []
+    for binary, effect in effects.items():
+        if effect == "allow":
+            lines.append(f"path=$(command -v {shlex.quote(binary)}) && chmod 755 $(readlink -f $path) || true")
+        else:
+            lines.append(
+                f"path=$(command -v {shlex.quote(binary)}) && chown root:root $(readlink -f $path) && chmod 700 $(readlink -f $path) || true"
+            )
+    root_exec(rid, "\n".join(lines))
+
+
+def guest_endpoint(rid: str) -> tuple[str, int] | None:
+    url = urllib.parse.urlsplit(container(rid).environment.get("ZOO_GUEST_URL", ""))
+    if not url.hostname:
+        return None
+    return url.hostname, url.port or (443 if url.scheme == "wss" else 80)
 
 
 def existing_pod(namespace: str, name: str) -> Pod | None:
@@ -636,21 +1008,250 @@ def pull_secrets(spec: dict):
         spec["imagePullSecrets"] = [{"name": PULL_SECRET}]
 
 
-def ensure_claim(namespace: str, name: str, source: dict | None = None, storage: str = HOME_SIZE):
-    """Creates the claim unless it exists. Docker creates a volume the same way the first time it is mounted."""
-    if api.exists(claims_path(namespace, name)) is not None:
+def ensure_claim(namespace: str, name: str, source: dict | None = None, storage: str = HOME_SIZE, node: str = ""):
+    """Creates the claim unless it exists."""
+    if not STORAGE_CLASS:
+        raise ZooError("unavailable", "Kubernetes home volumes require a StorageClass", "Set ZOO_STORAGE_CLASS.")
+    existing = api.exists(claims_path(namespace, name))
+    if existing is not None:
+        if existing["metadata"].get("deletionTimestamp"):
+            raise ZooError("conflict", "home claim is being deleted", "Wait for volume cleanup before restarting.")
+        if node:
+            selected = (existing["metadata"].get("annotations") or {}).get("volume.kubernetes.io/selected-node")
+            if selected and selected != node:
+                raise ZooError(
+                    "conflict",
+                    "home claim has a different selected node",
+                    "Keep the persisted node or move the volume.",
+                )
+            if (existing.get("status") or {}).get("phase") == "Bound":
+                bound_claim(namespace, name, node)
+            elif not selected:
+                api.request(
+                    "PATCH",
+                    claims_path(namespace, name),
+                    {
+                        "metadata": {
+                            "resourceVersion": existing["metadata"]["resourceVersion"],
+                            "annotations": {"volume.kubernetes.io/selected-node": node},
+                        }
+                    },
+                )
         return
-    spec: dict = {"accessModes": ["ReadWriteOnce"], "resources": {"requests": {"storage": storage}}}
-    if STORAGE_CLASS:
-        spec["storageClassName"] = STORAGE_CLASS
+    spec: dict = {
+        "accessModes": ["ReadWriteOnce"],
+        "resources": {"requests": {"storage": storage}},
+        "storageClassName": STORAGE_CLASS,
+    }
     if source is not None:
         spec["dataSource"] = source
     body = {"metadata": {"name": name, "labels": {**LABELS, "app.kubernetes.io/component": "home"}}, "spec": spec}
+    if node:
+        body["metadata"]["annotations"] = {"volume.kubernetes.io/selected-node": node}
     try:
         api.request("POST", claims_path(namespace), body)
     except KubeError as e:
         if e.status != 409:
             raise
+        ensure_claim(namespace, name, source, storage, node)
+
+
+def spare_storage_check():
+    if SPARE_VOLUMES < 0 or quantity(HOME_SIZE) <= 0:
+        raise ZooError(
+            "bad_request", "invalid spare volume settings", "Use a nonnegative count and positive home size."
+        )
+    storage = api.get(f"/apis/storage.k8s.io/v1/storageclasses/{STORAGE_CLASS}")
+    if storage.get("volumeBindingMode") != "WaitForFirstConsumer":
+        raise ZooError(
+            "unavailable",
+            "spare home claims require WaitForFirstConsumer storage",
+            "Configure ZOO_STORAGE_CLASS with delayed volume binding.",
+        )
+
+
+def spare_node_label(node: str) -> str:
+    return hashlib.sha256(node.encode()).hexdigest()[:16]
+
+
+def create_spare_claim(node: str) -> dict:
+    return api.request(
+        "POST",
+        claims_path(NAMESPACE),
+        {
+            "metadata": {
+                "name": f"zoo-spare-home-{uuid.uuid4().hex}",
+                "labels": {**LABELS, "app.kubernetes.io/component": "spare-home", SPARE_NODE: spare_node_label(node)},
+                "annotations": {SPARE_NODE: node},
+            },
+            "spec": {
+                "accessModes": ["ReadWriteOnce"],
+                "resources": {"requests": {"storage": HOME_SIZE}},
+                "storageClassName": STORAGE_CLASS,
+            },
+        },
+    )
+
+
+def spare_claim_state(db) -> tuple[list[dict], dict[str, str], set[str]]:
+    references: dict[str, str] = {}
+    for row in db.list_kube_home_claims():
+        config = json.loads(row.config)
+        for key in ("home_claim", "previous_home_claim"):
+            name = config.get(key)
+            if not isinstance(name, str) or not name:
+                continue
+            if name in references and references[name] != row.id:
+                raise ZooError(
+                    "conflict", "home claim has multiple owners", "Repair the persisted home claim pointers."
+                )
+            references[name] = row.id
+    mounted = {
+        volume["persistentVolumeClaim"]["claimName"]
+        for pod in api.get(pods_path(NAMESPACE)).get("items") or []
+        for volume in pod.get("spec", {}).get("volumes") or []
+        if volume.get("persistentVolumeClaim")
+    }
+    claims = (
+        api.get(claims_path(NAMESPACE), labelSelector=f"app.kubernetes.io/managed-by=zoo,{SPARE_NODE}").get("items")
+        or []
+    )
+    return claims, references, mounted
+
+
+def available_spare(claim: dict, node: str, references: dict[str, str], mounted: set[str]) -> bool:
+    metadata = claim["metadata"]
+    labels = metadata.get("labels") or {}
+    annotations = metadata.get("annotations") or {}
+    spec = claim["spec"]
+    return bool(
+        metadata["name"] not in references
+        and metadata["name"] not in mounted
+        and not metadata.get("deletionTimestamp")
+        and labels.get("app.kubernetes.io/component") == "spare-home"
+        and labels.get(SPARE_NODE) == spare_node_label(node)
+        and annotations.get(SPARE_NODE) == node
+        and not labels.get("zoo.dev/sandbox")
+        and not annotations.get("volume.kubernetes.io/selected-node")
+        and not spec.get("volumeName")
+        and not spec.get("dataSource")
+        and not spec.get("dataSourceRef")
+        and spec.get("storageClassName") == STORAGE_CLASS
+        and spec.get("accessModes") == ["ReadWriteOnce"]
+        and spec.get("volumeMode", "Filesystem") == "Filesystem"
+        and quantity((spec.get("resources") or {}).get("requests", {}).get("storage")) == quantity(HOME_SIZE)
+        and (claim.get("status") or {}).get("phase", "Pending") == "Pending"
+    )
+
+
+def own_spare_claim(name: str, sandbox_id: str, node: str):
+    for _ in range(3):
+        claim = api.get(claims_path(NAMESPACE, name))
+        metadata = claim["metadata"]
+        labels = metadata.get("labels") or {}
+        if (
+            metadata.get("deletionTimestamp")
+            or labels.get(SPARE_NODE) != spare_node_label(node)
+            or (metadata.get("annotations") or {}).get(SPARE_NODE) != node
+            or labels.get("zoo.dev/sandbox") not in (None, sandbox_id)
+        ):
+            raise ZooError("conflict", "spare claim ownership changed", "Retry after volume cleanup completes.")
+        if labels.get("zoo.dev/sandbox") == sandbox_id and labels.get("app.kubernetes.io/component") == "home":
+            return
+        try:
+            api.request(
+                "PATCH",
+                claims_path(NAMESPACE, name),
+                {
+                    "metadata": {
+                        "resourceVersion": metadata["resourceVersion"],
+                        "labels": {"app.kubernetes.io/component": "home", "zoo.dev/sandbox": sandbox_id},
+                    }
+                },
+            )
+            return
+        except KubeError as error:
+            if error.status != 409:
+                raise
+    raise ZooError("conflict", "spare claim changed during assignment", "Retry the sandbox start.")
+
+
+def prepare_home_claim(sandbox_id: str, node: str, size: Size) -> str:
+    storage = f"{size.disk_gb}Gi" if size.disk_gb else HOME_SIZE
+    spare = False
+    with db_manager.session() as db:
+        db.lock_kube_placement(namespace=NAMESPACE)
+        sandbox = db.get_sandbox_for_update(id=sandbox_id)
+        pooled = db.get_pool_sandbox_for_update(id=sandbox_id) if sandbox is None else None
+        owner = sandbox if sandbox is not None else pooled
+        if owner is None:
+            raise ZooError("sandbox_not_found", "sandbox not found", "Create the sandbox before assigning its home.")
+        config = json.loads(owner.config)
+        name = config.get("home_claim")
+        if not isinstance(name, str) or not name or config.get("node_name") != node:
+            raise ZooError(
+                "conflict", "home placement changed", "Retry after the current lifecycle operation completes."
+            )
+        existing = api.exists(claims_path(NAMESPACE, name))
+        if existing is not None:
+            spare = SPARE_NODE in (existing["metadata"].get("labels") or {})
+        elif name != claim_name(sandbox_id):
+            raise ZooError("unavailable", "persisted home claim is missing", "Restore its data before restarting.")
+        elif quantity(storage) == quantity(HOME_SIZE):
+            spare_storage_check()
+            claims, references, mounted = spare_claim_state(db)
+            candidate = next((claim for claim in claims if available_spare(claim, node, references, mounted)), None)
+            if candidate is None:
+                candidate = create_spare_claim(node)
+            parameters = {
+                "spare_claim": candidate["metadata"]["name"],
+                "sandbox_id": sandbox_id,
+                "home_claim": name,
+                "node_name": node,
+            }
+            updated = (
+                db.claim_sandbox_spare_home(**parameters)
+                if sandbox is not None
+                else db.claim_pool_spare_home(**parameters)
+            )
+            if updated is None:
+                raise ZooError("conflict", "sandbox changed during home assignment", "Retry the sandbox start.")
+            name = candidate["metadata"]["name"]
+            spare = True
+    if spare:
+        own_spare_claim(name, sandbox_id, node)
+    return name
+
+
+def refill_spare_volumes() -> dict[str, int]:
+    spare_storage_check()
+    with db_manager.session() as db:
+        db.lock_kube_placement(namespace=NAMESPACE)
+        nodes = {node["metadata"]["name"] for node in nodes_for_sandboxes()}
+        available: dict[str, list[dict]] = {node: [] for node in nodes}
+        claims, references, mounted = spare_claim_state(db)
+        for claim in claims:
+            metadata = claim["metadata"]
+            name = metadata["name"]
+            node = (metadata.get("annotations") or {}).get(SPARE_NODE)
+            if name in references:
+                if not metadata.get("deletionTimestamp"):
+                    if not isinstance(node, str) or not node:
+                        raise ZooError("conflict", "owned spare has no node", "Repair its spare-node annotation.")
+                    own_spare_claim(name, references[name], node)
+                continue
+            if name in mounted or metadata.get("deletionTimestamp"):
+                continue
+            if isinstance(node, str) and node in nodes and available_spare(claim, node, references, mounted):
+                available[node].append(claim)
+            else:
+                delete_claim(NAMESPACE, name)
+        for node, claims in available.items():
+            for claim in claims[SPARE_VOLUMES:]:
+                delete_claim(NAMESPACE, claim["metadata"]["name"])
+            for _ in range(max(0, SPARE_VOLUMES - len(claims))):
+                create_spare_claim(node)
+        return {node: SPARE_VOLUMES for node in available}
 
 
 def delete_claim(namespace: str, name: str, wait: bool = False, timeout: float = 120):
@@ -732,10 +1333,289 @@ def memory_quantity(mb: int) -> str:
     return f"{mb >> 10}Gi" if mb % 1024 == 0 else f"{mb}Mi"
 
 
+def sandbox_requests(desktop: bool, size: Size) -> dict[str, str]:
+    memory = IDLE_MEMORY_MB_DESKTOP if desktop else IDLE_MEMORY_MB_CODE
+    if memory <= 0:
+        raise ZooError(
+            "unavailable",
+            "idle memory requests must be positive",
+            "Set the ZOO_IDLE_MEMORY_MB settings to positive values.",
+        )
+    if not math.isfinite(size.cpus) or size.cpus < CPU_REQUEST or size.memory_mb < memory:
+        raise ZooError(
+            "bad_request",
+            f"sandbox limits must allow at least 100m CPU and {memory}Mi memory",
+            "Increase the sandbox size to cover its idle resource requests.",
+        )
+    return {"cpu": "100m", "memory": memory_quantity(memory)}
+
+
+def resource_requests(resources: dict) -> dict[str, int]:
+    return {
+        "cpu": math.ceil(quantity(resources.get("cpu")) * 1000),
+        "memory": math.ceil(quantity(resources.get("memory"))),
+    }
+
+
+def pod_requests(obj: dict) -> dict[str, int]:
+    spec = obj["spec"]
+    regular = {"cpu": 0, "memory": 0}
+    sidecars = {"cpu": 0, "memory": 0}
+    initial = {"cpu": 0, "memory": 0}
+    for container_spec in spec.get("containers") or []:
+        requested = resource_requests((container_spec.get("resources") or {}).get("requests") or {})
+        for resource in regular:
+            regular[resource] += requested[resource]
+    for container_spec in spec.get("initContainers") or []:
+        requested = resource_requests((container_spec.get("resources") or {}).get("requests") or {})
+        if container_spec.get("restartPolicy") == "Always":
+            for resource in sidecars:
+                sidecars[resource] += requested[resource]
+            requested = sidecars.copy()
+        else:
+            requested = {resource: requested[resource] + sidecars[resource] for resource in requested}
+        for resource, amount in initial.items():
+            initial[resource] = max(amount, requested[resource])
+    overhead = resource_requests(spec.get("overhead") or {})
+    pod_level = (spec.get("resources") or {}).get("requests") or {}
+    return {
+        resource: (
+            resource_requests(pod_level)[resource]
+            if resource in pod_level
+            else max(regular[resource] + sidecars[resource], initial[resource])
+        )
+        + overhead[resource]
+        for resource in regular
+    }
+
+
+def selector_matches(requirements: list[dict], values: dict[str, str]) -> bool:
+    for requirement in requirements:
+        actual = values.get(requirement["key"])
+        expected = requirement.get("values") or []
+        operator = requirement["operator"]
+        if operator == "In":
+            matched = actual in expected
+        elif operator == "NotIn":
+            matched = actual not in expected
+        elif operator == "Exists":
+            matched = actual is not None
+        elif operator == "DoesNotExist":
+            matched = actual is None
+        elif operator in {"Gt", "Lt"}:
+            try:
+                matched = (
+                    actual is not None
+                    and len(expected) == 1
+                    and (int(actual) > int(expected[0]) if operator == "Gt" else int(actual) < int(expected[0]))
+                )
+            except ValueError:
+                matched = False
+        else:
+            raise ZooError(
+                "upstream_error",
+                "volume has an unsupported node affinity operator",
+                "Check the persistent volume's node affinity.",
+            )
+        if not matched:
+            return False
+    return True
+
+
+def node_affinity_matches(node: dict, affinity: dict) -> bool:
+    required = affinity.get("required")
+    if required is None:
+        return True
+    labels = node["metadata"].get("labels") or {}
+    fields = {"metadata.name": node["metadata"]["name"]}
+    return any(
+        bool(term.get("matchExpressions") or term.get("matchFields"))
+        and selector_matches(term.get("matchExpressions") or [], labels)
+        and selector_matches(term.get("matchFields") or [], fields)
+        for term in required.get("nodeSelectorTerms") or []
+    )
+
+
+def bound_claim(namespace: str, name: str, node_name: str) -> dict:
+    claim = api.get(claims_path(namespace, name))
+    if claim.get("status", {}).get("phase") != "Bound" or not claim["spec"].get("volumeName"):
+        raise ZooError(
+            "unavailable",
+            "sandbox home claim is not bound",
+            "Wait for its selected-node provisioner to bind the claim.",
+        )
+    selected = (claim["metadata"].get("annotations") or {}).get("volume.kubernetes.io/selected-node")
+    if selected and selected != node_name:
+        raise ZooError(
+            "conflict",
+            "home claim is bound to another node",
+            "Restart on the volume's persisted node or move its home.",
+        )
+    volume = api.get(f"/api/v1/persistentvolumes/{claim['spec']['volumeName']}")
+    node = api.get(f"/api/v1/nodes/{node_name}")
+    if not node_affinity_matches(node, volume["spec"].get("nodeAffinity") or {}):
+        raise ZooError(
+            "conflict",
+            "home volume affinity excludes the selected node",
+            "Restart on the volume's persisted node or move its home.",
+        )
+    return claim
+
+
+def wait_bound(namespace: str, name: str, node_name: str, timeout: float = START_TIMEOUT) -> dict:
+    deadline = time.monotonic() + timeout
+    while True:
+        claim = api.get(claims_path(namespace, name))
+        phase = (claim.get("status") or {}).get("phase")
+        if phase == "Bound":
+            return bound_claim(namespace, name, node_name)
+        selected = (claim["metadata"].get("annotations") or {}).get("volume.kubernetes.io/selected-node")
+        if phase == "Lost" or claim["metadata"].get("deletionTimestamp") or selected != node_name:
+            raise ZooError(
+                "unavailable",
+                "home claim lost its selected-node binding",
+                "Check the CSI provisioner and selected node.",
+            )
+        if time.monotonic() >= deadline:
+            raise ZooError(
+                "timeout",
+                "home claim did not bind on the selected node",
+                "Check TopoLVM capacity and the CSI provisioner.",
+            )
+        time.sleep(0.1)
+
+
+def reserve_node(sandbox_id: str, desktop: bool, size: Size) -> str:
+    requested = resource_requests(sandbox_requests(desktop, size))
+    runtime = api.get("/apis/node.k8s.io/v1/runtimeclasses/kata")
+    overhead = resource_requests((runtime.get("overhead") or {}).get("podFixed") or {})
+    requested = {resource: requested[resource] + overhead[resource] for resource in requested}
+    with db_manager.session() as db:
+        db.lock_kube_placement(namespace=NAMESPACE)
+        sandbox = db.get_sandbox_for_update(id=sandbox_id)
+        pooled = db.get_pool_sandbox_for_update(id=sandbox_id) if sandbox is None else None
+        owner = sandbox if sandbox is not None else pooled
+        if owner is None:
+            raise ZooError("sandbox_not_found", "sandbox not found", "Create the sandbox before placing it.")
+        config = json.loads(owner.config)
+        claim_name = config.get("home_claim")
+        if not isinstance(claim_name, str) or not claim_name:
+            raise ZooError(
+                "unavailable",
+                "sandbox has no home claim configured",
+                "Set config.home_claim when creating the sandbox.",
+            )
+        claim = api.exists(claims_path(NAMESPACE, claim_name))
+        volume = None
+        if claim is not None and (claim.get("status") or {}).get("phase") == "Bound":
+            volume_name = claim["spec"].get("volumeName")
+            if not volume_name:
+                raise ZooError(
+                    "upstream_error", "bound claim has no volume name", "Check the persistent volume binding."
+                )
+            volume = api.get(f"/api/v1/persistentvolumes/{volume_name}")
+        selected = ((claim or {}).get("metadata", {}).get("annotations") or {}).get(
+            "volume.kubernetes.io/selected-node"
+        )
+        persisted = config.get("node_name")
+        if persisted and selected and persisted != selected:
+            raise ZooError(
+                "conflict",
+                "persisted node differs from the home claim's selected node",
+                "Move the home volume before changing its node.",
+            )
+        pinned = persisted or selected
+        nodes = {node["metadata"]["name"]: node for node in nodes_for_sandboxes()}
+        capacity = {
+            name: {
+                "cpu": math.floor(quantity(node["status"]["allocatable"]["cpu"]) * 1000),
+                "memory": math.floor(quantity(node["status"]["allocatable"]["memory"])),
+            }
+            for name, node in nodes.items()
+        }
+        active = (
+            api.get("/api/v1/pods", fieldSelector="status.phase!=Succeeded,status.phase!=Failed").get("items") or []
+        )
+        visible: dict[str, str] = {}
+        for pod in active:
+            metadata = pod["metadata"]
+            identity = (
+                (metadata.get("labels") or {}).get("zoo.dev/sandbox")
+                if metadata.get("namespace") == NAMESPACE
+                else None
+            )
+            node_name = pod["spec"].get("nodeName")
+            if identity and node_name:
+                visible[identity] = node_name
+            if identity == sandbox_id:
+                continue
+            if node_name in capacity:
+                usage = pod_requests(pod)
+                for resource in usage:
+                    capacity[node_name][resource] -= usage[resource]
+        for reservation in db.list_kube_node_reservations():
+            if reservation.id == sandbox_id:
+                continue
+            reserved = json.loads(reservation.config)
+            node_name = reserved["node_name"]
+            if visible.get(reservation.id) == node_name:
+                continue
+            if node_name in capacity:
+                for resource in requested:
+                    capacity[node_name][resource] -= reserved["node_reservation"][resource]
+        eligible = [
+            name
+            for name in nodes
+            if (not pinned or name == pinned)
+            and (volume is None or node_affinity_matches(nodes[name], volume["spec"].get("nodeAffinity") or {}))
+            and all(capacity[name][resource] >= requested[resource] for resource in requested)
+        ]
+        if not eligible:
+            raise ZooError(
+                "unavailable",
+                "no eligible node has capacity for this sandbox",
+                "Free CPU and memory on its persisted node, or add a Kata-capable node.",
+            )
+        node_name = max(sorted(eligible), key=lambda name: (capacity[name]["memory"], capacity[name]["cpu"]))
+        parameters = {
+            "node_name": node_name,
+            "reservation": json.dumps(requested),
+            "sandbox_id": sandbox_id,
+            "home_claim": claim_name,
+        }
+        updated = (
+            db.reserve_sandbox_node(**parameters) if sandbox is not None else db.reserve_pool_sandbox_node(**parameters)
+        )
+        if updated is None:
+            raise ZooError(
+                "conflict",
+                "sandbox changed during node placement",
+                "Retry after its current lifecycle operation completes.",
+            )
+    return node_name
+
+
+def release_node_reservation(sandbox_id: str, node_name: str):
+    with db_manager.session() as db:
+        db.lock_kube_placement(namespace=NAMESPACE)
+        db.clear_sandbox_node_reservation(sandbox_id=sandbox_id, node_name=node_name)
+        db.clear_pool_sandbox_node_reservation(sandbox_id=sandbox_id, node_name=node_name)
+
+
 def sandbox_pod(
     name: str, image: str, sandbox_id: str, env: dict[str, str], desktop: bool, size: Size = DEFAULT_SIZE
 ) -> dict:
-    claim = claim_name(sandbox_id)
+    config = home_config(sandbox_id)
+    claim = config["home_claim"]
+    node_name = config.get("node_name")
+    if not node_name:
+        raise ZooError(
+            "unavailable",
+            "sandbox has no persisted node",
+            "Reserve a node and bind its home claim before creating the pod.",
+        )
+    bound_claim(NAMESPACE, claim, node_name)
+    requested = sandbox_requests(desktop, size)
     home = {"name": "home", "mountPath": HOME}
     security = {"allowPrivilegeEscalation": False, "capabilities": {"drop": ["NET_RAW"]}}
     container: dict = {
@@ -744,27 +1624,27 @@ def sandbox_pod(
         "imagePullPolicy": "IfNotPresent",
         "env": [{"name": k, "value": v} for k, v in env.items()],
         "resources": {
-            # a fraction of the CPUs is reserved, so idle desktops pack densely; memory is reserved in full
-            "requests": {"cpu": cpu_quantity(size.cpus * CPU_REQUEST_SHARE), "memory": memory_quantity(size.memory_mb)},
+            "requests": requested,
             "limits": {"cpu": cpu_quantity(size.cpus), "memory": memory_quantity(size.memory_mb)},
         },
         "securityContext": security,
         "volumeMounts": [home, {"name": "shm", "mountPath": "/dev/shm"}],
     }
-    if desktop:
-        container["ports"] = [{"name": "vnc", "containerPort": 6080}]
     spec: dict = {
         "restartPolicy": "Never",
         "automountServiceAccountToken": False,
         "enableServiceLinks": False,
         "terminationGracePeriodSeconds": 10,
-        "securityContext": {"seccompProfile": {"type": "RuntimeDefault"}},
+        "runtimeClassName": "kata",
+        "priorityClassName": "zoo-sandbox",
+        "nodeName": node_name,
         "initContainers": [
             {
                 "name": "home",
                 "image": image,
                 "imagePullPolicy": "IfNotPresent",
                 "command": ["sh", "-c", SEED_HOME],
+                "resources": container["resources"],
                 "securityContext": {**security, "runAsUser": 0},
                 "volumeMounts": [{"name": "home", "mountPath": "/seed"}],
             }
@@ -775,40 +1655,69 @@ def sandbox_pod(
             {"name": "shm", "emptyDir": {"medium": "Memory", "sizeLimit": SHM}},
         ],
     }
-    if RUNTIME_CLASS:
-        spec["runtimeClassName"] = RUNTIME_CLASS
     pull_secrets(spec)
     labels = {**LABELS, "app.kubernetes.io/component": "sandbox", "zoo.dev/sandbox": sandbox_id}
     return {"metadata": {"name": name, "labels": labels}, "spec": spec}
 
 
-def run_pod(
-    name: str, image: str, sandbox_id: str, env: dict[str, str], desktop: bool = True, size: Size = DEFAULT_SIZE
-):
-    """Starts (or adopts) the sandbox's pod; returns its runtime id and where its desktop is, as
-    docker.run_container does: the pod's address and websockify port, or no port when the guest tunnels it."""
+def run_container(
+    name: str,
+    image: str,
+    sandbox_id: str,
+    env: dict[str, str],
+    server=None,
+    desktop: bool = True,
+    size: Size = DEFAULT_SIZE,
+) -> tuple[str, str | None]:
+    """Starts or adopts the sandbox's Kata pod; returns its runtime id and, for a desktop, its address."""
+    local_server(server)
+    sandbox_requests(desktop, size)
     api.load()
     if desktop and not api.in_cluster and "ZOO_GUEST_TOKEN" not in env:
-        raise RuntimeError(
-            "from outside the cluster, desktops are reached through the sandbox's guest: set ZOO_GUEST_URL to an "
-            "address pods can reach"
+        raise ZooError(
+            "guest_unavailable",
+            "desktops outside the cluster require the sandbox's guest",
+            "Configure ZOO_GATEWAY_SERVICE to the gateway's Kubernetes service.",
         )
-    ensure_claim(NAMESPACE, claim_name(sandbox_id), storage=f"{size.disk_gb}Gi" if size.disk_gb else HOME_SIZE)
+    config = home_config(sandbox_id)
     found = existing_pod(NAMESPACE, name)
     if found is not None:
         spec = next(c for c in found.obj["spec"]["containers"] if c["name"] == CONTAINER)
-        if found.status != "running" or found.labels.get("zoo.dev/sandbox") != sandbox_id or spec["image"] != image:
+        if (
+            found.status != "running"
+            or found.labels.get("zoo.dev/sandbox") != sandbox_id
+            or spec["image"] != image
+            or found.obj["spec"].get("runtimeClassName") != "kata"
+            or not config.get("node_name")
+            or not any(
+                (volume.get("persistentVolumeClaim") or {}).get("claimName") == config["home_claim"]
+                for volume in found.obj["spec"].get("volumes") or []
+            )
+            or (config.get("node_name") and found.node != config["node_name"])
+        ):
             # a pod left by an earlier attempt that can't be adopted
             delete_pod(NAMESPACE, name)
             found = None
     if found is None:
-        api.request("POST", pods_path(NAMESPACE), sandbox_pod(name, image, sandbox_id, env, desktop, size))
+        node_name = reserve_node(sandbox_id, desktop, size)
+        try:
+            prepare_home_claim(sandbox_id, node_name, size)
+            config = home_config(sandbox_id)
+            ensure_claim(
+                NAMESPACE,
+                config["home_claim"],
+                storage=f"{size.disk_gb}Gi" if size.disk_gb else HOME_SIZE,
+                node=node_name,
+            )
+            wait_bound(NAMESPACE, config["home_claim"], node_name, START_TIMEOUT)
+            api.request("POST", pods_path(NAMESPACE), sandbox_pod(name, image, sandbox_id, env, desktop, size))
+        finally:
+            release_node_reservation(sandbox_id, node_name)
         found = Pod(NAMESPACE, name, wait_running(NAMESPACE, name, START_TIMEOUT))
-    if not desktop:
-        return found.id, None, None
-    if api.in_cluster:
-        return found.id, found.ip, 6080
-    return found.id, found.ip, None
+    else:
+        bound_claim(NAMESPACE, config["home_claim"], found.node)
+        release_node_reservation(sandbox_id, found.node)
+    return found.id, found.ip if desktop else None
 
 
 def pause(rid: str):
@@ -829,8 +1738,193 @@ def resume(rid: str):
 # --- snapshots through CSI ---
 
 
+def snapshot_name(snapshot_id: str) -> str:
+    return f"zoo-volume-{snapshot_id}"
+
+
+def snapshot_prefix(snapshot_id: str) -> str:
+    return f"snapshots/{snapshot_id}/"
+
+
+HOME_PART_BYTES = 1 << 30
+UPLOAD_HOME = r"""
+export SHELL=/bin/bash
+cd /from
+tar -czf - . | split -d -a 4 -b "$PART" --filter '
+    cat > /tmp/part && url=$(sed -n "$((10#${FILE#p} + 1))p" /tmp/urls) && [ -n "$url" ] &&
+    curl -fsS --retry 3 -T /tmp/part "$url" && echo "$FILE"' - p
+"""
+DOWNLOAD_HOME = r"""
+find /to -mindepth 1 -delete
+while read -r url; do curl -fsS --retry 3 "$url"; done < /tmp/urls | tar -xzf - -C /to
+"""
+
+
+def helper_image(sandbox_id: str) -> str:
+    image = HELPER_IMAGE or home_config(sandbox_id).get("image")
+    if not image:
+        raise ZooError(
+            "unavailable", "sandbox has no helper image configured", "Set config.image or ZOO_KUBERNETES_HELPER_IMAGE."
+        )
+    return image
+
+
+def helper_check(pod: Pod, script: str, environment: dict[str, str] | None = None) -> str:
+    code, out, err = pod.execute(["bash", "-c", "set -euo pipefail\n" + script], user="root", environment=environment)
+    if code != 0:
+        raise ZooError(
+            "upstream_error",
+            (err or out).decode(errors="replace").strip()[-500:] or f"helper exited with {code}",
+            "Check the helper pod and object storage connectivity.",
+        )
+    return out.decode(errors="replace")
+
+
+def snapshot_class():
+    if not SNAPSHOT_CLASS:
+        raise ZooError(
+            "unavailable",
+            "Kubernetes snapshots require a VolumeSnapshotClass",
+            "Set ZOO_SNAPSHOT_CLASS.",
+        )
+
+
+def snapshot(sandbox_id: str, snapshot_id: str, server=None) -> int:
+    local_server(server)
+    snapshot_class()
+    claim = api.get(claims_path(NAMESPACE, home_claim(sandbox_id)))
+    node = (claim["metadata"].get("annotations") or {}).get("volume.kubernetes.io/selected-node") or ""
+    name = snapshot_name(snapshot_id)
+    temporary = f"zoo-volume-copy-{uuid.uuid4().hex}"
+    try:
+        with contextlib.ExitStack() as cleanup:
+            cleanup.callback(remove_csi_snapshot, name)
+            storage = csi_snapshot(sandbox_id, snapshot_id, name)
+            storage = max(storage, int(quantity(claim["spec"]["resources"]["requests"]["storage"])))
+            cleanup.callback(delete_claim, NAMESPACE, temporary, wait=True)
+            ensure_claim(
+                NAMESPACE,
+                temporary,
+                {"apiGroup": "snapshot.storage.k8s.io", "kind": "VolumeSnapshot", "name": name},
+                storage=str(storage),
+                node=node,
+            )
+            reader = HelperPod(
+                NAMESPACE, helper_image(sandbox_id), {temporary: "/from"}, {"zoo.dev/snapshot": snapshot_id}, node=node
+            )
+            cleanup.callback(reader.remove)
+            reader.start()
+            size = int(helper_check(reader, "du -sb /from | cut -f1").strip())
+            remove_snapshot(snapshot_id)
+            keys = [f"{snapshot_prefix(snapshot_id)}home.{index:04d}" for index in range(size // HOME_PART_BYTES + 2)]
+            urls = "\n".join(objects.presign("PUT", key) for key in keys) + "\n"
+            reader.write_archive("/tmp", tar_file("urls", urls.encode()))
+            helper_check(reader, UPLOAD_HOME, {"PART": str(HOME_PART_BYTES)})
+            return size
+    except Exception:
+        remove_snapshot(snapshot_id)
+        raise
+
+
+def restore_snapshot(sandbox_id: str, snapshot_id: str, server=None):
+    local_server(server)
+    if existing_pod(NAMESPACE, pod_name(sandbox_id)) is not None:
+        raise ZooError(
+            "conflict",
+            "the sandbox pod must be removed before restoring its home",
+            "Stop the sandbox before restoring.",
+        )
+    config = home_config(sandbox_id)
+    with db_manager.session() as db:
+        sandbox = db.get_sandbox(id=sandbox_id)
+        if sandbox is None:
+            raise ZooError("sandbox_not_found", "sandbox not found", "Create the sandbox before restoring its home.")
+        storage = f"{sandbox.disk_gb}Gi" if sandbox.disk_gb else HOME_SIZE
+    ensure_claim(NAMESPACE, config["home_claim"], storage=storage, node=config.get("node_name") or "")
+    restore_claim(sandbox_id, config["home_claim"], snapshot_id, config.get("node_name") or "")
+
+
+def restore_claim(sandbox_id: str, claim: str, snapshot_id: str, node: str = ""):
+    prefix = snapshot_prefix(snapshot_id)
+    keys = sorted(key for key in objects.keys(prefix) if re.fullmatch(r"home\.[0-9]{4}", key[len(prefix) :]))
+    if not keys:
+        raise ZooError(
+            "not_found", "the snapshot is gone from object storage", "Create a new snapshot before restoring."
+        )
+    if keys != [f"{prefix}home.{index:04d}" for index in range(len(keys))]:
+        raise ZooError(
+            "upstream_error", "the snapshot is missing home archive parts", "Create a new complete snapshot."
+        )
+    writer = HelperPod(
+        NAMESPACE, helper_image(sandbox_id), {claim: "/to"}, {"zoo.dev/snapshot": snapshot_id}, node=node
+    )
+    try:
+        writer.start()
+        downloads = "\n".join(objects.presign("GET", key) for key in keys) + "\n"
+        writer.write_archive("/tmp", tar_file("urls", downloads.encode()))
+        helper_check(writer, DOWNLOAD_HOME)
+    finally:
+        writer.remove()
+
+
+def remove_snapshot(snapshot_id: str, server=None):
+    local_server(server)
+    objects.delete_prefix(snapshot_prefix(snapshot_id))
+
+
+def move_volume(sandbox_id: str, node_name: str, snapshot_id: str | None = None) -> str:
+    """Restores a portable snapshot on the target node, commits the home pointer, then deletes the source claim."""
+    config = cleanup_previous_home_claim(sandbox_id)
+    if node_name not in {node["metadata"]["name"] for node in nodes_for_sandboxes()}:
+        raise ZooError("bad_request", "target node cannot run sandbox pods", "Choose a ready node that supports Kata.")
+    if existing_pod(NAMESPACE, pod_name(sandbox_id)) is not None:
+        raise ZooError(
+            "conflict", "the sandbox pod must be removed before moving its home", "Stop the sandbox before moving."
+        )
+    source = config["home_claim"]
+    claim = api.get(claims_path(NAMESPACE, source))
+    selected = (claim["metadata"].get("annotations") or {}).get("volume.kubernetes.io/selected-node")
+    if config.get("node_name") == node_name and selected == node_name:
+        return source
+    storage = claim["spec"]["resources"]["requests"]["storage"]
+    transfer = snapshot_id or str(uuid.uuid4())
+    target = f"zoo-home-{sandbox_id}-{uuid.uuid4().hex[:12]}"
+    committed = False
+    switching = False
+    try:
+        snapshot(sandbox_id, transfer)
+        ensure_claim(NAMESPACE, target, storage=storage, node=node_name)
+        restore_claim(sandbox_id, target, transfer, node=node_name)
+        switching = True
+        with db_manager.session() as db:
+            updated = db.switch_sandbox_home_claim(
+                target_claim=target, node_name=node_name, source_claim=source, sandbox_id=sandbox_id
+            )
+            if updated is None:
+                switching = False
+                raise ZooError(
+                    "conflict", "sandbox placement or status changed during the move", "Stop the sandbox and retry."
+                )
+        committed = True
+        cleanup_previous_home_claim(sandbox_id)
+        return target
+    finally:
+        if not committed and not switching:
+            delete_claim(NAMESPACE, target, wait=True)
+        if snapshot_id is None:
+            remove_snapshot(transfer)
+
+
 def csi_snapshot(sandbox_id: str, snapshot_id: str, name: str, timeout: float = 600) -> int:
     """A CSI VolumeSnapshot of the sandbox's home claim; returns its size."""
+    snapshot_class()
+    configured = api.get(f"/apis/snapshot.storage.k8s.io/v1/volumesnapshotclasses/{SNAPSHOT_CLASS}")
+    if configured.get("deletionPolicy") != "Delete":
+        raise ZooError(
+            "unavailable",
+            "temporary CSI snapshots require deletionPolicy Delete",
+            "Set deletionPolicy: Delete on the configured VolumeSnapshotClass.",
+        )
     body = {
         "apiVersion": "snapshot.storage.k8s.io/v1",
         "kind": "VolumeSnapshot",
@@ -840,7 +1934,7 @@ def csi_snapshot(sandbox_id: str, snapshot_id: str, name: str, timeout: float = 
         },
         "spec": {
             "volumeSnapshotClassName": SNAPSHOT_CLASS,
-            "source": {"persistentVolumeClaimName": claim_name(sandbox_id)},
+            "source": {"persistentVolumeClaimName": home_claim(sandbox_id)},
         },
     }
     api.request("POST", snapshots_path(NAMESPACE), body)
@@ -851,25 +1945,17 @@ def csi_snapshot(sandbox_id: str, snapshot_id: str, name: str, timeout: float = 
             remove_csi_snapshot(name)
             raise RuntimeError(f"the volume snapshot failed: {status['error']['message']}")
         if status.get("readyToUse"):
-            return int(quantity(status.get("restoreSize") or 0))
+            return int(quantity(status.get("restoreSize")))
         if time.monotonic() > deadline:
             remove_csi_snapshot(name)
             raise RuntimeError(f"the volume snapshot wasn't ready within {int(timeout)}s")
         time.sleep(1)
 
 
-def restore_csi_snapshot(sandbox_id: str, name: str):
-    """Replaces the home claim with one made from the snapshot. The sandbox's pod must be gone."""
-    if api.exists(snapshots_path(NAMESPACE, name)) is None:
-        raise RuntimeError("the volume snapshot is gone from the cluster")
-    claim = claim_name(sandbox_id)
-    delete_claim(NAMESPACE, claim, wait=True)
-    ensure_claim(NAMESPACE, claim, {"apiGroup": "snapshot.storage.k8s.io", "kind": "VolumeSnapshot", "name": name})
-
-
 def remove_csi_snapshot(name: str):
     with contextlib.suppress(NotFound):
         api.request("DELETE", snapshots_path(NAMESPACE, name))
+    gone(snapshots_path(NAMESPACE, name), 120)
 
 
 # --- network policy through the node's egress daemon ---
@@ -885,7 +1971,11 @@ def egress_daemon(node: str) -> Pod:
     running = [Pod(EGRESS_NAMESPACE, p["metadata"]["name"], p) for p in found]
     running = [p for p in running if p.obj.get("status", {}).get("phase") == "Running"]
     if not running:
-        raise RuntimeError(f"the egress daemon is not running on node {node}")
+        raise ZooError(
+            "unavailable",
+            f"the egress daemon is not running on node {node}",
+            "Start the egress DaemonSet on every sandbox node.",
+        )
     return running[0]
 
 
@@ -893,18 +1983,17 @@ def apply_network(rid: str, default_action: str, allow_dns: bool, rules: list[tu
     """Hands the policy to the egress daemon on the sandbox's node (the same daemon as on a Docker host, run by the
     chart as a DaemonSet), which enforces it outside the sandbox."""
     from server import egress
-    from server.docker import guest_endpoint, tar_file
 
     pod = container(rid)
-    addrs = sorted({a for a in (pod.attrs["NetworkSettings"]["Networks"]["pod"].values()) if a})
+    addrs = pod.addresses
     if not addrs:
-        raise RuntimeError("the sandbox has no network address to apply the policy to")
+        raise ZooError("unavailable", "the sandbox has no network address", "Wait for the sandbox pod to become ready.")
     endpoint = guest_endpoint(rid)
     resolved = egress.addresses(endpoint[0]) if endpoint else []
     data = egress.policy(rid, addrs, default_action, allow_dns, rules, egress.always(endpoint, resolved))
     daemon = egress_daemon(pod.node)
     prune_policies(daemon)
-    daemon.put_archive(EGRESS_DIR, tar_file(egress.file_name(rid), data))
+    daemon.write_archive(EGRESS_DIR, tar_file(egress.file_name(rid), data))
 
 
 def prune_policies(daemon: Pod):
@@ -912,7 +2001,10 @@ def prune_policies(daemon: Pod):
     doesn't inherit one."""
     from server import egress
 
-    names = daemon.exec_run(["ls", EGRESS_DIR]).output.decode(errors="replace").split()
+    code, out, err = daemon.execute(["ls", EGRESS_DIR])
+    if code != 0:
+        raise KubeError(0, err.decode(errors="replace").strip() or f"could not list {EGRESS_DIR}")
+    names = out.decode(errors="replace").split()
     pods = (
         api.get(
             pods_path(NAMESPACE),
@@ -924,7 +2016,9 @@ def prune_policies(daemon: Pod):
     live = {egress.file_name(runtime_id(NAMESPACE, p["metadata"]["name"])) for p in pods}
     stale = [f"{EGRESS_DIR}/{n}" for n in names if n.endswith(".json") and n not in live]
     if stale:
-        daemon.exec_run(["rm", "-f", *stale])
+        code, _, err = daemon.execute(["rm", "-f", *stale])
+        if code != 0:
+            raise KubeError(0, err.decode(errors="replace").strip() or "could not prune network policies")
 
 
 def forget_policy(rid: str, node: str):
@@ -932,7 +2026,7 @@ def forget_policy(rid: str, node: str):
 
     # no daemon there means no policy either; a later prune catches anything left
     with contextlib.suppress(Exception):
-        egress_daemon(node).exec_run(["rm", "-f", f"{EGRESS_DIR}/{egress.file_name(rid)}"])
+        egress_daemon(node).execute(["rm", "-f", f"{EGRESS_DIR}/{egress.file_name(rid)}"])
 
 
 # --- capacity and requirements ---
@@ -943,10 +2037,9 @@ _free: dict[str, Any] = {}
 
 def nodes_for_sandboxes() -> list[dict]:
     """Ready, schedulable nodes the RuntimeClass can place pods on."""
-    selector: dict = {}
-    if RUNTIME_CLASS:
-        found = api.exists(f"/apis/node.k8s.io/v1/runtimeclasses/{RUNTIME_CLASS}")
-        selector = ((found or {}).get("scheduling") or {}).get("nodeSelector") or {}
+    found = api.get("/apis/node.k8s.io/v1/runtimeclasses/kata")
+    selector = (found.get("scheduling") or {}).get("nodeSelector") or {}
+    tolerations = (found.get("scheduling") or {}).get("tolerations") or []
     out = []
     for node in api.get("/api/v1/nodes").get("items") or []:
         labels = node["metadata"].get("labels") or {}
@@ -954,7 +2047,27 @@ def nodes_for_sandboxes() -> list[dict]:
             c.get("type") == "Ready" and c.get("status") == "True"
             for c in node.get("status", {}).get("conditions") or []
         )
-        if ready and not node["spec"].get("unschedulable") and all(labels.get(k) == v for k, v in selector.items()):
+        tolerated = all(
+            any(
+                (not tolerance.get("effect") or tolerance["effect"] == taint["effect"])
+                and (
+                    tolerance.get("operator", "Equal") == "Exists"
+                    and (not tolerance.get("key") or tolerance["key"] == taint["key"])
+                    or tolerance.get("operator", "Equal") == "Equal"
+                    and tolerance.get("key") == taint["key"]
+                    and tolerance.get("value", "") == taint.get("value", "")
+                )
+                for tolerance in tolerations
+            )
+            for taint in node["spec"].get("taints") or []
+            if taint.get("effect") in {"NoSchedule", "NoExecute"}
+        )
+        if (
+            ready
+            and tolerated
+            and not node["spec"].get("unschedulable")
+            and all(labels.get(key) == value for key, value in selector.items())
+        ):
             out.append(node)
     return out
 
@@ -982,8 +2095,24 @@ def free_memory(ttl: float = 10) -> int | None:
     return free
 
 
-def host_info() -> dict:
-    """The cluster, as the monitoring view shows a Docker host (docker info's names)."""
+def pressured_nodes(share: float) -> set[str]:
+    """Sandbox nodes with less than `share` of their allocatable memory left unrequested."""
+    nodes = {n["metadata"]["name"]: quantity(n["status"]["allocatable"]["memory"]) for n in nodes_for_sandboxes()}
+    left = dict(nodes)
+    pods = api.get("/api/v1/pods", fieldSelector="status.phase!=Succeeded,status.phase!=Failed").get("items") or []
+    for pod in pods:
+        node = pod["spec"].get("nodeName")
+        if node in left:
+            left[node] -= sum(
+                quantity((c.get("resources") or {}).get("requests", {}).get("memory"))
+                for c in pod["spec"]["containers"]
+            )
+            left[node] -= quantity((pod["spec"].get("overhead") or {}).get("memory"))
+    return {name for name, total in nodes.items() if total and left[name] < share * total}
+
+
+def info() -> dict:
+    """Cluster capacity for the runtime monitoring interface."""
     nodes = nodes_for_sandboxes()
     first = nodes[0]["status"]["nodeInfo"] if nodes else {}
     running = (
@@ -1010,9 +2139,31 @@ def ping():
     api.get("/version")
 
 
+def stats(rid: str) -> dict | None:
+    from server.guest import hub
+
+    guest = hub.for_runtime(rid)
+    if guest is None or not guest.metrics:
+        return None
+    usage = {
+        "cpu_percent": 0.0,
+        "memory_usage": 0,
+        "memory_limit": 0,
+        "memory_percent": 0.0,
+        "network_rx": 0,
+        "network_tx": 0,
+        "pids": 0,
+    }
+    return {
+        **usage,
+        **{key: value for key, value in guest.metrics.items() if value is not None},
+        "status": "running",
+        "collected_at": datetime.now(UTC).isoformat(),
+    }
+
+
 def check(probe: bool = False) -> list[dict]:
-    """What sandboxes on this cluster need, each as {name, ok, detail}. With `probe`, a pod under the RuntimeClass
-    is started on every sandbox node, which proves the runtime works there (for Kata, that KVM does)."""
+    """Reports every cluster prerequisite as {name, ok, detail}; probe also boots Kata on each sandbox node."""
     checks: list[dict] = []
 
     def add(name: str, ok: bool, detail: str):
@@ -1023,53 +2174,63 @@ def check(probe: bool = False) -> list[dict]:
         add("api", True, f"Kubernetes {version.get('gitVersion', '')}")
     except Exception as e:
         add("api", False, str(e))
-        return checks
     try:
         api.get(pods_path(NAMESPACE), limit="1")
         add("namespace", True, NAMESPACE)
     except Exception as e:
         add("namespace", False, f"{NAMESPACE}: {e}")
-    handler = ""
-    if RUNTIME_CLASS:
-        found = api.exists(f"/apis/node.k8s.io/v1/runtimeclasses/{RUNTIME_CLASS}")
+    try:
+        found = api.exists("/apis/node.k8s.io/v1/runtimeclasses/kata")
         handler = (found or {}).get("handler", "")
         add(
             "runtime class",
             found is not None,
-            f"{RUNTIME_CLASS} (handler {handler})"
-            if found
-            else f"no RuntimeClass {RUNTIME_CLASS}: install Kata "
-            "Containers (kata-deploy), or set ZOO_KUBERNETES_RUNTIME_CLASS",
+            f"kata (handler {handler})" if found else "no RuntimeClass kata: install Kata Containers (kata-deploy)",
         )
-    nodes = nodes_for_sandboxes()
-    add("nodes", bool(nodes), f"{len(nodes)} ready node{'s' if len(nodes) != 1 else ''} can run sandboxes")
-    kata = "kata" in (handler or RUNTIME_CLASS)
-    if kata:
-        hinted = [n["metadata"]["name"] for n in nodes if kvm_hint(n)]
-        add(
-            "kvm",
-            len(hinted) == len(nodes) and bool(nodes),
-            f"{len(hinted)} of {len(nodes)} nodes show KVM (kata-deploy or node-feature-discovery labels); "
-            "Kata needs bare metal or nested virtualization",
-        )
-    claims = api.get("/apis/storage.k8s.io/v1/storageclasses").get("items") or []
-    if STORAGE_CLASS:
-        add("storage", any(c["metadata"]["name"] == STORAGE_CLASS for c in claims), f"StorageClass {STORAGE_CLASS}")
-    else:
-        default = [
-            c["metadata"]["name"]
-            for c in claims
-            if (c["metadata"].get("annotations") or {}).get("storageclass.kubernetes.io/is-default-class") == "true"
-        ]
-        add("storage", bool(default), f"default StorageClass {default[0]}" if default else "no default StorageClass")
-    if SNAPSHOT_CLASS:
+    except Exception as e:
+        add("runtime class", False, str(e))
+    nodes: list[dict] = []
+    try:
+        nodes = nodes_for_sandboxes()
+        add("nodes", bool(nodes), f"{len(nodes)} ready node{'s' if len(nodes) != 1 else ''} can run sandboxes")
+    except Exception as e:
+        add("nodes", False, str(e))
+    missing_kvm = [node["metadata"]["name"] for node in nodes if not kvm_hint(node)]
+    add(
+        "kvm",
+        bool(nodes) and not missing_kvm,
+        "no sandbox nodes available to verify KVM"
+        if not nodes
+        else f"nodes without KVM evidence: {', '.join(missing_kvm)}; Kata needs bare metal or nested virtualization"
+        if missing_kvm
+        else f"all {len(nodes)} sandbox nodes show KVM (kata-deploy or node-feature-discovery labels)",
+    )
+    try:
+        if not STORAGE_CLASS:
+            raise ZooError("unavailable", "Kubernetes home volumes require a StorageClass", "Set ZOO_STORAGE_CLASS.")
+        found = api.exists(f"/apis/storage.k8s.io/v1/storageclasses/{STORAGE_CLASS}")
+        add("storage", found is not None, f"StorageClass {STORAGE_CLASS}")
+    except Exception as e:
+        add("storage", False, str(e))
+    try:
+        snapshot_class()
         found = api.exists(f"/apis/snapshot.storage.k8s.io/v1/volumesnapshotclasses/{SNAPSHOT_CLASS}")
         add("snapshots", found is not None, f"VolumeSnapshotClass {SNAPSHOT_CLASS}")
+    except Exception as e:
+        add("snapshots", False, str(e))
     try:
         daemons = api.get(pods_path(EGRESS_NAMESPACE), labelSelector=EGRESS_SELECTOR).get("items") or []
         on = {p["spec"].get("nodeName") for p in daemons if (p.get("status") or {}).get("phase") == "Running"}
         missing = [n["metadata"]["name"] for n in nodes if n["metadata"]["name"] not in on]
-        add("egress", not missing, "on every sandbox node" if not missing else f"not running on {', '.join(missing)}")
+        add(
+            "egress",
+            bool(nodes) and not missing,
+            "no sandbox nodes available to verify egress"
+            if not nodes
+            else f"not running on {', '.join(missing)}"
+            if missing
+            else "on every sandbox node",
+        )
     except Exception as e:
         add("egress", False, str(e))
     if probe:
@@ -1093,6 +2254,7 @@ def kvm_hint(node: dict) -> bool:
 def probe_node(node: str, timeout: float = 120) -> tuple[bool, str]:
     name = f"zoo-probe-{uuid.uuid4().hex[:8]}"
     spec: dict = {
+        "runtimeClassName": "kata",
         "affinity": on_node(node),
         "restartPolicy": "Never",
         "automountServiceAccountToken": False,
@@ -1101,15 +2263,13 @@ def probe_node(node: str, timeout: float = 120) -> tuple[bool, str]:
             {"name": "probe", "image": PROBE_IMAGE, "resources": {"limits": {"cpu": "100m", "memory": "64Mi"}}}
         ],
     }
-    if RUNTIME_CLASS:
-        spec["runtimeClassName"] = RUNTIME_CLASS
     pull_secrets(spec)
     labels = {**LABELS, "app.kubernetes.io/component": "probe"}
     started = time.monotonic()
     try:
         api.request("POST", pods_path(NAMESPACE), {"metadata": {"name": name, "labels": labels}, "spec": spec})
         wait_running(NAMESPACE, name, timeout)
-        return True, f"a {RUNTIME_CLASS or 'default'} pod started in {time.monotonic() - started:.1f}s"
+        return True, f"a kata pod started in {time.monotonic() - started:.1f}s"
     except Exception as e:
         return False, str(e)
     finally:
@@ -1119,8 +2279,8 @@ def probe_node(node: str, timeout: float = 120) -> tuple[bool, str]:
 
 def main(argv: list[str]) -> int:
     """`python -m server.kube check [--probe]`: the requirements check, for the Helm chart's test hook."""
-    if argv[:1] != ["check"] or not enabled():
-        print("usage: ZOO_KUBERNETES_NAMESPACE=<namespace> python -m server.kube check [--probe]")
+    if argv[:1] != ["check"]:
+        print("usage: ZOO_RUNTIME=kube ZOO_NAMESPACE=<namespace> python -m server.kube check [--probe]")
         return 2
     checks = check(probe="--probe" in argv)
     for c in checks:
