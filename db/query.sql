@@ -184,6 +184,84 @@ RETURNING *;
 -- name: GetSandbox :one
 SELECT * FROM sandboxes WHERE id = $1 LIMIT 1;
 
+-- name: GetSandboxForUpdate :one
+SELECT * FROM sandboxes WHERE id = $1 FOR UPDATE;
+
+-- name: SwitchSandboxHomeClaim :one
+UPDATE sandboxes
+SET config = (config::jsonb || jsonb_build_object(
+        'home_claim', sqlc.arg(target_claim)::text,
+        'node_name', sqlc.arg(node_name)::text,
+        'previous_home_claim', sqlc.arg(source_claim)::text
+    ))::text,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(sandbox_id)::text
+    AND status = 'stopped'
+    AND runtime_id IS NULL
+    AND config::jsonb->>'home_claim' = sqlc.arg(source_claim)::text
+    AND NOT (config::jsonb ? 'previous_home_claim')
+    AND NOT (config::jsonb ? 'node_reservation')
+RETURNING *;
+
+-- name: ClearPreviousHomeClaim :one
+UPDATE sandboxes
+SET config = (config::jsonb - 'previous_home_claim')::text,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(sandbox_id)::text
+    AND config::jsonb->>'home_claim' = sqlc.arg(home_claim)::text
+    AND config::jsonb->>'previous_home_claim' = sqlc.arg(previous_home_claim)::text
+RETURNING *;
+
+-- name: LockKubePlacement :exec
+SELECT pg_advisory_xact_lock(hashtextextended(sqlc.arg(namespace)::text, 0));
+
+-- name: ReserveSandboxNode :one
+UPDATE sandboxes
+SET config = (config::jsonb || jsonb_build_object(
+        'node_name', sqlc.arg(node_name)::text,
+        'node_reservation', sqlc.arg(reservation)::jsonb
+    ))::text,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(sandbox_id)::text
+    AND config::jsonb->>'home_claim' = sqlc.arg(home_claim)::text
+    AND status NOT IN ('deleting', 'deleted', 'failed')
+RETURNING *;
+
+-- name: ClearSandboxNodeReservation :exec
+UPDATE sandboxes
+SET config = (config::jsonb - 'node_reservation')::text,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(sandbox_id)::text
+    AND config::jsonb->>'node_name' = sqlc.arg(node_name)::text;
+
+-- name: ListKubeNodeReservations :many
+SELECT id, config FROM sandboxes
+WHERE kind NOT IN ('macos', 'windows')
+    AND status NOT IN ('deleting', 'deleted', 'failed')
+    AND config::jsonb ? 'node_reservation'
+UNION ALL
+SELECT id, config FROM pool_sandboxes
+WHERE status = 'booting' AND config::jsonb ? 'node_reservation';
+
+-- name: ListKubeHomeClaims :many
+SELECT id, config FROM sandboxes
+WHERE kind NOT IN ('macos', 'windows')
+UNION ALL
+SELECT id, config FROM pool_sandboxes;
+
+-- name: ClaimSandboxSpareHome :one
+UPDATE sandboxes
+SET config = (config::jsonb || jsonb_build_object('home_claim', sqlc.arg(spare_claim)::text))::text,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(sandbox_id)::text
+    AND config::jsonb->>'home_claim' = sqlc.arg(home_claim)::text
+    AND config::jsonb->>'node_name' = sqlc.arg(node_name)::text
+    AND config::jsonb ? 'node_reservation'
+    AND NOT (config::jsonb ? 'previous_home_claim')
+    AND runtime_id IS NULL
+    AND status NOT IN ('deleting', 'deleted', 'failed')
+RETURNING *;
+
 -- name: GetSandboxByRuntimeID :one
 SELECT * FROM sandboxes WHERE runtime_id = $1 LIMIT 1;
 
@@ -212,9 +290,9 @@ RETURNING *;
 
 -- name: UpdateSandboxRuntime :one
 UPDATE sandboxes
-SET runtime_id = $1, runtime_host = $2, access_url = $3,
+SET runtime_id = $1, runtime_host = $2,
     updated_at = CURRENT_TIMESTAMP
-WHERE id = $4
+WHERE id = $3
 RETURNING *;
 
 -- name: SetSandboxStarted :one
@@ -234,6 +312,21 @@ SET status = 'stopped',
     updated_at = CURRENT_TIMESTAMP
 WHERE id = $1
 RETURNING *;
+
+-- name: SetSandboxPaused :one
+UPDATE sandboxes
+SET status = 'stopped',
+    paused_at = CURRENT_TIMESTAMP,
+    stopped_at = CURRENT_TIMESTAMP,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING *;
+
+-- name: ClearSandboxPaused :exec
+UPDATE sandboxes SET paused_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1;
+
+-- name: ListPausedSandboxes :many
+SELECT * FROM sandboxes WHERE paused_at IS NOT NULL AND status = 'stopped' ORDER BY paused_at;
 
 -- name: SetSandboxFailed :one
 UPDATE sandboxes
@@ -543,7 +636,7 @@ ORDER BY created_at DESC;
 
 -- name: ClearSandboxRuntime :one
 UPDATE sandboxes
-SET runtime_id = NULL, runtime_host = NULL, access_url = NULL,
+SET runtime_id = NULL, runtime_host = NULL, paused_at = NULL,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = $1
 RETURNING *;
@@ -810,10 +903,45 @@ RETURNING *;
 -- name: ListPoolSandboxes :many
 SELECT * FROM pool_sandboxes ORDER BY created_at, seq;
 
+-- name: GetPoolSandboxForUpdate :one
+SELECT * FROM pool_sandboxes WHERE id = $1 FOR UPDATE;
+
+-- name: ReservePoolSandboxNode :one
+UPDATE pool_sandboxes
+SET config = (config::jsonb || jsonb_build_object(
+        'node_name', sqlc.arg(node_name)::text,
+        'node_reservation', sqlc.arg(reservation)::jsonb
+    ))::text,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(sandbox_id)::text
+    AND config::jsonb->>'home_claim' = sqlc.arg(home_claim)::text
+    AND status = 'booting'
+RETURNING *;
+
+-- name: ClearPoolSandboxNodeReservation :exec
+UPDATE pool_sandboxes
+SET config = (config::jsonb - 'node_reservation')::text,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(sandbox_id)::text
+    AND config::jsonb->>'node_name' = sqlc.arg(node_name)::text;
+
+-- name: ClaimPoolSpareHome :one
+UPDATE pool_sandboxes
+SET config = (config::jsonb || jsonb_build_object('home_claim', sqlc.arg(spare_claim)::text))::text,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(sandbox_id)::text
+    AND config::jsonb->>'home_claim' = sqlc.arg(home_claim)::text
+    AND config::jsonb->>'node_name' = sqlc.arg(node_name)::text
+    AND config::jsonb ? 'node_reservation'
+    AND NOT (config::jsonb ? 'previous_home_claim')
+    AND runtime_id IS NULL
+    AND status = 'booting'
+RETURNING *;
+
 -- name: SetPoolSandboxRuntime :exec
 UPDATE pool_sandboxes
-SET runtime_id = $1, runtime_host = $2, access_url = $3, updated_at = CURRENT_TIMESTAMP
-WHERE id = $4;
+SET runtime_id = $1, runtime_host = $2, updated_at = CURRENT_TIMESTAMP
+WHERE id = $3;
 
 -- name: SetPoolSandboxIdle :exec
 UPDATE pool_sandboxes SET status = 'idle', updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND status = 'booting';
@@ -831,6 +959,15 @@ WHERE id = (
     FOR UPDATE SKIP LOCKED
 )
 RETURNING *;
+
+-- name: ListRecentCreates :many
+-- creates per kind and refill interval over the last hour, which size the warm pool
+SELECT kind,
+    floor(extract(epoch FROM created_at) / sqlc.arg(interval_seconds)::float8)::bigint AS bucket,
+    count(*)::bigint AS creates
+FROM sandboxes
+WHERE created_at > now() - interval '1 hour'
+GROUP BY kind, bucket;
 
 -- name: DeletePoolSandbox :one
 DELETE FROM pool_sandboxes WHERE id = $1 RETURNING *;
@@ -886,9 +1023,16 @@ SELECT * FROM node_authority WHERE id = 1;
 INSERT INTO node_authority (id, certificate, key_ciphertext) VALUES (1, $1, $2)
 ON CONFLICT (id) DO NOTHING;
 
+-- name: GetSshIdentity :one
+SELECT * FROM ssh_identity WHERE id = 1;
+
+-- name: CreateSshIdentity :exec
+INSERT INTO ssh_identity (id, key_ciphertext) VALUES (1, $1)
+ON CONFLICT (id) DO NOTHING;
+
 -- name: CreateNodeToken :one
-INSERT INTO node_tokens (id, secret_hash, created_by, server_id, name, expires_at, workspace_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO node_tokens (id, secret_hash, created_by, name, expires_at, workspace_id)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
 -- name: ClaimNodeToken :one
@@ -900,11 +1044,11 @@ RETURNING *;
 DELETE FROM node_tokens WHERE expires_at < $1;
 
 -- name: UpsertNode :one
-INSERT INTO nodes (id, server_id, serial, cert_expires_at, os, arch, hostname)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO nodes (id, server_id, serial, cert_expires_at, os, arch, hostname, ssh_host_key)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (server_id) DO UPDATE SET
     id = excluded.id, serial = excluded.serial, cert_expires_at = excluded.cert_expires_at, os = excluded.os,
-    arch = excluded.arch, hostname = excluded.hostname, version = '', seen_at = NULL
+    arch = excluded.arch, hostname = excluded.hostname, ssh_host_key = excluded.ssh_host_key, version = '', seen_at = NULL
 RETURNING *;
 
 -- name: GetNode :one

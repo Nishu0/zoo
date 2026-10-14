@@ -113,6 +113,7 @@ class Node(pydantic.BaseModel):
     server_id: str
     serial: str
     cert_expires_at: datetime.datetime
+    ssh_host_key: str
     version: str
     os: str
     arch: str
@@ -143,7 +144,6 @@ class NodeToken(pydantic.BaseModel):
     workspace_id: str
     secret_hash: str
     created_by: str
-    server_id: Optional[str]
     name: str
     expires_at: datetime.datetime
     used_at: Optional[datetime.datetime]
@@ -159,7 +159,6 @@ class PoolSandbox(pydantic.BaseModel):
     status: str
     runtime_id: Optional[str]
     runtime_host: Optional[str]
-    access_url: Optional[str]
     error_message: Optional[str]
     created_at: datetime.datetime
     updated_at: datetime.datetime
@@ -207,12 +206,12 @@ class Sandbox(pydantic.BaseModel):
     runtime: str
     runtime_id: Optional[str]
     runtime_host: Optional[str]
-    access_url: Optional[str]
     resources: str
     config: str
     error_message: Optional[str]
     started_at: Optional[datetime.datetime]
     stopped_at: Optional[datetime.datetime]
+    paused_at: Optional[datetime.datetime]
     created_at: datetime.datetime
     updated_at: datetime.datetime
     deleted_at: Optional[datetime.datetime]
@@ -354,6 +353,12 @@ class Snapshot(pydantic.BaseModel):
     created_by: str
     created_at: datetime.datetime
     seq: Optional[int]
+
+
+class SshIdentity(pydantic.BaseModel):
+    id: int
+    key_ciphertext: str
+    created_at: datetime.datetime
 
 
 class Ticket(pydantic.BaseModel):

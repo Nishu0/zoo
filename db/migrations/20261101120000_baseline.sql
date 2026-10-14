@@ -34,6 +34,12 @@ CREATE TABLE node_authority (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE ssh_identity (
+    id BIGINT PRIMARY KEY NOT NULL CHECK (id = 1),
+    key_ciphertext TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE workspaces (
     id TEXT PRIMARY KEY NOT NULL,
     name TEXT NOT NULL,
@@ -142,24 +148,6 @@ CREATE TABLE apps (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- the whole workspace, one sandbox, or the sandboxes with some labels (an end user's); read-only keys only read
-CREATE TABLE api_keys (
-    id TEXT PRIMARY KEY NOT NULL,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    created_by TEXT NOT NULL REFERENCES users(id),
-    name TEXT NOT NULL,
-    key_hash TEXT NOT NULL UNIQUE,
-    key_prefix TEXT NOT NULL,
-    scopes TEXT NOT NULL DEFAULT '[]',
-    expires_at TIMESTAMPTZ,
-    last_used_at TIMESTAMPTZ,
-    revoked_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    sandbox_id TEXT REFERENCES sandboxes(id) ON DELETE CASCADE,
-    read_only BOOLEAN NOT NULL DEFAULT false,
-    label_selector TEXT
-);
-
 CREATE TABLE pool_settings (
     id TEXT PRIMARY KEY NOT NULL,
     kind TEXT NOT NULL,
@@ -178,7 +166,6 @@ CREATE TABLE pool_sandboxes (
     status TEXT NOT NULL DEFAULT 'booting' CHECK (status IN ('booting', 'idle', 'failed')),
     runtime_id TEXT,
     runtime_host TEXT,
-    access_url TEXT,
     error_message TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -204,7 +191,6 @@ CREATE TABLE node_tokens (
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     secret_hash TEXT NOT NULL UNIQUE,
     created_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    server_id TEXT REFERENCES servers(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL,
     used_at TIMESTAMPTZ,
@@ -216,6 +202,7 @@ CREATE TABLE nodes (
     server_id TEXT NOT NULL UNIQUE REFERENCES servers(id) ON DELETE CASCADE,
     serial TEXT NOT NULL,
     cert_expires_at TIMESTAMPTZ NOT NULL,
+    ssh_host_key TEXT NOT NULL,
     version TEXT NOT NULL DEFAULT '',
     os TEXT NOT NULL DEFAULT '',
     arch TEXT NOT NULL DEFAULT '',
@@ -258,12 +245,13 @@ CREATE TABLE sandboxes (
     runtime TEXT NOT NULL DEFAULT 'docker',
     runtime_id TEXT,
     runtime_host TEXT,
-    access_url TEXT,
     resources TEXT NOT NULL DEFAULT '{}',
     config TEXT NOT NULL DEFAULT '{}',
     error_message TEXT,
     started_at TIMESTAMPTZ,
     stopped_at TIMESTAMPTZ,
+    -- a stopped Linux sandbox frozen in place, resumed by the next start until the sweeper deletes it
+    paused_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at TIMESTAMPTZ,
@@ -280,6 +268,24 @@ CREATE TABLE sandboxes (
     last_activity_at TIMESTAMPTZ,
     idle_timeout_minutes BIGINT CHECK (idle_timeout_minutes > 0),
     max_lifetime_minutes BIGINT CHECK (max_lifetime_minutes > 0)
+);
+
+-- the whole workspace, one sandbox, or the sandboxes with some labels (an end user's); read-only keys only read
+CREATE TABLE api_keys (
+    id TEXT PRIMARY KEY NOT NULL,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    created_by TEXT NOT NULL REFERENCES users(id),
+    name TEXT NOT NULL,
+    key_hash TEXT NOT NULL UNIQUE,
+    key_prefix TEXT NOT NULL,
+    scopes TEXT NOT NULL DEFAULT '[]',
+    expires_at TIMESTAMPTZ,
+    last_used_at TIMESTAMPTZ,
+    revoked_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    sandbox_id TEXT REFERENCES sandboxes(id) ON DELETE CASCADE,
+    read_only BOOLEAN NOT NULL DEFAULT false,
+    label_selector TEXT
 );
 
 CREATE TABLE sandbox_members (
@@ -496,17 +502,204 @@ $$;
 
 -- +goose StatementBegin
 CREATE FUNCTION sandbox_events() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    changed sandboxes;
 BEGIN
-    IF OLD.status IS DISTINCT FROM NEW.status THEN
-        PERFORM zoo_event(NEW.workspace_id, NEW.id, 'sandbox.state',
-            jsonb_build_object('status', NEW.status, 'previous', OLD.status, 'error', NEW.error_message));
+    IF TG_OP = 'UPDATE' AND (OLD.status, OLD.unreachable_since, OLD.server_id,
+        OLD.runtime_id, OLD.config, OLD.name, OLD.kind)
+        IS NOT DISTINCT FROM (NEW.status, NEW.unreachable_since, NEW.server_id,
+        NEW.runtime_id, NEW.config, NEW.name, NEW.kind) THEN
+        RETURN NULL;
+    END IF;
+    changed := CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+    IF EXISTS (SELECT 1 FROM workspaces WHERE id = changed.workspace_id) THEN
+        PERFORM zoo_event(changed.workspace_id, changed.id, 'sandbox.state',
+            jsonb_build_object('status', CASE WHEN TG_OP = 'DELETE' THEN 'deleted' ELSE changed.status END,
+                'previous', OLD.status, 'error', changed.error_message,
+                'unreachable', changed.unreachable_since IS NOT NULL));
     END IF;
     RETURN NULL;
 END;
 $$;
 -- +goose StatementEnd
-CREATE TRIGGER sandboxes_events AFTER UPDATE OF status ON sandboxes
+CREATE TRIGGER sandboxes_events AFTER INSERT OR UPDATE OR DELETE ON sandboxes
     FOR EACH ROW EXECUTE FUNCTION sandbox_events();
+
+-- +goose StatementBegin
+CREATE FUNCTION security_events() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    changed JSONB;
+    workspace TEXT;
+    sandbox TEXT;
+BEGIN
+    IF TG_OP = 'UPDATE' AND
+        (to_jsonb(OLD) - 'last_used_at' - 'updated_at') IS NOT DISTINCT FROM
+        (to_jsonb(NEW) - 'last_used_at' - 'updated_at') THEN
+        RETURN NULL;
+    END IF;
+    changed := CASE WHEN TG_OP = 'DELETE' THEN to_jsonb(OLD) ELSE to_jsonb(NEW) END;
+    workspace := changed->>'workspace_id';
+    sandbox := changed->>'sandbox_id';
+    IF TG_TABLE_NAME = 'sandbox_network_rules' THEN
+        SELECT p.sandbox_id INTO sandbox FROM sandbox_network_policies p WHERE p.id = changed->>'policy_id';
+    END IF;
+    IF workspace IS NULL AND sandbox IS NOT NULL THEN
+        SELECT s.workspace_id INTO workspace FROM sandboxes s WHERE s.id = sandbox;
+    END IF;
+    IF TG_TABLE_NAME = 'workspaces' THEN
+        workspace := changed->>'id';
+    END IF;
+    IF workspace IS NOT NULL THEN
+        PERFORM pg_notify('zoo_event', workspace);
+    END IF;
+    IF workspace IS NOT NULL AND EXISTS (SELECT 1 FROM workspaces WHERE id = workspace) THEN
+        PERFORM zoo_event(workspace, sandbox, 'security.state',
+            jsonb_build_object('resource', TG_TABLE_NAME, 'operation', lower(TG_OP)));
+    END IF;
+    RETURN NULL;
+END;
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER api_keys_security_events AFTER INSERT OR UPDATE OR DELETE ON api_keys
+    FOR EACH ROW EXECUTE FUNCTION security_events();
+CREATE TRIGGER workspaces_security_events AFTER INSERT OR UPDATE OR DELETE ON workspaces
+    FOR EACH ROW EXECUTE FUNCTION security_events();
+CREATE TRIGGER workspace_members_security_events AFTER INSERT OR UPDATE OR DELETE ON workspace_members
+    FOR EACH ROW EXECUTE FUNCTION security_events();
+CREATE TRIGGER sandbox_members_security_events AFTER INSERT OR UPDATE OR DELETE ON sandbox_members
+    FOR EACH ROW EXECUTE FUNCTION security_events();
+CREATE TRIGGER sandbox_permissions_security_events AFTER INSERT OR UPDATE OR DELETE ON sandbox_permissions
+    FOR EACH ROW EXECUTE FUNCTION security_events();
+CREATE TRIGGER sandbox_app_permissions_security_events AFTER INSERT OR UPDATE OR DELETE ON sandbox_app_permissions
+    FOR EACH ROW EXECUTE FUNCTION security_events();
+CREATE TRIGGER sandbox_network_policies_security_events AFTER INSERT OR UPDATE OR DELETE ON sandbox_network_policies
+    FOR EACH ROW EXECUTE FUNCTION security_events();
+CREATE TRIGGER sandbox_network_rules_security_events AFTER INSERT OR UPDATE OR DELETE ON sandbox_network_rules
+    FOR EACH ROW EXECUTE FUNCTION security_events();
+CREATE TRIGGER sandbox_labels_security_events AFTER INSERT OR UPDATE OR DELETE ON sandbox_labels
+    FOR EACH ROW EXECUTE FUNCTION security_events();
+
+-- +goose StatementBegin
+CREATE FUNCTION server_events() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    changed servers;
+BEGIN
+    IF TG_OP = 'UPDATE' AND OLD IS NOT DISTINCT FROM NEW THEN
+        RETURN NULL;
+    END IF;
+    changed := CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+    IF EXISTS (SELECT 1 FROM workspaces WHERE id = changed.workspace_id) THEN
+        PERFORM zoo_event(changed.workspace_id, NULL, 'server.state',
+            jsonb_build_object('server_id', changed.id, 'operation', lower(TG_OP)));
+    END IF;
+    RETURN NULL;
+END;
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER servers_events AFTER INSERT OR UPDATE OR DELETE ON servers
+    FOR EACH ROW EXECUTE FUNCTION server_events();
+
+-- +goose StatementBegin
+CREATE FUNCTION node_events() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    changed nodes;
+    workspace TEXT;
+BEGIN
+    changed := CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+    PERFORM pg_notify('zoo_node_report', changed.server_id);
+    IF TG_OP = 'UPDATE' AND (to_jsonb(OLD) - 'seen_at')
+        IS NOT DISTINCT FROM (to_jsonb(NEW) - 'seen_at') THEN
+        RETURN NULL;
+    END IF;
+    SELECT s.workspace_id INTO workspace FROM servers s
+        JOIN workspaces w ON w.id = s.workspace_id WHERE s.id = changed.server_id;
+    IF workspace IS NOT NULL THEN
+        PERFORM zoo_event(workspace, NULL, 'server.state',
+            jsonb_build_object('server_id', changed.server_id, 'node_id', changed.id,
+                'operation', lower(TG_OP), 'reported_at', changed.seen_at));
+    END IF;
+    RETURN NULL;
+END;
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER nodes_events AFTER INSERT OR UPDATE OR DELETE ON nodes
+    FOR EACH ROW EXECUTE FUNCTION node_events();
+
+-- +goose StatementBegin
+CREATE FUNCTION pool_events() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    changed JSONB;
+    workspace TEXT;
+BEGIN
+    IF TG_OP = 'UPDATE' AND (to_jsonb(OLD) - 'updated_at')
+        IS NOT DISTINCT FROM (to_jsonb(NEW) - 'updated_at') THEN
+        RETURN NULL;
+    END IF;
+    changed := CASE WHEN TG_OP = 'DELETE' THEN to_jsonb(OLD) ELSE to_jsonb(NEW) END;
+    FOR workspace IN SELECT w.id FROM workspaces w
+        WHERE changed->>'server_id' IS NULL OR w.id = (
+            SELECT s.workspace_id FROM servers s WHERE s.id = changed->>'server_id'
+        )
+    LOOP
+        PERFORM zoo_event(workspace, NULL, 'pool.state',
+            jsonb_build_object('server_id', changed->>'server_id', 'kind', changed->>'kind'));
+    END LOOP;
+    RETURN NULL;
+END;
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER pool_settings_events AFTER INSERT OR UPDATE OR DELETE ON pool_settings
+    FOR EACH ROW EXECUTE FUNCTION pool_events();
+CREATE TRIGGER pool_sandboxes_events AFTER INSERT OR UPDATE OR DELETE ON pool_sandboxes
+    FOR EACH ROW EXECUTE FUNCTION pool_events();
+
+-- +goose StatementBegin
+CREATE FUNCTION snapshot_events() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    changed snapshots;
+    workspace TEXT;
+BEGIN
+    IF TG_OP = 'UPDATE' AND OLD IS NOT DISTINCT FROM NEW THEN
+        RETURN NULL;
+    END IF;
+    changed := CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+    SELECT s.workspace_id INTO workspace FROM sandboxes s
+        JOIN workspaces w ON w.id = s.workspace_id WHERE s.id = changed.sandbox_id;
+    IF workspace IS NOT NULL THEN
+        PERFORM zoo_event(workspace, changed.sandbox_id, 'snapshot.state',
+            jsonb_build_object('snapshot_id', changed.id, 'state', changed.state, 'operation', lower(TG_OP)));
+    END IF;
+    RETURN NULL;
+END;
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER snapshots_events AFTER INSERT OR UPDATE OR DELETE ON snapshots
+    FOR EACH ROW EXECUTE FUNCTION snapshot_events();
+
+-- +goose StatementBegin
+CREATE FUNCTION job_events() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    changed jobs;
+    workspace TEXT;
+BEGIN
+    IF TG_OP = 'UPDATE' AND (to_jsonb(OLD) - 'updated_at')
+        IS NOT DISTINCT FROM (to_jsonb(NEW) - 'updated_at') THEN
+        RETURN NULL;
+    END IF;
+    changed := CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+    SELECT s.workspace_id INTO workspace FROM sandboxes s
+        JOIN workspaces w ON w.id = s.workspace_id WHERE s.id = changed.sandbox_id;
+    IF workspace IS NOT NULL THEN
+        PERFORM zoo_event(workspace, changed.sandbox_id, 'job.state',
+            jsonb_build_object('job_id', changed.id, 'kind', changed.kind,
+                'state', changed.state, 'operation', lower(TG_OP)));
+    END IF;
+    RETURN NULL;
+END;
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER jobs_events AFTER INSERT OR UPDATE OR DELETE ON jobs
+    FOR EACH ROW EXECUTE FUNCTION job_events();
 
 -- webhooks (server/webhooks.py): each event a webhook wants gets a delivery row in the event's own transaction,
 -- which workers send and retry. types is a JSON array of event types ([] = all); label_selector a JSON object that
@@ -549,7 +742,7 @@ BEGIN
     WHERE w.workspace_id = NEW.workspace_id
       AND w.enabled
       -- a test event goes to the one webhook it tests (server/webhooks.py, test)
-      AND NEW.type <> 'webhook.test'
+      AND NEW.type NOT IN ('webhook.test', 'webhook.delivery')
       AND (w.types::jsonb = '[]'::jsonb OR w.types::jsonb ? NEW.type)
       AND (w.label_selector IS NULL OR NOT EXISTS (
           SELECT 1 FROM jsonb_each_text(w.label_selector::jsonb) wanted
@@ -564,6 +757,29 @@ $$;
 -- +goose StatementEnd
 CREATE TRIGGER events_webhooks AFTER INSERT ON events
     FOR EACH ROW EXECUTE FUNCTION webhook_deliveries_for();
+
+-- +goose StatementBegin
+CREATE FUNCTION webhook_delivery_events() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    workspace TEXT;
+BEGIN
+    IF TG_OP = 'UPDATE' AND (OLD.status, OLD.attempts, OLD.last_error, OLD.response_status, OLD.delivered_at)
+        IS NOT DISTINCT FROM (NEW.status, NEW.attempts, NEW.last_error, NEW.response_status, NEW.delivered_at) THEN
+        RETURN NULL;
+    END IF;
+    SELECT h.workspace_id INTO workspace FROM webhooks h
+        JOIN workspaces w ON w.id = h.workspace_id WHERE h.id = NEW.webhook_id;
+    IF workspace IS NOT NULL THEN
+        PERFORM zoo_event(workspace, NULL, 'webhook.delivery',
+            jsonb_build_object('webhook_id', NEW.webhook_id, 'delivery_id', NEW.id,
+                'status', NEW.status, 'attempts', NEW.attempts));
+    END IF;
+    RETURN NULL;
+END;
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER webhook_deliveries_events AFTER INSERT OR UPDATE ON webhook_deliveries
+    FOR EACH ROW EXECUTE FUNCTION webhook_delivery_events();
 
 -- metered usage in hourly buckets (server/metering.py). sandbox_id is not a foreign key: usage outlives its
 -- sandbox, and so do the labels copied into usage_labels when the sandbox is labelled. Storage that belongs to the
@@ -622,6 +838,21 @@ CREATE INDEX idx_profiles_workspace ON profiles(workspace_id);
 CREATE INDEX idx_api_keys_workspace ON api_keys(workspace_id);
 
 -- +goose Down
+DROP TRIGGER IF EXISTS webhook_deliveries_events ON webhook_deliveries;
+DROP TRIGGER IF EXISTS events_webhooks ON events;
+DROP TRIGGER IF EXISTS jobs_events ON jobs;
+DROP TRIGGER IF EXISTS snapshots_events ON snapshots;
+DROP TRIGGER IF EXISTS pool_sandboxes_events ON pool_sandboxes;
+DROP TRIGGER IF EXISTS pool_settings_events ON pool_settings;
+DROP TRIGGER IF EXISTS nodes_events ON nodes;
+DROP TRIGGER IF EXISTS servers_events ON servers;
+DROP FUNCTION IF EXISTS webhook_delivery_events();
+DROP FUNCTION IF EXISTS webhook_deliveries_for();
+DROP FUNCTION IF EXISTS job_events();
+DROP FUNCTION IF EXISTS snapshot_events();
+DROP FUNCTION IF EXISTS pool_events();
+DROP FUNCTION IF EXISTS node_events();
+DROP FUNCTION IF EXISTS server_events();
 DROP TABLE IF EXISTS idempotency_keys CASCADE;
 DROP TABLE IF EXISTS usage_labels CASCADE;
 DROP TABLE IF EXISTS usage CASCADE;
@@ -629,6 +860,16 @@ DROP TABLE IF EXISTS webhook_deliveries CASCADE;
 DROP TABLE IF EXISTS webhooks CASCADE;
 DROP TRIGGER IF EXISTS sandboxes_events ON sandboxes;
 DROP FUNCTION IF EXISTS sandbox_events();
+DROP TRIGGER IF EXISTS api_keys_security_events ON api_keys;
+DROP TRIGGER IF EXISTS workspaces_security_events ON workspaces;
+DROP TRIGGER IF EXISTS workspace_members_security_events ON workspace_members;
+DROP TRIGGER IF EXISTS sandbox_members_security_events ON sandbox_members;
+DROP TRIGGER IF EXISTS sandbox_permissions_security_events ON sandbox_permissions;
+DROP TRIGGER IF EXISTS sandbox_app_permissions_security_events ON sandbox_app_permissions;
+DROP TRIGGER IF EXISTS sandbox_network_policies_security_events ON sandbox_network_policies;
+DROP TRIGGER IF EXISTS sandbox_network_rules_security_events ON sandbox_network_rules;
+DROP TRIGGER IF EXISTS sandbox_labels_security_events ON sandbox_labels;
+DROP FUNCTION IF EXISTS security_events();
 DROP FUNCTION IF EXISTS zoo_event(TEXT, TEXT, TEXT, JSONB);
 DROP TABLE IF EXISTS events CASCADE;
 DROP TABLE IF EXISTS label_quotas CASCADE;
@@ -647,6 +888,7 @@ DROP TABLE IF EXISTS sandbox_permissions CASCADE;
 DROP TABLE IF EXISTS sandbox_network_policies CASCADE;
 DROP TABLE IF EXISTS sandbox_app_permissions CASCADE;
 DROP TABLE IF EXISTS sandbox_members CASCADE;
+DROP TABLE IF EXISTS api_keys CASCADE;
 DROP TABLE IF EXISTS sandboxes CASCADE;
 DROP TABLE IF EXISTS sandbox_image_versions CASCADE;
 DROP TABLE IF EXISTS nodes CASCADE;
@@ -654,7 +896,6 @@ DROP TABLE IF EXISTS node_tokens CASCADE;
 DROP TABLE IF EXISTS profile_versions CASCADE;
 DROP TABLE IF EXISTS pool_sandboxes CASCADE;
 DROP TABLE IF EXISTS pool_settings CASCADE;
-DROP TABLE IF EXISTS api_keys CASCADE;
 DROP TABLE IF EXISTS apps CASCADE;
 DROP TABLE IF EXISTS sandbox_images CASCADE;
 DROP TABLE IF EXISTS workspace_invitations CASCADE;
@@ -665,6 +906,7 @@ DROP TABLE IF EXISTS profiles CASCADE;
 DROP TABLE IF EXISTS servers CASCADE;
 DROP TABLE IF EXISTS workspaces CASCADE;
 DROP TABLE IF EXISTS node_authority CASCADE;
+DROP TABLE IF EXISTS ssh_identity CASCADE;
 DROP TABLE IF EXISTS leases CASCADE;
 DROP TABLE IF EXISTS secret_keys CASCADE;
 DROP TABLE IF EXISTS users CASCADE;

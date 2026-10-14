@@ -19,3 +19,11 @@ sql:
           emit_sync_querier: true
           emit_async_querier: false
           emit_pydantic_models: true 
+      - out: "db/async_generated"
+        plugin: "py-better"
+        options:
+          package: "db.async_generated"
+          model_type: "dataclass"
+          emit_sync_querier: false
+          emit_async_querier: true
+          emit_pydantic_models: true
