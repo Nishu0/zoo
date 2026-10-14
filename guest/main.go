@@ -10,6 +10,8 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"net/netip"
+	"net/url"
 	"os"
 	"runtime"
 	"slices"
@@ -33,16 +35,11 @@ type call struct {
 type handler func(c call) (any, []byte, error)
 
 var handlers = map[string]handler{
-	"exec":              execOp,
-	"read":              readOp,
-	"write":             writeOp,
-	"screenshot":        screenshotOp,
-	"mouse":             mouseOp,
-	"keyboard":          keyboardOp,
-	"pty_open":          ptyOpen,
-	"screen_diff":       diffOp,
-	"wait_until_stable": stableOp,
-	"tunnel_open":       tunnelOpen,
+	"exec":        execOp,
+	"read":        readOp,
+	"write":       writeOp,
+	"pty_open":    ptyOpen,
+	"tunnel_open": tunnelOpen,
 }
 
 // notifications carry no id and get no reply. They run in arrival order on the read loop, so a terminal's input
@@ -60,16 +57,11 @@ func main() {
 	envFile := flag.String("env", "", "read ZOO_GUEST_* from this file, waiting for the API to write it")
 	logFile := flag.String("log", "", "append the log to this file instead of stderr")
 	appsFile := flag.String("apps", "", "as root, enforce the app policy in this file (apps_linux.go)")
-	egressDir := flag.String("egress", "", "serve the host-side network policy written to this directory (egress.go)")
 	flag.Parse()
 	if *logFile != "" {
 		if f, err := os.OpenFile(*logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
 			log.SetOutput(f)
 		}
-	}
-	if *egressDir != "" {
-		runEgress(*egressDir)
-		return
 	}
 	if *appsFile != "" {
 		runApps(*appsFile)
@@ -82,7 +74,7 @@ func main() {
 		os.Unsetenv(name)
 	}
 	if *envFile == "" && !configured(env) {
-		log.Print("ZOO_GUEST_URL, ZOO_GUEST_TOKEN or ZOO_SANDBOX_ID is not set; the API uses its fallback path")
+		log.Fatal("ZOO_GUEST_URL, ZOO_GUEST_TOKEN and ZOO_SANDBOX_ID are required")
 		return
 	}
 	if *as != "" && os.Getuid() == 0 {
@@ -93,7 +85,7 @@ func main() {
 	if home, err := os.UserHomeDir(); err == nil {
 		os.Chdir(home)
 	}
-	backoff := 500 * time.Millisecond
+	backoff := 100 * time.Millisecond
 	for {
 		if *envFile != "" {
 			// read again on every attempt: the API rewrites the file at each boot of a VM
@@ -103,18 +95,40 @@ func main() {
 		err := errors.New(*envFile + " is not written yet")
 		if configured(env) {
 			err = session(context.Background(), env["ZOO_GUEST_URL"], env["ZOO_GUEST_TOKEN"], env["ZOO_SANDBOX_ID"])
+			if ownerURL, valid := guestOwnerURL(env["ZOO_GUEST_URL"], err); valid {
+				err = session(context.Background(), ownerURL, env["ZOO_GUEST_TOKEN"], env["ZOO_SANDBOX_ID"])
+			}
 		}
 		if time.Since(began) > 30*time.Second {
-			backoff = 500 * time.Millisecond
+			backoff = 100 * time.Millisecond
 		}
 		log.Printf("disconnected: %v; retrying in %s", err, backoff)
 		time.Sleep(backoff)
-		backoff = min(backoff*2, 10*time.Second)
+		backoff = min(backoff*2, time.Second)
 	}
 }
 
 func configured(env map[string]string) bool {
 	return env["ZOO_GUEST_URL"] != "" && env["ZOO_GUEST_TOKEN"] != "" && env["ZOO_SANDBOX_ID"] != ""
+}
+
+func guestOwnerURL(address string, failure error) (string, bool) {
+	var closed websocket.CloseError
+	if !errors.As(failure, &closed) || closed.Code != websocket.StatusCode(4001) || !strings.HasPrefix(closed.Reason, "owner=") {
+		return "", false
+	}
+	owner, err := netip.ParseAddr(strings.TrimPrefix(closed.Reason, "owner="))
+	if err != nil || owner.Zone() != "" {
+		return "", false
+	}
+	endpoint, err := url.Parse(address)
+	if err != nil || endpoint.Hostname() == "" || endpoint.User != nil || endpoint.Scheme != "ws" && endpoint.Scheme != "wss" {
+		return "", false
+	}
+	query := endpoint.Query()
+	query.Set("owner", owner.Unmap().String())
+	endpoint.RawQuery = query.Encode()
+	return endpoint.String(), true
 }
 
 // readEnv parses KEY=VALUE lines; a missing file reads as empty.
@@ -139,6 +153,7 @@ func session(ctx context.Context, url, token, sandbox string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	conn, _, err := websocket.Dial(ctx, url, &websocket.DialOptions{
+		HTTPClient: &http.Client{Timeout: 3 * time.Second},
 		HTTPHeader: http.Header{"Authorization": {"Bearer " + token}, "X-Zoo-Sandbox": {sandbox}},
 	})
 	if err != nil {

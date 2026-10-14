@@ -122,30 +122,6 @@ func TestFiles(t *testing.T) {
 	}
 }
 
-func TestKeyNames(t *testing.T) {
-	for name, want := range map[string]uint32{
-		"Return": 0xff0d, "enter": 0xff0d, "ctrl": 0xffe3, "Control_L": 0xffe3, "a": 0x61, "A": 0x41, "1": 0x31,
-		"F5": 0xffc2, "f5": 0xffc2, "page_down": 0xff56, "PageDown": 0xff56, "space": 0x20, "é": 0xe9,
-		"€": 0x010020ac, "XF86AudioMute": 0x1008ff12, "plus": 0x2b,
-	} {
-		if got, err := keysym(name); err != nil || got != want {
-			t.Errorf("keysym(%q) = %#x, %v; want %#x", name, got, err, want)
-		}
-	}
-	if _, err := keysym("NoSuchKey"); err == nil {
-		t.Error("expected an unknown key error")
-	}
-	if names, err := splitCombo("ctrl+shift+t"); err != nil || len(names) != 3 {
-		t.Errorf("splitCombo: %v %v", names, err)
-	}
-	if _, err := splitCombo("ctrl++"); err == nil {
-		t.Error("expected a bad combination error")
-	}
-	if names, _ := splitCombo("+"); names[0] != "plus" {
-		t.Errorf("a lone + is the plus key, got %v", names)
-	}
-}
-
 func notify(t *testing.T, ctx context.Context, c *websocket.Conn, op string, args any, payload []byte) {
 	t.Helper()
 	a, _ := json.Marshal(args)
