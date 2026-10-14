@@ -6,7 +6,7 @@
   "scripts": {
     "docs:gen": "cd .. && uv run python site/scripts/generate_reference.py",
     "dev": "bun run docs:gen && astro dev --port 4000",
-    "build": "bun run docs:gen && astro build",
+    "build": "astro build",
     "preview": "astro preview",
     "check": "astro check"
   },

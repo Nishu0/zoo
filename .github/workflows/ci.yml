@@ -108,7 +108,7 @@ jobs:
           cluster_name: zoo
       - name: The runc RuntimeClass and the test image
         run: |
-          kubectl apply -f tests/kubernetes/runtimeclass-kata.yaml
+          kubectl apply -f tests/kubernetes/kind.yaml
           docker build -t zoo-kube-test:1 tests/kubernetes
           kind load docker-image zoo-kube-test:1 --name zoo
       - run: uv run pytest tests/kubernetes -v

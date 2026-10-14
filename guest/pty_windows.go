@@ -78,6 +78,9 @@ func spawn(hpc windows.Handle, argv, env []string, cwd string) (windows.Handle, 
 	}
 	si := windows.StartupInfoEx{ProcThreadAttributeList: attrs.List()}
 	si.Cb = uint32(unsafe.Sizeof(si))
+	// with no std handles of its own the child would inherit ours (redirected under a service or a test runner)
+	// and never read the console; empty ones make it use the pseudoconsole
+	si.Flags |= windows.STARTF_USESTDHANDLES
 	cmdline, err := windows.UTF16PtrFromString(windows.ComposeCommandLine(argv))
 	if err != nil {
 		return 0, 0, err
