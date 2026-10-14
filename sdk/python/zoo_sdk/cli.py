@@ -10,18 +10,16 @@
     zoo logs <id> [-f]              recent tool calls, then (with -f) its events as they happen
     zoo rm <id>                     delete a sandbox
 
-    zoo server doctor | upgrade | backup | backups | restore <key>     run a Zoo installation
+    zoo backups                     list database backups (admin only)
 
 ZOO_URL and ZOO_API_KEY override the stored login; --json prints machine-readable output."""
 
 import asyncio
 import json
 import os
-import platform
 import re
 import shutil
 import signal
-import subprocess
 import sys
 import tomllib
 import webbrowser
@@ -38,8 +36,6 @@ from zoo_sdk.client import Sandbox, Zoo
 from zoo_sdk.errors import ZooError
 
 app = typer.Typer(help="Zoo sandboxes from the terminal.", no_args_is_help=True, pretty_exceptions_enable=False)
-server = typer.Typer(help="Operate a Zoo installation (run next to its compose.yml).", no_args_is_help=True)
-app.add_typer(server, name="server")
 
 T = TypeVar("T")
 
@@ -300,139 +296,14 @@ def remove(sandbox_ids: list[str], wait: Annotated[bool, typer.Option(help="Wait
         typer.echo(f"deleted {sandbox_id}")
 
 
-# operator commands: install.sh puts a fuller operator script at /usr/local/bin/zoo (deploy/zoo: upgrades with a
-# backup and rollback, local database backups); when it's there these hand over to it, else they work here
-
-
-def operator_script() -> str | None:
-    candidates = [os.environ.get("ZOO_OPERATOR_SCRIPT"), "/usr/local/bin/zoo"]
-    for path in candidates:
-        if not path or not os.path.isfile(path) or os.path.realpath(path) == os.path.realpath(sys.argv[0]):
-            continue
-        with open(path, "rb") as f:
-            if b"bash" in f.read(64):
-                return path
-    return None
-
-
-def hand_over(*args: str):
-    script = operator_script()
-    if script:
-        os.execv(script, [script, *args])
-
-
-def compose(*args: str, check: bool = True) -> subprocess.CompletedProcess:
-    if shutil.which("docker") is None:
-        fail("docker isn't installed or on PATH")
-    return subprocess.run(["docker", "compose", *args], check=check)
-
-
-def need_compose():
-    if not any(Path(name).exists() for name in ("compose.yml", "compose.yaml", "docker-compose.yml")):
-        fail("run this next to Zoo's compose.yml (on Kubernetes, use `helm upgrade` and the chart's backups)")
-
-
-@server.command()
-def doctor(as_json: Json = False):
-    """Check the installation: the API, its database, object store and runtime, and this machine. Exits 1 on a
-    failure."""
-    if not as_json:
-        hand_over("doctor")
-    import httpx
-
-    results: list[tuple[str, bool, str]] = []
-    config = stored()
-    url = (os.environ.get("ZOO_URL") or config.get("url") or "http://localhost:8000").rstrip("/")
-    try:
-        response = httpx.get(f"{url}/readyz", timeout=10)
-        body = response.json()
-        results.append(("api", True, f"{url} answers"))
-        for name, outcome in body.get("checks", {}).items():
-            results.append((name, outcome == "ok", outcome))
-    except (httpx.HTTPError, ValueError) as e:
-        results.append(("api", False, f"{url} doesn't answer: {e}"))
-    key = os.environ.get("ZOO_API_KEY") or config.get("api_key")
-    if key:
-        try:
-            Zoo(api_key=key, base_url=url, max_retries=0)._json("GET", "/auth/me")
-            results.append(("api_key", True, "accepted"))
-        except ZooError as e:
-            results.append(("api_key", False, e.message))
-    docker = shutil.which("docker")
-    results.append(("docker", docker is not None, docker or "not on PATH (needed for compose installs)"))
-    if platform.system() == "Linux":
-        kvm = os.access("/dev/kvm", os.R_OK | os.W_OK)
-        results.append(("kvm", kvm, "/dev/kvm usable" if kvm else "/dev/kvm missing or not accessible (VMs)"))
-    if as_json:
-        show([{"check": n, "ok": ok, "detail": d} for n, ok, d in results])
-    else:
-        for name, ok, detail in results:
-            typer.echo(f"{typer.style('✓' if ok else '✗', fg='green' if ok else 'red')} {name:<20} {detail}")
-    if not all(ok for _, ok, _ in results):
-        raise typer.Exit(1)
-
-
-@server.command()
-def upgrade(version: Annotated[str | None, typer.Option(help="Image tag; default: ZOO_VERSION or latest.")] = None):
-    """Pull the new images and restart; the API migrates the database as it starts."""
-    hand_over("upgrade", *([version] if version else []))
-    need_compose()
-    if version:
-        os.environ["ZOO_VERSION"] = version
-    compose("pull")
-    compose("up", "-d", "--remove-orphans")
-    typer.echo("Upgraded. Check it with `zoo server doctor`.")
-
-
-@server.command()
-def backup():
-    """Take a backup now: a database dump and snapshots of sandbox homes, to object storage (or, on an install.sh
-    server, a database dump in $ZOO_HOME/backups)."""
-    hand_over("backup")
-    result = run(lambda: client()._json("POST", "/admin/backups", timeout=3600))
-    typer.echo(f"backed up to {result.get('key')}")
-
-
-@server.command()
+@app.command()
 def backups(as_json: Json = False):
-    """List database backups in object storage."""
+    """List database backups in object storage (admin only)."""
     found = run(lambda: client()._json("GET", "/admin/backups"))
     if as_json:
         return show(found)
     for item in found:
         typer.echo(f"{item.get('key')}  {item.get('size')} bytes")
-
-
-@server.command()
-def restore(
-    key: str,
-    yes: Annotated[bool, typer.Option("--yes", help="Don't ask.")] = False,
-):
-    """Replace the database with a backup (`zoo server backups` lists them). Stops the API and workers while it
-    runs. On an install.sh server KEY is a file from `zoo server backup`."""
-    hand_over("restore", key)
-    need_compose()
-    if not yes:
-        typer.confirm(f"Replace the database with {key}? Everything since then is lost", abort=True)
-    compose("stop", "api", "worker", "gateway")
-    try:
-        compose(
-            "run",
-            "--rm",
-            "--no-deps",
-            "api",
-            "uv",
-            "run",
-            "--no-sync",
-            "python",
-            "-m",
-            "server.backups",
-            "restore",
-            key,
-        )
-    finally:
-        compose("start", "api", "worker", "gateway")
-    typer.echo("Restored. Sandbox homes come back through each sandbox's snapshots.")
 
 
 def main():

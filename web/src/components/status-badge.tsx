@@ -20,6 +20,7 @@ const STATUS_STYLES: Record<string, string> = {
   unreachable: AMBER,
   offline: GRAY,
   stopped: GRAY,
+  paused: GRAY,
   closed: GRAY,
   error: RED,
   failed: RED,
@@ -40,6 +41,7 @@ const STATUS_DOT: Record<string, string> = {
   unreachable: "bg-amber-500",
   offline: "bg-zinc-500",
   stopped: "bg-zinc-500",
+  paused: "bg-sky-400",
   closed: "bg-zinc-500",
   error: "bg-red-500",
   failed: "bg-red-500",
@@ -63,6 +65,11 @@ export function StatusDot({
   )
 }
 
+// statuses shown as a phrase rather than one capitalized word
+const LABELS: Record<string, string> = {
+  paused: "Paused · resumes instantly",
+}
+
 export function StatusBadge({
   status,
   className,
@@ -73,7 +80,8 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium capitalize",
+        "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium",
+        !LABELS[status] && "capitalize",
         STATUS_STYLES[status] ?? GRAY,
         className
       )}
@@ -84,7 +92,7 @@ export function StatusBadge({
           STATUS_DOT[status] ?? "bg-zinc-500"
         )}
       />
-      {status}
+      {LABELS[status] ?? status}
     </span>
   )
 }

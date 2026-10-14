@@ -2,7 +2,12 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useCallback, useEffect } from "react"
 
 import { VncScreen } from "@/components/vnc-screen"
-import { baseSocketUrl, useBaseStatus, useMe } from "@/lib/api_client"
+import {
+  baseSocketUrl,
+  useBaseStatus,
+  useEventStream,
+  useMe,
+} from "@/lib/api_client"
 
 export const Route = createFileRoute("/base/$serverId")({
   component: BaseView,
@@ -12,6 +17,7 @@ function BaseView() {
   const { serverId } = Route.useParams()
   const navigate = useNavigate()
   const { data: user, isPending } = useMe()
+  useEventStream(Boolean(user))
   const base = useBaseStatus(serverId)
   const socketUrl = useCallback(() => baseSocketUrl(serverId), [serverId])
 

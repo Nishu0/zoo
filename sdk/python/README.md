@@ -8,6 +8,9 @@ pip install zoo-sdk            # the SDK
 pip install 'zoo-sdk[cli]'     # plus the `zoo` command
 ```
 
+After `zoo login`, admins can list database backups in object storage with `zoo backups` or
+`zoo backups --json`. The CLI does not restore backups or operate the deployment.
+
 ```python
 from zoo_sdk import Zoo
 

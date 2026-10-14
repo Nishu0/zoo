@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react"
 
 import type RFB from "@novnc/novnc"
 
-// Full-screen noVNC view that reconnects while `active` is true.
+// Full-screen view of the sandbox's VNC session in the gateway, through the API websocket; reconnects while
+// `active` is true.
 export function VncScreen({
   socketUrl,
   active,

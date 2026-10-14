@@ -1128,17 +1128,6 @@
       "title": "Id",
       "type": "string"
      },
-     "run_id": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Run Id"
-     },
      "sandbox_id": {
       "anyOf": [
        {
@@ -1164,7 +1153,6 @@
      "seq",
      "type",
      "sandbox_id",
-     "run_id",
      "data",
      "created_at"
     ],
@@ -1283,34 +1271,6 @@
      "images"
     ],
     "title": "HostResponse",
-    "type": "object"
-   },
-   "InstallCommand": {
-    "properties": {
-     "command": {
-      "title": "Command",
-      "type": "string"
-     },
-     "platform": {
-      "title": "Platform",
-      "type": "string"
-     },
-     "public_key": {
-      "title": "Public Key",
-      "type": "string"
-     },
-     "requirements": {
-      "title": "Requirements",
-      "type": "string"
-     }
-    },
-    "required": [
-     "platform",
-     "command",
-     "public_key",
-     "requirements"
-    ],
-    "title": "InstallCommand",
     "type": "object"
    },
    "InvitationRequest": {
@@ -1448,7 +1408,6 @@
      },
      "os": {
       "enum": [
-       "linux",
        "darwin",
        "windows"
       ],
@@ -1456,29 +1415,17 @@
       "type": "string"
      },
      "ssh_host_key": {
-      "anyOf": [
-       {
-        "maxLength": 2000,
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Ssh Host Key"
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Ssh Host Key",
+      "type": "string"
      },
      "ssh_user": {
-      "anyOf": [
-       {
-        "maxLength": 100,
-        "pattern": "^[A-Za-z0-9._-]+$",
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Ssh User"
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9._-]+$",
+      "title": "Ssh User",
+      "type": "string"
      },
      "token": {
       "maxLength": 2000,
@@ -1491,7 +1438,9 @@
      "token",
      "csr",
      "os",
-     "arch"
+     "arch",
+     "ssh_user",
+     "ssh_host_key"
     ],
     "title": "JoinRequest",
     "type": "object"
@@ -1929,6 +1878,19 @@
    },
    "MoveSandboxRequest": {
     "properties": {
+     "node_name": {
+      "anyOf": [
+       {
+        "maxLength": 253,
+        "minLength": 1,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Node Name"
+     },
      "server_id": {
       "anyOf": [
        {
@@ -2484,15 +2446,8 @@
       "type": "string"
      },
      "server_id": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Server Id"
+      "title": "Server Id",
+      "type": "null"
      },
      "server_name": {
       "title": "Server Name",
@@ -2528,15 +2483,8 @@
       "type": "string"
      },
      "server_id": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Server Id"
+      "title": "Server Id",
+      "type": "null"
      },
      "size": {
       "maximum": 10.0,
@@ -3060,6 +3008,11 @@
       ],
       "title": "Recovered At"
      },
+     "resumable": {
+      "default": false,
+      "title": "Resumable",
+      "type": "boolean"
+     },
      "server_id": {
       "anyOf": [
        {
@@ -3210,56 +3163,6 @@
      "created_at"
     ],
     "title": "SecretResponse",
-    "type": "object"
-   },
-   "ServerRequest": {
-    "properties": {
-     "bind_address": {
-      "maxLength": 255,
-      "minLength": 1,
-      "title": "Bind Address",
-      "type": "string"
-     },
-     "docker_url": {
-      "pattern": "^((ssh|tcp)://.+|local://)$",
-      "title": "Docker Url",
-      "type": "string"
-     },
-     "host_key": {
-      "anyOf": [
-       {
-        "maxLength": 2000,
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Host Key"
-     },
-     "name": {
-      "maxLength": 100,
-      "minLength": 1,
-      "title": "Name",
-      "type": "string"
-     },
-     "platform": {
-      "default": "linux",
-      "enum": [
-       "linux",
-       "macos",
-       "windows"
-      ],
-      "title": "Platform",
-      "type": "string"
-     }
-    },
-    "required": [
-     "name",
-     "docker_url",
-     "bind_address"
-    ],
-    "title": "ServerRequest",
     "type": "object"
    },
    "ServerResponse": {
@@ -4354,45 +4257,6 @@
      }
     },
     "summary": "Embed"
-   }
-  },
-  "/embed/{token}/state": {
-   "get": {
-    "operationId": "embed_state_embed__token__state_get",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "token",
-      "required": true,
-      "schema": {
-       "title": "Token",
-       "type": "string"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/EmbedStateResponse"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "summary": "Embed State"
    }
   },
   "/v1/admin/backups": {
@@ -5553,6 +5417,45 @@
     "summary": "Check Domain"
    }
   },
+  "/v1/embed/{token}/state": {
+   "get": {
+    "operationId": "embed_state_v1_embed__token__state_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "token",
+      "required": true,
+      "schema": {
+       "title": "Token",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/EmbedStateResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Embed State"
+   }
+  },
   "/v1/events": {
    "get": {
     "operationId": "list_events_v1_events_get",
@@ -5991,7 +5894,6 @@
       "required": true,
       "schema": {
        "enum": [
-        "linux",
         "darwin",
         "windows"
        ],
@@ -6084,9 +5986,8 @@
       "name": "platform",
       "required": false,
       "schema": {
-       "default": "linux",
+       "default": "macos",
        "enum": [
-        "linux",
         "macos",
         "windows"
        ],
@@ -6153,7 +6054,7 @@
   },
   "/v1/platforms": {
    "get": {
-    "description": "Every sandbox OS, and whether this install can run it. The control plane's own Docker runs Linux.",
+    "description": "The built-in Linux runtime and the sandbox OSes available through registered node hosts.",
     "operationId": "list_platforms_v1_platforms_get",
     "parameters": [
      {
@@ -9850,130 +9751,6 @@
      }
     ],
     "summary": "List Servers"
-   },
-   "post": {
-    "operationId": "add_server_v1_servers_post",
-    "parameters": [
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "requestBody": {
-     "content": {
-      "application/json": {
-       "schema": {
-        "$ref": "#/components/schemas/ServerRequest"
-       }
-      }
-     },
-     "required": true
-    },
-    "responses": {
-     "201": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ServerResponse"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Add Server"
-   }
-  },
-  "/v1/servers/install-command": {
-   "get": {
-    "operationId": "server_install_command_v1_servers_install_command_get",
-    "parameters": [
-     {
-      "in": "query",
-      "name": "platform",
-      "required": true,
-      "schema": {
-       "enum": [
-        "linux",
-        "macos",
-        "windows"
-       ],
-       "title": "Platform",
-       "type": "string"
-      }
-     },
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/InstallCommand"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Server Install Command"
    }
   },
   "/v1/servers/{server_id}": {
@@ -10397,59 +10174,6 @@
      }
     ],
     "summary": "Base Vnc Ticket"
-   }
-  },
-  "/v1/servers/{server_id}/migrate": {
-   "post": {
-    "operationId": "migrate_server_v1_servers__server_id__migrate_post",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "server_id",
-      "required": true,
-      "schema": {
-       "title": "Server Id",
-       "type": "string"
-      }
-     },
-     {
-      "in": "header",
-      "name": "x-zoo-workspace",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "X-Zoo-Workspace"
-      }
-     }
-    ],
-    "responses": {
-     "204": {
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "security": [
-     {
-      "HTTPBearer": []
-     }
-    ],
-    "summary": "Migrate Server"
    }
   },
   "/v1/servers/{server_id}/status": {

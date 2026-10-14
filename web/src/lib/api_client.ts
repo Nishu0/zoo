@@ -93,6 +93,7 @@ export const sandboxSchema = z.object({
   created_at: z.string(),
   // the host didn't answer the last health check
   unreachable: z.boolean().default(false),
+  resumable: z.boolean().default(false),
   job: sandboxJobSchema.nullable().default(null),
   // the image a Linux sandbox boots from; it stays on it until restarted on the new one
   image: z.string().nullable().default(null),
@@ -161,11 +162,13 @@ export const serverSchema = z.object({
   name: z.string(),
   docker_url: z.string(),
   bind_address: z.string(),
-  platform: z.enum(["linux", "macos", "windows"]),
-  capabilities: z.array(z.enum(["linux", "macos", "windows"])),
+  platform: z.enum(["macos", "windows"]),
+  capabilities: z.array(z.string()),
   created_at: z.string(),
   node: nodeSchema.nullable().default(null),
 })
+
+export type ServerPlatform = z.infer<typeof serverSchema>["platform"]
 
 export const nodeTokenSchema = z.object({
   token: z.string(),
@@ -222,43 +225,6 @@ export const platformSchema = z.object({
   available: z.boolean(),
 })
 
-export const installCommandSchema = z.object({
-  platform: z.string(),
-  command: z.string(),
-  public_key: z.string(),
-  requirements: z.string(),
-})
-
-export const serverInputSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(100),
-  docker_url: z
-    .string()
-    .trim()
-    .regex(
-      /^((ssh|tcp):\/\/.+|local:\/\/)$/,
-      "Use ssh://user@host, tcp://host:2376 or local://"
-    ),
-  bind_address: z.string().trim().min(1, "Address is required"),
-  platform: z.enum(["linux", "macos", "windows"]),
-  host_key: z.string().optional(),
-})
-
-/** Reads the `zoo-join:` line the node installer prints into the fields of a new server. */
-export function parseJoinLine(line: string): ServerInput {
-  const encoded = line.trim().replace(/^zoo-join:/, "")
-  let data: unknown
-  try {
-    data = JSON.parse(atob(encoded))
-  } catch {
-    throw new Error("That isn't a join line; copy the whole zoo-join:… line")
-  }
-  const parsed = serverInputSchema.safeParse(data)
-  if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid join line")
-  }
-  return parsed.data
-}
-
 export const serverStatusSchema = z.object({
   online: z.boolean(),
   error: z.string().nullable(),
@@ -266,7 +232,6 @@ export const serverStatusSchema = z.object({
   os: z.string().nullable(),
   cpus: z.number().nullable(),
   memory_total: z.number().nullable(),
-  docker_version: z.string().nullable(),
   microvm: z.boolean().nullable(),
   containers_running: z.number().nullable(),
   sandboxes: z.number(),
@@ -404,8 +369,6 @@ export const domainInputSchema = z
     "Enter a hostname like zoo.example.com"
   )
 
-export type ServerInput = z.infer<typeof serverInputSchema>
-
 export const execResultSchema = z.object({
   sandbox_id: z.string(),
   exit_code: z.number(),
@@ -515,6 +478,62 @@ export const executionSchema = z.object({
   error_message: z.string().nullable(),
   created_at: z.string(),
   completed_at: z.string().nullable(),
+})
+
+export const viewerLinkModeSchema = z.enum(["view", "control"])
+
+export const viewerLinkSchema = z.object({
+  id: z.string(),
+  sandbox_id: z.string(),
+  mode: viewerLinkModeSchema,
+  end_user: z.string().nullable(),
+  expires_at: z.string(),
+  revoked_at: z.string().nullable(),
+  created_at: z.string(),
+})
+
+export const createdViewerLinkSchema = viewerLinkSchema.extend({
+  token: z.string(),
+  url: z.string(),
+})
+
+export type CreateViewerLinkInput = {
+  mode?: ViewerLinkMode
+  expires_in_minutes?: number
+  end_user?: string | null
+}
+
+export const webhookSchema = z.object({
+  id: z.string(),
+  url: z.string(),
+  types: z.array(z.string()),
+  label_selector: z.record(z.string(), z.string()).nullable(),
+  enabled: z.boolean(),
+  created_at: z.string(),
+})
+
+export const createdWebhookSchema = webhookSchema.extend({
+  secret: z.string(),
+})
+
+export type WebhookInput = {
+  url: string
+  types?: Array<string>
+  label_selector?: Record<string, string> | null
+  enabled?: boolean
+}
+
+export const webhookDeliverySchema = z.object({
+  id: z.string(),
+  event_id: z.string(),
+  event_type: z.string(),
+  status: z.string(),
+  attempts: z.number(),
+  next_attempt_at: z.string(),
+  last_error: z.string().nullable(),
+  response_status: z.number().nullable(),
+  created_at: z.string(),
+  delivered_at: z.string().nullable(),
 })
 
 export const apiKeySchema = z.object({
@@ -868,22 +887,10 @@ export const api = {
   },
   servers: {
     list: () => request("/servers", z.array(serverSchema)),
-    installCommand: (platform: string) =>
-      request(
-        `/servers/install-command?platform=${platform}`,
-        installCommandSchema
-      ),
     status: (id: string) =>
       request(`/servers/${id}/status`, serverStatusSchema),
-    create: (input: ServerInput) =>
-      request("/servers", serverSchema, {
-        method: "POST",
-        body: JSON.stringify(input),
-      }),
     remove: (id: string) =>
       request(`/servers/${id}`, z.null(), { method: "DELETE" }),
-    migrate: (id: string) =>
-      request(`/servers/${id}/migrate`, z.null(), { method: "POST" }),
     base: (id: string) => request(`/servers/${id}/base`, baseStatusSchema),
     baseAction: ({
       id,
@@ -910,7 +917,13 @@ export const api = {
       request("/kubernetes/check", kubernetesSchema, { method: "POST" }),
   },
   nodes: {
-    createToken: ({ name, platform }: { name: string; platform: string }) =>
+    createToken: ({
+      name,
+      platform,
+    }: {
+      name: string
+      platform: ServerPlatform
+    }) =>
       request(`/nodes/tokens?platform=${platform}`, nodeTokenSchema, {
         method: "POST",
         body: JSON.stringify({ name }),
@@ -1250,8 +1263,6 @@ export const queryKeys = {
   kubernetes: ["kubernetes"] as const,
   // under "servers", so adding or removing a server refreshes what can run
   platforms: ["servers", "platforms"] as const,
-  installCommand: (platform: string) =>
-    ["servers", "install-command", platform] as const,
   server: (id: string) => ["servers", id] as const,
   snapshots: (sandboxId: string) =>
     ["sandboxes", sandboxId, "snapshots"] as const,
@@ -1288,6 +1299,7 @@ const JOB_STATUS = {
 export function displayStatus(sandbox: Sandbox): string {
   if (sandbox.job) return JOB_STATUS[sandbox.job.kind]
   if (sandbox.unreachable && sandbox.status === "running") return "unreachable"
+  if (sandbox.status === "stopped" && sandbox.resumable) return "paused"
   return sandbox.status
 }
 
@@ -1372,18 +1384,41 @@ export function useEventStream(
 
     function touched(event: ZooEvent) {
       const id = event.sandbox_id
-      if (event.type === "sandbox.state") {
+      if (event.type === "server.state") {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.servers })
+        void queryClient.invalidateQueries({ queryKey: queryKeys.sandboxes })
+        void queryClient.invalidateQueries({ queryKey: queryKeys.pool })
+        void queryClient.invalidateQueries({ queryKey: queryKeys.kubernetes })
+      }
+      if (event.type === "pool.state") {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.pool })
+      }
+      if (event.type === "kubernetes.state") {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.kubernetes })
+      }
+      if (event.type === "webhook.delivery") {
+        const webhookId = event.data.webhook_id
+        if (typeof webhookId === "string") {
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.webhookDeliveries(webhookId),
+          })
+        }
+      }
+      if (
+        event.type === "sandbox.state" ||
+        event.type === "snapshot.state" ||
+        event.type === "job.state"
+      ) {
         void queryClient.invalidateQueries({
           queryKey: queryKeys.sandboxes,
           exact: true,
         })
-      }
-      if (!id) return
-      if (event.type === "sandbox.state") {
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.sandbox(id),
-          exact: true,
-        })
+        void queryClient.invalidateQueries({ queryKey: queryKeys.pool })
+        if (id) {
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.sandbox(id),
+          })
+        }
       }
     }
 
@@ -1401,6 +1436,10 @@ export function useEventStream(
           delay = 1000
           // anything may have changed while disconnected
           void queryClient.invalidateQueries({ queryKey: queryKeys.sandboxes })
+          void queryClient.invalidateQueries({ queryKey: queryKeys.servers })
+          void queryClient.invalidateQueries({ queryKey: queryKeys.pool })
+          void queryClient.invalidateQueries({ queryKey: queryKeys.kubernetes })
+          void queryClient.invalidateQueries({ queryKey: queryKeys.webhooks })
           const reader = res.body
             .pipeThrough(new TextDecoderStream())
             .getReader()
@@ -1639,7 +1678,6 @@ export function useWebhookDeliveries(id: string, enabled: boolean) {
     queryKey: queryKeys.webhookDeliveries(id),
     queryFn: () => api.webhooks.deliveries(id),
     enabled,
-    refetchInterval: enabled ? 5000 : false,
   })
 }
 
@@ -1694,11 +1732,10 @@ function useInvalidatingMutation<TInput, TData>(
   })
 }
 
-export function useServers(refetchInterval: number | false = false) {
+export function useServers() {
   return useQuery({
     queryKey: queryKeys.servers,
     queryFn: api.servers.list,
-    refetchInterval,
   })
 }
 
@@ -1706,10 +1743,6 @@ export function usePool() {
   return useQuery({
     queryKey: queryKeys.pool,
     queryFn: api.pool.list,
-    refetchInterval: (query) =>
-      query.state.data?.some((e) => e.booting > 0 || e.idle < e.size)
-        ? 3000
-        : 15000,
   })
 }
 
@@ -1724,19 +1757,10 @@ export function usePlatforms() {
   })
 }
 
-export function useInstallCommand(platform: string) {
-  return useQuery({
-    queryKey: queryKeys.installCommand(platform),
-    queryFn: () => api.servers.installCommand(platform),
-    staleTime: Infinity,
-  })
-}
-
 export function useServerStatus(id: string) {
   return useQuery({
     queryKey: queryKeys.server(id),
     queryFn: () => api.servers.status(id),
-    refetchInterval: 15000,
   })
 }
 
@@ -1744,8 +1768,6 @@ export function useBaseStatus(id: string) {
   return useQuery({
     queryKey: queryKeys.base(id),
     queryFn: () => api.servers.base(id),
-    refetchInterval: (query) =>
-      query.state.data?.state === "installing" ? 3000 : 15000,
   })
 }
 
@@ -1757,23 +1779,14 @@ export function useBaseSetup() {
   return useMutation({ mutationFn: api.servers.baseSetup })
 }
 
-export function useCreateServer() {
-  return useInvalidatingMutation(queryKeys.servers, api.servers.create)
-}
-
 export function useRemoveServer() {
   return useInvalidatingMutation(queryKeys.servers, api.servers.remove)
-}
-
-export function useMigrateServer() {
-  return useInvalidatingMutation(queryKeys.servers, api.servers.migrate)
 }
 
 export function useKubernetes() {
   return useQuery({
     queryKey: queryKeys.kubernetes,
     queryFn: api.kubernetes.status,
-    refetchInterval: 30000,
   })
 }
 
@@ -1794,8 +1807,6 @@ export function useSnapshots(sandboxId: string) {
   return useQuery({
     queryKey: queryKeys.snapshots(sandboxId),
     queryFn: () => api.snapshots.list(sandboxId),
-    refetchInterval: (query) =>
-      query.state.data?.some((s) => s.state === "creating") ? 2000 : false,
   })
 }
 

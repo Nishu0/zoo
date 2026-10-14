@@ -21,23 +21,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/embed/{token}/state": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Embed State */
-        get: operations["embed_state_embed__token__state_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/admin/backups": {
         parameters: {
             query?: never;
@@ -310,6 +293,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/embed/{token}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Embed State */
+        get: operations["embed_state_v1_embed__token__state_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/events": {
         parameters: {
             query?: never;
@@ -484,7 +484,7 @@ export interface paths {
         };
         /**
          * List Platforms
-         * @description Every sandbox OS, and whether this install can run it. The control plane's own Docker runs Linux.
+         * @description The built-in Linux runtime and the sandbox OSes available through registered node hosts.
          */
         get: operations["list_platforms_v1_platforms_get"];
         put?: never;
@@ -1231,24 +1231,6 @@ export interface paths {
         /** List Servers */
         get: operations["list_servers_v1_servers_get"];
         put?: never;
-        /** Add Server */
-        post: operations["add_server_v1_servers_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/servers/install-command": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Server Install Command */
-        get: operations["server_install_command_v1_servers_install_command_get"];
-        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1369,23 +1351,6 @@ export interface paths {
         put?: never;
         /** Base Vnc Ticket */
         post: operations["base_vnc_ticket_v1_servers__server_id__base_vnc_ticket_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/servers/{server_id}/migrate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Migrate Server */
-        post: operations["migrate_server_v1_servers__server_id__migrate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2148,8 +2113,6 @@ export interface components {
             };
             /** Id */
             id: string;
-            /** Run Id */
-            run_id: string | null;
             /** Sandbox Id */
             sandbox_id: string | null;
             /** Seq */
@@ -2206,17 +2169,6 @@ export interface components {
             name: string;
             /** Os */
             os: string;
-        };
-        /** InstallCommand */
-        InstallCommand: {
-            /** Command */
-            command: string;
-            /** Platform */
-            platform: string;
-            /** Public Key */
-            public_key: string;
-            /** Requirements */
-            requirements: string;
         };
         /** InvitationRequest */
         InvitationRequest: {
@@ -2280,11 +2232,11 @@ export interface components {
              * Os
              * @enum {string}
              */
-            os: "linux" | "darwin" | "windows";
+            os: "darwin" | "windows";
             /** Ssh Host Key */
-            ssh_host_key?: string | null;
+            ssh_host_key: string;
             /** Ssh User */
-            ssh_user?: string | null;
+            ssh_user: string;
             /** Token */
             token: string;
         };
@@ -2415,6 +2367,8 @@ export interface components {
         };
         /** MoveSandboxRequest */
         MoveSandboxRequest: {
+            /** Node Name */
+            node_name?: string | null;
             /** Server Id */
             server_id?: string | null;
         };
@@ -2612,7 +2566,7 @@ export interface components {
             /** Kind */
             kind: string;
             /** Server Id */
-            server_id: string | null;
+            server_id: null;
             /** Server Name */
             server_name: string;
             /** Size */
@@ -2626,7 +2580,7 @@ export interface components {
              */
             kind: "desktop" | "browser" | "code";
             /** Server Id */
-            server_id?: string | null;
+            server_id?: null;
             /** Size */
             size: number;
         };
@@ -2792,6 +2746,11 @@ export interface components {
             name: string;
             /** Recovered At */
             recovered_at?: string | null;
+            /**
+             * Resumable
+             * @default false
+             */
+            resumable: boolean;
             /** Server Id */
             server_id: string | null;
             /** Started At */
@@ -2844,23 +2803,6 @@ export interface components {
             id: string;
             /** Name */
             name: string;
-        };
-        /** ServerRequest */
-        ServerRequest: {
-            /** Bind Address */
-            bind_address: string;
-            /** Docker Url */
-            docker_url: string;
-            /** Host Key */
-            host_key?: string | null;
-            /** Name */
-            name: string;
-            /**
-             * Platform
-             * @default linux
-             * @enum {string}
-             */
-            platform: "linux" | "macos" | "windows";
         };
         /** ServerResponse */
         ServerResponse: {
@@ -3213,37 +3155,6 @@ export interface operations {
                 };
                 content: {
                     "text/html": string;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    embed_state_embed__token__state_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                token: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EmbedStateResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3846,6 +3757,37 @@ export interface operations {
             };
         };
     };
+    embed_state_v1_embed__token__state_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbedStateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_events_v1_events_get: {
         parameters: {
             query?: {
@@ -4050,7 +3992,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                os_name: "linux" | "darwin" | "windows";
+                os_name: "darwin" | "windows";
                 arch: "amd64" | "arm64";
             };
             cookie?: never;
@@ -4113,7 +4055,7 @@ export interface operations {
     create_token_v1_nodes_tokens_post: {
         parameters: {
             query?: {
-                platform?: "linux" | "macos" | "windows";
+                platform?: "macos" | "windows";
             };
             header?: {
                 "x-zoo-workspace"?: string | null;
@@ -6051,74 +5993,6 @@ export interface operations {
             };
         };
     };
-    add_server_v1_servers_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ServerRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ServerResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    server_install_command_v1_servers_install_command_get: {
-        parameters: {
-            query: {
-                platform: "linux" | "macos" | "windows";
-            };
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InstallCommand"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     delete_server_v1_servers__server_id__delete: {
         parameters: {
             query?: never;
@@ -6338,37 +6212,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["VncTicketResponse"];
                 };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    migrate_server_v1_servers__server_id__migrate_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-zoo-workspace"?: string | null;
-            };
-            path: {
-                server_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Validation Error */
             422: {

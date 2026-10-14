@@ -197,10 +197,6 @@ class Zoo:
     def servers(self) -> list[dict]:
         return self._json("GET", "/servers")
 
-    def add_server(self, name: str, docker_url: str, bind_address: str) -> dict:
-        body = {"name": name, "docker_url": docker_url, "bind_address": bind_address}
-        return self._json("POST", "/servers", json=body)
-
     def profiles(self) -> list[dict]:
         return self._json("GET", "/profiles")
 
