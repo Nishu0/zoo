@@ -108,13 +108,12 @@ jobs:
           cluster_name: zoo
       - name: The runc RuntimeClass and the test image
         run: |
-          kubectl apply -f tests/kubernetes/runtimeclass-runc.yaml
+          kubectl apply -f tests/kubernetes/runtimeclass-kata.yaml
           docker build -t zoo-kube-test:1 tests/kubernetes
           kind load docker-image zoo-kube-test:1 --name zoo
       - run: uv run pytest tests/kubernetes -v
         env:
           ZOO_TEST_KUBERNETES: zoo-ci
-          ZOO_TEST_RUNTIME_CLASS: runc
           ZOO_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
       - name: Pods
         if: failure()

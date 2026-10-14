@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 PATCH_ROOT="$ROOT/patches/kata/4.2.0"
+# shellcheck source=/dev/null
 source "$PATCH_ROOT/source.lock"
 OUT=${1:?usage: build-kata-vm-control.sh OUTPUT_DIRECTORY amd64\|arm64 [PINNED_SOURCE_ARCHIVE]}
 ARCH=${2:?architecture required}

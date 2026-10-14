@@ -2,7 +2,6 @@ package main
 
 import (
 	"os"
-	"strings"
 	"sync"
 	"unsafe"
 
@@ -89,9 +88,18 @@ func spawn(hpc windows.Handle, argv, env []string, cwd string) (windows.Handle, 
 			return 0, 0, err
 		}
 	}
-	block, err := windows.UTF16FromString(strings.Join(env, "\x00") + "\x00")
-	if err != nil {
-		return 0, 0, err
+	// NUL-separated entries ending in an empty one; UTF16FromString refuses a NUL, so encode entry by entry
+	var block []uint16
+	for _, e := range env {
+		s, err := windows.UTF16FromString(e)
+		if err != nil {
+			return 0, 0, err
+		}
+		block = append(block, s...)
+	}
+	block = append(block, 0)
+	if len(env) == 0 {
+		block = append(block, 0)
 	}
 	var pi windows.ProcessInformation
 	flags := uint32(windows.EXTENDED_STARTUPINFO_PRESENT | windows.CREATE_UNICODE_ENVIRONMENT)

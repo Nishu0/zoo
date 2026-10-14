@@ -1,3 +1,4 @@
+{{- if (.Values.vmControl).enabled }}
 {{- $config := default dict .Values.vmControl -}}
 {{- $name := printf "%s-vm-control" (include "zoo.fullname" .) -}}
 {{- $namespace := include "zoo.sandboxNamespace" . -}}
@@ -426,3 +427,4 @@ spec:
               - {key: app.kubernetes.io/component, operator: In, values: [api, worker]}
       ports:
         - {protocol: TCP, port: 9444}
+{{- end }}

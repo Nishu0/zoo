@@ -239,3 +239,14 @@ sandboxes:
     resources:
       requests: {cpu: 5m, memory: 8Mi}
       limits: {memory: 16Mi}
+
+# Native VM control (vm-control controller, issuer API and node agents). Off by default; enabling it requires
+# trustDomain, publicCAConfigMap, issuerTLSSecret, nodeCASecret and runtimeHandler (the patched Kata CLH handler).
+vmControl:
+  enabled: false
+  # trustDomain: zoo.example
+  # publicCAConfigMap: zoo-vm-control-ca
+  # issuerTLSSecret: zoo-vm-control-issuer-tls
+  # nodeCASecret: zoo-vm-control-node-ca
+  # runtimeHandler: kata-clh-zoo
+  # runtimeSocket: /run/k3s/containerd/containerd.sock

@@ -31,7 +31,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # no thumbnailer or power manager in a sandbox; caches built here, not at each first boot
-RUN apt-get purge -y tumbler xfce4-power-manager xfce4-power-manager-plugins \
+RUN apt-get purge -y tumbler xfce4-power-manager \
     && apt-get autoremove -y && rm -rf /var/lib/apt/lists/* \
     && fc-cache -f \
     && for theme in /usr/share/icons/*/; do if [ -f "$theme/index.theme" ]; then gtk-update-icon-cache -f "$theme"; fi; done

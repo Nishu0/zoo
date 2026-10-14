@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# ok/bad pairs: bad runs whenever the check fails, which is the intent
+# shellcheck disable=SC2015
 set -uo pipefail
 U=${URL:-http://127.0.0.1:8077}
 ok() { printf '  ok    %s\n' "$*"; }
