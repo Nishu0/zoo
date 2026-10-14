@@ -191,7 +191,7 @@ Target this serves: stopped → running ≤ 1.5 s (≤ 100 ms while paused).
    - A call serialises the cached tree, which is fast however large Firefox's page is.
    - The first call after a big change rebuilds only the affected subtree.
 7. **Live view**
-   - The browser's VNC stream is relayed from the gateway's own session (Gate in between), never a second connection to x11vnc.
+   - The browser's VNC stream is relayed from the gateway's own session, never a second connection to x11vnc.
    - x11vnc runs with `-noxdamage` off and a 10 ms poll, and Xvfb uses `-fbdir` shared memory, so updates are cheap.
 8. **Terminal**: the PTY bytes are relayed straight through, with Nagle off on every hop.
 

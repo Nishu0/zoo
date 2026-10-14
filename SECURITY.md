@@ -32,7 +32,7 @@ Out of scope:
 
 ## How sandboxes are isolated
 
-See "Security model" in `README.md`. In short: Kata Containers VMs (or runc with a tighter seccomp filter and AppArmor), network policy enforced on the host by the egress daemon (`guest/egress.go`), app policy enforced by a root service the agent can't reach, and envelope encryption for secrets.
+Linux sandboxes run in Kata VMs. Network policy is enforced on the host by the egress service (`egress/`), app policy by a root service the agent can't reach, and secrets use envelope encryption. The full model is in the [security docs](site/src/content/docs/docs/concepts/security-model.md).
 
 ## Supported versions
 
