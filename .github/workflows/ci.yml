@@ -386,6 +386,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: docker/setup-buildx-action@v3
+        with:
+          # base images through Google's Docker Hub mirror, so builds don't hit Docker Hub's pull rate limit
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
       - uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
@@ -416,6 +421,11 @@ jobs:
           enable-cache: true
       - run: uv sync --locked
       - uses: docker/setup-buildx-action@v3
+        with:
+          # base images through Google's Docker Hub mirror, so builds don't hit Docker Hub's pull rate limit
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
       # rebuilt from the cache the images job filled, so this is mostly layer reuse
       - uses: docker/build-push-action@v6
         with:
