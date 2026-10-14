@@ -1,6 +1,6 @@
 # Zoo desktop sandbox
 
-The image for `desktop` and `browser` sandboxes: Debian with XFCE, Firefox and noVNC. The API starts it under Kata Containers (or runc) and passes a per-sandbox VNC password that only the API knows; x11vnc listens only inside the sandbox.
+The image for `desktop` and `browser` sandboxes: Debian with XFCE, Firefox, the guest agent and VNC. Both Linux runtimes use Kata VMs. The native gateway relays the guest VNC connection; there is no direct public desktop port.
 
 Part of [Zoo](https://github.com/chann44/zoo), self-hosted sandboxes for AI agents. Install a whole stack with:
 

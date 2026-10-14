@@ -23,7 +23,9 @@ bun run preview
 - Design context and principles live in [`../.impeccable.md`](../.impeccable.md).
 - Tokens (palette, type, rhythm) are defined once in `src/styles/global.css`.
 - Archivo Variable (expanded display) + Fragment Mono (machine facts), warm charcoal + petrol teal.
-- Copy must stay faithful to `../docs/*.md` — no invented product behavior.
+- Canonical guides live in `src/content/docs/docs/`; `../docs/development.md` documents source workflows.
+- Generated references use the checked-in SDK OpenAPI artifact, registry metadata and AST-parsed CLI/SDK/configuration sources. Run `bun run docs:gen` after updating the shared schema artifact; no API server or database is started.
+- Performance figures are targets until a real runtime measurement records results; no invented product behavior.
 
 ## Deploy
 

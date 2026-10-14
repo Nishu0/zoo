@@ -9,7 +9,7 @@ Regenerate with `bun run docs:gen` from `site/`.
 :::
 
 Every tool is registered once in `server/registry.py` and exposed the same way over
-REST, MCP and the SDK. `GET /tools?kind=desktop` returns the same data live.
+REST, MCP and the SDK. `GET /v1/tools?kind=desktop` returns the same data live.
 
 Sandbox kinds: `desktop`, `browser`, `code`, `macos`, `windows`. A `desktop`, `macos` or `windows` sandbox offers every
 category; `browser` and `code` restrict them (columns below).
@@ -45,28 +45,28 @@ category; `browser` and `code` restrict them (columns below).
 
 | Tool | Arguments | Permission | Kinds |
 | --- | --- | --- | --- |
-| `hotkey` | `keys: list, display: str = ':1'` | `input.control` — Control mouse, keyboard, windows and apps | `desktop`, `browser`, `macos`, `windows` |
-| `press_key` | `key: str, display: str = ':1'` | `input.control` — Control mouse, keyboard, windows and apps | `desktop`, `browser`, `macos`, `windows` |
-| `type_text` | `text: str, display: str = ':1', delay: int = 12` | `input.control` — Control mouse, keyboard, windows and apps | `desktop`, `browser`, `macos`, `windows` |
+| `hotkey` | `keys: list` | `input.control` — Control mouse, keyboard, windows and apps | `desktop`, `browser`, `macos`, `windows` |
+| `press_key` | `key: str` | `input.control` — Control mouse, keyboard, windows and apps | `desktop`, `browser`, `macos`, `windows` |
+| `type_text` | `text: str` | `input.control` — Control mouse, keyboard, windows and apps | `desktop`, `browser`, `macos`, `windows` |
 
 ## mouse
 
 | Tool | Arguments | Permission | Kinds |
 | --- | --- | --- | --- |
-| `click` | `x: int, y: int, display: str = ':1', button: str = 'left'` | `input.control` — Control mouse, keyboard, windows and apps | `desktop`, `browser`, `macos`, `windows` |
-| `double_click` | `x: int, y: int, display: str = ':1', button: str = 'left'` | `input.control` — Control mouse, keyboard, windows and apps | `desktop`, `browser`, `macos`, `windows` |
-| `drag` | `start_x: int, start_y: int, end_x: int, end_y: int, display: str = ':1', button: str = 'left', duration: float = 0.5` | `input.control` — Control mouse, keyboard, windows and apps | `desktop`, `browser`, `macos`, `windows` |
-| `move_mouse` | `x: int, y: int, display: str = ':1'` | `input.control` — Control mouse, keyboard, windows and apps | `desktop`, `browser`, `macos`, `windows` |
-| `scroll` | `direction: str, amount: int = 3, x: int \| None = None, y: int \| None = None, display: str = ':1'` | `input.control` — Control mouse, keyboard, windows and apps | `desktop`, `browser`, `macos`, `windows` |
+| `click` | `x: int, y: int, button: str = 'left'` | `input.control` — Control mouse, keyboard, windows and apps | `desktop`, `browser`, `macos`, `windows` |
+| `double_click` | `x: int, y: int, button: str = 'left'` | `input.control` — Control mouse, keyboard, windows and apps | `desktop`, `browser`, `macos`, `windows` |
+| `drag` | `start_x: int, start_y: int, end_x: int, end_y: int, button: str = 'left', duration: float = 0.5` | `input.control` — Control mouse, keyboard, windows and apps | `desktop`, `browser`, `macos`, `windows` |
+| `move_mouse` | `x: int, y: int` | `input.control` — Control mouse, keyboard, windows and apps | `desktop`, `browser`, `macos`, `windows` |
+| `scroll` | `direction: str, amount: int = 3, x: int \| None = None, y: int \| None = None` | `input.control` — Control mouse, keyboard, windows and apps | `desktop`, `browser`, `macos`, `windows` |
 
 ## observe
 
 | Tool | Arguments | Permission | Kinds |
 | --- | --- | --- | --- |
 | `accessibility_tree` | `app: str = '', title: str = '', max_nodes: int = 300` | `screen.read` — Take screenshots and list apps | `desktop`, `browser`, `macos`, `windows` |
-| `screen_diff` | `display: str = ':1', session: str = 'default', format: str = 'png', scale: float = 1.0, quality: int = 80` | `screen.read` — Take screenshots and list apps | `desktop`, `browser`, `macos`, `windows` |
-| `screenshot` | `display: str = ':1', format: str = 'png', scale: float = 1.0, quality: int = 80` | `screen.read` — Take screenshots and list apps | `desktop`, `browser`, `macos`, `windows` |
-| `wait_until_stable` | `display: str = ':1', timeout: float = 5.0, quiet_ms: int = 500, threshold: float = 0.0` | `screen.read` — Take screenshots and list apps | `desktop`, `browser`, `macos`, `windows` |
+| `screen_diff` | `session: str = 'default', format: str = 'png', scale: float = 1.0, quality: int = 80` | `screen.read` — Take screenshots and list apps | `desktop`, `browser`, `macos`, `windows` |
+| `screenshot` | `format: str = 'png', scale: float = 1.0, quality: int = 80` | `screen.read` — Take screenshots and list apps | `desktop`, `browser`, `macos`, `windows` |
+| `wait_until_stable` | `timeout: float = 5.0, quiet_ms: int = 500, threshold: float = 0.0` | `screen.read` — Take screenshots and list apps | `desktop`, `browser`, `macos`, `windows` |
 
 ## shell
 

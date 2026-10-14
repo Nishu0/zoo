@@ -2,7 +2,7 @@
 const rows = [
     {
         term: "Kernel isolation",
-        desc: "Each sandbox boots in its own microVM — its own kernel, its own filesystem, its own user. Desktop ports bind to 127.0.0.1. The API is the only door.",
+        desc: "Linux uses Kata VMs; Mac and Windows hosts use native guest VMs. Guest tools and screen traffic pass through the authenticated native gateway rather than a public desktop port.",
     },
     {
         term: "Policies",
@@ -15,7 +15,7 @@ const rows = [
     },
     {
         term: "Audit log",
-        desc: "Every tool call recorded — who, what, when. Agent actions keep the screenshot they were decided on, so any task replays step by step.",
+        desc: "Recorded tool calls show who, what and when. Zoo hosts machines and tools, not model reasoning or a built-in task planner.",
     },
 ];
 ---

@@ -51,6 +51,12 @@ Fix: `GET /v1/sandboxes` lists this workspace's sandboxes; ids are case-sensitiv
 
 HTTP `405`. The route exists but not with this method.
 
+### `create_failed`
+
+HTTP `503`. No warm sandbox could be handed over in time. Retry.
+
+Fix: Retry the create; a cold create starts once no warm sandbox is left.
+
 ### `conflict`
 
 HTTP `409`. The object's current state doesn't allow this, e.g. the sandbox isn't running.
@@ -111,6 +117,12 @@ HTTP `503`. Zoo or a dependency is starting or overloaded. Retry with backoff.
 
 Fix: Retry with exponential backoff.
 
+### `guest_unavailable`
+
+HTTP `503`. The sandbox's guest agent isn't connected, and every tool goes through it.
+
+Fix: the sandbox's guest agent is not connected; restart the sandbox
+
 ### `timeout`
 
 HTTP `504`. A sandbox, node or provider didn't answer in time.
@@ -123,18 +135,17 @@ Where each HTTP status is declared or raised.
 
 | Status | Where it comes from |
 | --- | --- |
-| `200` | `GET /embed/{token}`, `GET /embed/{token}/state`, `POST /v1/auth/login`, +94 more |
-| `201` | `POST /v1/auth/signup`, `POST /v1/api-keys`, `POST /v1/sandboxes`, +11 more |
+| `200` | `GET /embed/{token}`, `GET /v1/admin/backups`, `GET /v1/admin/domains`, +93 more |
+| `201` | `POST /v1/admin/backups`, `POST /v1/admin/domains`, `POST /v1/api-keys`, +10 more |
 | `202` | `POST /v1/sandboxes/{sandbox_id}/snapshots`, `POST /v1/webhooks/{webhook_id}/test` |
-| `204` | `PUT /v1/auth/me/onboarded`, `DELETE /v1/sandboxes/{sandbox_id}/snapshots/{snapshot_id}`, `DELETE /v1/admin/domains/{domain_id}`, +10 more |
+| `204` | `DELETE /v1/admin/domains/{domain_id}`, `PUT /v1/auth/me/onboarded`, `DELETE /v1/profiles/{profile_id}`, +9 more |
 | `400` | raised by the handlers |
 | `401` | raised by the handlers |
 | `403` | raised by the handlers |
 | `404` | raised by the handlers |
 | `409` | raised by the handlers |
-| `422` | `GET /embed/{token}`, `GET /embed/{token}/state`, `POST /v1/auth/signup`, +123 more |
+| `422` | `GET /embed/{token}`, `GET /v1/admin/backups`, `POST /v1/admin/backups`, +120 more |
 | `429` | raised by the handlers |
 | `500` | raised by the handlers |
 | `502` | raised by the handlers |
 | `503` | raised by the handlers |
-| `504` | raised by the handlers |

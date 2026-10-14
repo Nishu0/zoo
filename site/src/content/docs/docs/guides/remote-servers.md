@@ -1,79 +1,44 @@
 ---
-title: Remote Linux servers
-description: Add Linux machines to spread sandboxes out — with zoo-node, the dial-out daemon that needs no inbound port.
+title: Mac and Windows hosts
+description: Enroll native VM hosts with zoo-node; Linux capacity stays in the selected Linux backend.
 ---
 
-The control plane runs Linux sandboxes on its own machine. Add a server to get more room,
-or to run another OS:
+## Supported hosts
 
-| Server | Runs |
-|---|---|
-| Linux (amd64 or arm64; KVM for VM isolation, otherwise runc) | Linux sandboxes |
-| Mac (Apple Silicon, macOS 13+) | macOS sandboxes, plus Linux ones with Docker Desktop |
-| Windows Pro, Enterprise, Education or Server, with Hyper-V | Windows sandboxes, plus Linux ones with Docker Desktop |
+Only Apple Silicon Macs running macOS 14+ and Hyper-V-capable Windows hosts enroll as
+additional VM hosts. They run their native sandbox kind, not Linux Docker capacity.
+Linux capacity is either the one local Docker host or the selected Kubernetes nodes.
 
-Intel Macs and Windows Home can't run these VMs, so the installer refuses them. A Linux
-machine without KVM gets runc.
+## Enroll from the dashboard
 
-## Add a server with zoo-node
+Open **Servers → Add server**, choose Mac or Windows and copy the generated command.
+It contains a one-time join token, the public control-plane URL and the API-provided host
+key. Run it on the intended host under the VM-owning account, with required privileges.
 
-[zoo-node](#how-zoo-node-works) is a small daemon on each host that runs sandboxes:
+Mac installation uses `install.sh --node --token ... --control-plane ... --key ...`.
+Windows uses the generated elevated PowerShell installer command with its token and key.
+Do not construct an old operator command or paste a private key into the dashboard.
 
-1. In the dashboard, open **Servers**, pick the machine's OS, name it and click
-   **Get the command**. The command carries a one-time join token.
-2. Run the command on the machine: `curl … | sudo bash -s -- --node … --token …` on Linux
-   (or a Mac), or PowerShell as administrator on Windows.
-   - It runs pre-flight checks first (virtualization, disk, memory, the control plane) and
-     changes nothing if one fails. Add `--check` to only run them.
-   - It then installs what's needed and zoo-node, which joins the control plane.
-3. The server appears under **Servers** when its node connects.
+## Connectivity and identity
 
-On a machine that is already set up, run only the join line the dashboard shows:
+zoo-node dials the native gateway's mTLS endpoint on port 7443. The public node hostname
+may differ from the API hostname; configure `ZOO_NODE_HOST` for that address. Permit outbound
+access and ensure the API URL is reachable by the host and by its VM guests.
 
-```sh
-sudo zoo-node join '<token>' --service                    # Linux
-zoo-node join '<token>' --service                         # Mac, as the user that runs the VMs
-zoo-node.exe join '<token>' --service --ssh-user <user>   # Windows, elevated
-```
+Node CA material and host identity are database-backed. Gateway peers use their own
+private DNS membership, TLS RPC and peer-relay listeners. The public node address is not
+the peer DNS name, and ordinary HTTP ingress does not forward node gRPC.
 
-A token works once and expires after an hour. It carries the API's URL and the fingerprint
-of its node CA, so a man in the middle of the join request can't slip in its own.
+The node reports host capacity and carries scoped VM-helper operations. It does not expose
+a host Docker daemon. Update binaries from the matching release and retain the persisted
+CA/enrollment identity.
 
-## How zoo-node works
+## Capacity, saved state and moves
 
-The node **dials out** to the API and keeps one mTLS gRPC stream up, so the machine needs
-no inbound port and can sit behind NAT. It:
+Mac capacity is capped at two running macOS VMs per host, including a running base VM.
+Windows uses the configured per-host VM cap. A saved-state slot has its own hardware identity,
+disk and state; slot reuse is not a license to duplicate one running state into arbitrary
+new VM identities or across hosts.
 
-- reports the host's capacity, health and running sandboxes, and the scheduler places
-  sandboxes by that free capacity;
-- carries the API's connections to the host's Docker socket (and, on macOS and Windows,
-  its SSH server), so every runtime operation works the same as over SSH;
-- updates itself to the API's version;
-- renews its own certificate (a year each; renewed within 30 days of expiry).
-
-## SSH, the older way
-
-**Connect over SSH instead** is supported until Zoo 2.0. The command then prints a
-`zoo-join:` line to paste under **Servers**; the line carries the address, platform and
-SSH host key, so the control plane verifies the machine from its first connection.
-
-You can also set a Linux machine up manually under **Servers**: install Docker and Kata as
-in the [quickstart](/docs/get-started/install/), add an SSH user to the `docker` group,
-then fill in a Docker URL (`ssh://user@10.0.0.5`, or `tcp://host:2376` for TLS) and a bind
-address on a private network — desktop ports are published there.
-
-An SSH server can be switched to zoo-node in place later: click **Switch to zoo-node** on
-it, or `zoo-node migrate <server-id> --api <url> --key <key>`. Sandboxes stay where they
-are.
-
-## Placement and moves
-
-When creating a sandbox you can pick a server or **Least busy server**: the most free
-memory among hosts that report it, otherwise the fewest sandboxes. A Linux sandbox needs
-2 GB; the macOS and Windows per-host VM limits still apply.
-
-A stopped sandbox moves with the **Server** tab or `POST /sandboxes/{id}/move`. With
-`ZOO_OBJECT_STORE` set, the home volume goes through object storage in 1 GB parts and the
-data never passes through the API host; without it, a Linux home streams through the API.
-macOS and Windows disks always move through object storage. The source copy is removed
-afterwards. A sandbox with snapshots stays on its server until they are deleted.
+Disk/profile transfer and saved-memory portability are different operations. Follow the
+native-platform guides; saved-state acceptance and real cross-host recovery are deferred.

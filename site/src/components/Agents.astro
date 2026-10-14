@@ -11,7 +11,7 @@ const mcpCode = `<span class="c"># any MCP client — Claude, Cursor, your own</
 }`;
 
 const restCode = `<span class="c"># every tool is an HTTP endpoint</span>
-curl -X POST localhost:8000/sandboxes/$ID/tools/type_text \\
+curl -X POST localhost:8000/v1/sandboxes/$ID/tools/type_text \\
   -H <span class="s">"Authorization: Bearer $ZOO_API_KEY"</span> \\
   -H <span class="s">"content-type: application/json"</span> \\
   -d <span class="s">'{"text": "hello"}'</span>`;
@@ -61,7 +61,7 @@ box.type_text(text=<span class="s">"hello"</span>)
                 <div class="panel">
                     <pre><code set:html={restCode} /></pre>
                     <p class="caption">
-                        <code class="mono">POST /sandboxes/{"{id}"}/tools/{"{name}"}</code> calls any registered
+                        <code class="mono">POST /v1/sandboxes/{"{id}"}/tools/{"{name}"}</code> calls any registered
                         tool. Shortcuts: <code class="mono">/screenshot</code> returns PNG bytes,
                         <code class="mono">/exec</code> runs a shell command.
                     </p>
@@ -82,8 +82,8 @@ box.type_text(text=<span class="s">"hello"</span>)
                 <h3>Claude Code in every code sandbox</h3>
                 <p>
                     Inject your Anthropic key as an encrypted secret, clone a repo, and run headless
-                    sessions: <code class="mono">box.claude("fix the failing test", cwd="~/work/repo")</code>
-                    returns parsed JSON. Network rules keep it deny-by-default if you want.
+                    sessions using <code class="mono">box.exec("claude -p 'inspect this repository'")</code>.
+                    Zoo provides the machine and policy, not a built-in model or task planner.
                 </p>
             </article>
         </div>

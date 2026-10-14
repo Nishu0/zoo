@@ -1,132 +1,53 @@
 ---
 title: macOS sandboxes
-description: macOS microVMs on Apple Silicon Macs — hardware, zoovm, the base VM, and troubleshooting.
+description: Apple Silicon VM hosts, required guest tools and reserved saved-state slot constraints.
 ---
 
-A `macos` sandbox is a macOS microVM on an Apple Silicon Mac. The Mac runs `zoovm`, a
-helper built on Apple's Virtualization.framework (`macos/zoovm`). The API reaches the Mac
-over SSH: it clones the base VM for each sandbox (APFS clones — instant, almost no extra
-disk), boots it headless, drives the screen, mouse and keyboard through the framework's
-VNC server, and runs the other tools through the guest agent (`zoo-guest`) in the VM.
+## Requirements
 
-Because the screen is read and controlled from the host, the guest needs no Screen
-Recording permission. Window tools need one Accessibility grant.
+Use an Apple Silicon host running macOS 14+, zoo-node, zoovm and a prepared macOS guest.
+The guest must run zoo-guest and have the required Accessibility grant for window/input
+tools. The host/guest OS pair must be compatible with the restore image and VM helper.
+Keep sufficient disk/RAM for the base and the configured slots.
 
-## Hardware and versions
+Zoo caps a Mac at two running macOS VMs, counting a running base. Administrators remain
+responsible for applicable platform licensing.
 
-- **Host:** an Apple Silicon Mac (M1 or later; Intel Macs can't run macOS VMs) on macOS 13
-  or later, with 16 GB of memory (32 GB to run two sandboxes comfortably) and 100 GB free
-  for the base VM and its download.
-- **Guest:** the macOS the host supports, up to the host's own version. A Mac on macOS 15
-  can't install macOS 26 — update the Mac, or pass `--ipsw` with an older restore image.
-- **Limit:** Apple's license allows 2 macOS VMs running at once per Mac, the base VM
-  included. A sandbox created while every Mac is full waits in the queue ("Mac full" on
-  its page) and starts when a VM stops, for up to 2 hours. Create it with
-  `"queue": false` to get a `409 Mac full` error instead.
+## Prepare the host
 
-## Unattended setup
+Use the dashboard's **Add server → Mac** command with its one-time token, control-plane
+URL and API-provided key. The native daemon enrolls and dials the gateway over mTLS.
+`install.sh --node` can prepare the base; `--ipsw PATH` selects a restore image and
+`--no-base` leaves base preparation to the administrator.
 
-Run the command from **Servers → Add server → Mac** on the Mac, or
-`zoo node install --macos --key "<the API's public key>"` with the `zoo` CLI from a
-release. It checks the Mac, turns on Remote Login, authorizes the API's key, installs
-signed `zoovm`, adds the passwordless `pfctl` sudoers rule for network policy, installs
-macOS into the base VM (about an hour), and prepares it without Setup Assistant: first
-boot creates the `admin` user, runs the guest setup and shuts down; a second boot checks
-SSH and marks the base ready with its version.
+Finish any guest setup/Accessibility permission that cannot be safely automated. Verify
+the guest is connected before using tools. Host/guest endpoints must resolve and trust
+the deployment's API certificate; there is no configurable guest-URL alternate path.
 
-What stays manual is the Accessibility grant, which macOS reserves for a person — see
-step 4 below. Without it everything works except window tools.
+## Saved-state contract: unique reserved slots
 
-## The dashboard way (and fixing a base)
+Saved-state reuse is restricted to a pre-reserved VM slot with its own hardware identity,
+disk and saved state. The state must originate from that slot on the same compatible
+Mac/account and configuration. Restore it as that slot, then hand off sandbox identity
+through the required guest. Never run two allocations from the same slot simultaneously.
 
-1. **Build zoovm**: needs macOS 13+ on Apple Silicon and the Xcode command line tools.
-   `git clone <repo> && cd zoo/macos/zoovm && ./build.sh` installs `/usr/local/bin/zoovm`.
-2. **Let the API reach the Mac**: turn on **System Settings → General → Sharing → Remote
-   Login**, put the API's SSH public key in `~/.ssh/authorized_keys`, and add the Mac's
-   host key to the API's `known_hosts` (`ssh-keyscan <mac-ip>`).
-3. **Add the Mac**: under **Remote Servers**, choose **macOS**, enter
-   `ssh://you@<mac-ip>` and the Mac's address. The server card gets a **Base VM** panel.
-4. **Install macOS** downloads the latest macOS this Mac supports and installs it (about
-   an hour). **Start** boots the base VM; **Open screen** shows it live. Go through Setup
-   Assistant, create the user `admin` (or set `ZOO_MACOS_USER`), skip Apple Account, Siri,
-   analytics and FileVault.
-5. **Run setup** opens Terminal in the VM and types `guest-setup.sh` with the API's public
-   key — passwordless sudo, Remote Login with that key, auto-login, no sleep or screen
-   lock.
-6. **Accessibility grant**: in the VM, **System Settings → Privacy & Security →
-   Accessibility**, click **+**, Cmd+Shift+G, add `/usr/libexec/sshd-keygen-wrapper` and
-   enable it. Do the same for `/bin/zsh` — the guest agent runs under it, and window tools
-   read accessibility trees natively only with the grant. Install anything else every
-   sandbox should have.
-7. **Stop** shuts the base VM down.
+Do not copy one saved state into arbitrary clones with new machine identifiers, attach a
+different disk to it, or treat it as portable memory for another host/account. A saved
+state captures credentials and memory; handle it as sensitive data and keep the disk/state
+pair consistent. Incompatible or unavailable state is an explicit failure, not permission
+to use an undocumented alternate create path.
 
-Then create sandboxes with type **macOS** — each is a clone of the base. To change the
-base later, stop the server's macOS sandboxes and start the base again: new sandboxes get
-the change, existing ones keep their own disks.
+Base/slot updates must happen while allocations are drained and must capture state from
+the actual prepared slot. APFS disk clones alone do not establish that a saved-memory clone
+is valid. Actual slot preparation, resume/reidentification and cleanup need native runtime
+validation before this path is declared accepted.
 
-Each base VM has a version, `<macOS version>-<build>-<UTC time>`, shown on each sandbox's
-page with its boot time. The target is under 10 seconds from the stopped base to a booted
-sandbox.
+## Tools and lifecycle
 
-## Guest agent and metrics
+Shell, files, terminals, windows, apps, accessibility and secrets use zoo-guest. The native
+gateway owns the active VNC session for screenshots, input and viewing. Missing required
+guest capabilities fail explicitly.
 
-When `ZOO_GUEST_REMOTE_URL` is set, each boot installs `zoo-guest` in the VM as a
-LaunchAgent and shell, file, app and window tools plus the Terminal tab skip SSH. If the
-API runs on the same Mac, use the Mac's address on the VM network, e.g.
-`ws://192.168.64.1:8000/guest/connect`. The guest sends metrics every 10 seconds, which
-double as its heartbeat: a running VM whose guest goes quiet **and** whose screen stops
-answering for a minute is restarted by the API, and the sandbox page says when.
-
-## Network policy
-
-The Mac enforces each VM's network policy itself, so nothing inside the VM can undo it:
-the API runs `zoo-guest -egress` on the Mac, which proxies the VMs' web traffic and DNS,
-deciding by name, and loads pf rules into the `com.apple/zoo` anchor. The pf rules inside
-the VM stay as a second layer. The Mac's user needs passwordless sudo for `pfctl` only —
-the installer adds it:
-
-```sh
-echo "$USER ALL=(root) NOPASSWD: /sbin/pfctl" | sudo tee /etc/sudoers.d/zoo-pf
-```
-
-## Limits
-
-- Sandboxes run as a standard user by default, so an agent can't undo the VM's own pf
-  rules or app policy. Create an **admin sandbox** (the **Guest user** option, or
-  `"admin": true`) when the agent needs sudo.
-- A VM's pf rules on the Mac match its address. An admin sandbox can change its address to
-  another VM's, so give admin sandboxes the strictest policy on that Mac, or a Mac of
-  their own.
-- Safari profiles need Full Disk Access for `/bin/zsh` in the base VM.
-- The VNC server is a private Virtualization.framework API. It works on macOS 13 to 26,
-  but Apple could remove it.
-- Moving macOS sandboxes between Macs needs `ZOO_OBJECT_STORE` (S3, or MinIO/R2 via
-  `ZOO_S3_ENDPOINT`).
-- Secrets are written to `~/.zoo/env` in the guest and loaded by `execute_command`. GUI
-  apps don't see them.
-
-## zoovm commands
-
-| Command | Does |
-| --- | --- |
-| `zoovm install <name> [--ipsw P] [--cpu N] [--memory MB] [--disk GB]` | create a VM from an IPSW (latest if omitted) |
-| `zoovm clone <source> <name>` | APFS clone with a new machine id and MAC address |
-| `zoovm set <name> [--cpu N] [--memory MB]` | resize |
-| `zoovm run <name>` | boot headless and serve VNC |
-| `zoovm stop <name> [--timeout S]` | stop, forcing it after the timeout |
-| `zoovm ip <name>` | guest IP from the host's DHCP leases |
-| `zoovm vnc <name>` | VNC URL of a running VM |
-| `zoovm version <name>` | the macOS version and build it was installed from, as JSON |
-| `zoovm list` | JSON list of VMs and their state |
-| `zoovm delete <name>` | delete a stopped VM |
-
-## Troubleshooting
-
-| Symptom | Fix |
-| --- | --- |
-| "requires a software update" when installing macOS | The IPSW is newer than the Mac's macOS. Update the Mac, or install an older macOS with `--ipsw PATH`. |
-| Download or install stops partway | Run it again: the IPSW download resumes. Needs about 100 GB free. Log: `~/.zoovm/install.log`. |
-| The Mac shows offline, or the API can't SSH in | Remote Login on; the API's key in the Mac user's `authorized_keys`; the Mac's host key in the API's `known_hosts`; `zoovm` on that user's PATH. |
-| The base VM never opens SSH after unattended setup | Start it from the server's page and open its screen. At a login window: the first-boot log is `/var/log/zoo-firstboot.log` in the VM; finish with **Run setup**. |
-| Window tools fail with an Accessibility error | Grant Accessibility to `/bin/zsh` and `/usr/libexec/sshd-keygen-wrapper` in the base VM; recreate sandboxes cloned before the grant. |
-| Network policy fails with a pfctl error | Add the sudoers rule under [Network policy](#network-policy). |
+Snapshots, disk transfer and saved-state restore have different identity constraints.
+Do not promise saved memory will move with a disk. Real lifecycle recovery and the boot
+timing targets remain unmeasured.

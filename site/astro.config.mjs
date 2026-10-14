@@ -46,6 +46,7 @@ const sidebar = [
             "docs/reference/cli",
             "docs/reference/configuration",
             "docs/reference/errors",
+            "docs/reference/performance",
         ],
     },
 ];

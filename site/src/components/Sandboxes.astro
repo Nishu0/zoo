@@ -33,12 +33,12 @@ const kinds = [
 ];
 
 const guarantees = [
-    "own kernel — kata microVM",
-    "runs as user zoo, uid 1000",
-    "/home/zoo survives restarts",
-    "2 GB · 2 cpus · 1024 procs",
-    "no-new-privileges",
-    "reachable only through the api",
+    "linux — kata virtual machines",
+    "macos — virtualization.framework",
+    "windows — hyper-v",
+    "persistent user data",
+    "policy outside the guest",
+    "tools and screen via gateway",
 ];
 ---
 
@@ -86,16 +86,18 @@ const guarantees = [
             <article data-reveal>
                 <h3>Snapshots</h3>
                 <p>
-                    Copy a sandbox's home disk — or the whole macOS or Windows VM — and restore it
-                    later. Queued as jobs, kept on the same server, up to ten per sandbox.
+                    Capture persistent sandbox data through lifecycle jobs. Native saved-state
+                    slots preserve a unique VM identity and its matching disks; copying memory
+                    state onto unrelated disks is not a portable clone recipe.
                 </p>
             </article>
             <article data-reveal style="--d: 0.08s">
                 <h3>App profiles</h3>
                 <p>
                     Save an app's profile — logins, cookies, settings — from Firefox, Chromium,
-                    Chrome or VS Code, and load it into any new sandbox before it boots. Encrypted
-                    at rest, versioned ten deep.
+                    Chrome or VS Code, and load it into compatible sandboxes before they boot.
+                    Encrypted at rest and versioned; native app encryption may bind a profile
+                    to its original account or machine identity.
                 </p>
             </article>
         </div>

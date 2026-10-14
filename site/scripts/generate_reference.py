@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Generate the docs Reference section (and the release badge) from code.
 
-Everything in site/src/content/docs/docs/reference/ is produced here so the
-pages cannot drift from the implementation:
+The following pages in site/src/content/docs/docs/reference/ are produced here.
+Conventions and performance targets are maintained separately:
 
-  api.md            FastAPI's OpenAPI schema (main:app)
+  api.md            the checked-in SDK OpenAPI artifact
   tools.md          server/registry.py — TOOLS, KINDS, PERMISSIONS
   sdk.md            docstrings in sdk/python/zoo_sdk (ast-parsed)
   configuration.md  every environment variable the code reads
   errors.md         every HTTP status the API actually returns
+  cli.md            commands and signatures parsed from the SDK CLI
 
 Run from anywhere: `uv run python site/scripts/generate_reference.py`
 (prebuild for the site; needs the repo's Python environment, no database).
@@ -16,6 +17,7 @@ Run from anywhere: `uv run python site/scripts/generate_reference.py`
 
 from __future__ import annotations
 
+import argparse
 import ast
 import json
 import re
@@ -123,7 +125,6 @@ GROUPS = OrderedDict(
     [
         ("sandboxes", "Sandboxes"),
         ("servers", "Servers"),
-        ("agent", "Agent"),
         ("profiles", "App profiles"),
         ("vault", "Vault and secrets"),
         ("api-keys", "API keys"),
@@ -132,7 +133,6 @@ GROUPS = OrderedDict(
         ("auth", "Auth"),
         ("nodes", "Nodes"),
         ("guest", "Guest agent"),
-        ("integrations", "Chat integrations"),
         ("tools", "Tools"),
         ("monitoring", "Monitoring"),
     ]
@@ -149,7 +149,7 @@ def resolve(ref: str, spec: dict) -> dict:
 
 
 def group_of(path: str) -> str:
-    name = path.strip("/").split("/")[0]
+    name = path.removeprefix("/v1").strip("/").split("/")[0]
     if name.startswith("sandboxes"):
         return "Sandboxes"
     if name.startswith("profiles"):
@@ -160,18 +160,12 @@ def group_of(path: str) -> str:
     return name.capitalize() if name else "Other"
 
 
+def api_spec() -> dict:
+    return json.loads((ROOT / "sdk/typescript/openapi.json").read_text())
+
+
 def gen_api() -> None:
-    sys.path.insert(0, str(ROOT))
-    import os
-
-    os.environ.setdefault("JWT_SECRET", "docs")
-    os.environ.setdefault("ZOO_SECRETS_KEY", "docs")
-    # required at startup; the pool connects lazily, so nothing is reached
-    os.environ.setdefault("DATABASE_URL", "postgresql://docs:docs@127.0.0.1:1/docs")
-    os.environ.setdefault("ZOO_OBJECT_STORE", "s3://docs")
-    from main import app  # no server starts; FastAPI object only
-
-    spec = app.openapi()
+    spec = api_spec()
 
     out = [
         "---",
@@ -181,8 +175,10 @@ def gen_api() -> None:
         "",
         GENERATED_NOTE,
         "",
-        "The API serves the same schema at `/docs` on a running server. Every request is",
-        "authenticated with an API key unless it is under `/auth`:",
+        "Generated from `sdk/typescript/openapi.json`, the shared API/SDK schema artifact.",
+        "Regenerate that artifact after API changes before publishing this reference.",
+        "The API serves its schema at `/docs` on a running server. Every request is",
+        "authenticated according to its declared security requirements; auth and public health routes differ:",
     ]
     schemes = spec.get("components", {}).get("securitySchemes", {})
     for name, scheme in schemes.items():
@@ -282,7 +278,7 @@ def gen_tools() -> None:
         GENERATED_NOTE,
         "",
         "Every tool is registered once in `server/registry.py` and exposed the same way over",
-        "REST, MCP and the SDK. `GET /tools?kind=desktop` returns the same data live.",
+        "REST, MCP and the SDK. `GET /v1/tools?kind=desktop` returns the same data live.",
         "",
         f"Sandbox kinds: {kinds_all}. A `desktop`, `macos` or `windows` sandbox offers every",
         "category; `browser` and `code` restrict them (columns below).",
@@ -400,7 +396,7 @@ def gen_sdk() -> None:
         "## Errors",
         "",
         "Any non-2xx response raises `zoo_sdk.ZooError` with the status code and the API's",
-        "`detail`; see [Errors](/docs/reference/errors/). Any tool can be called as a method",
+        "stable `code`, `message`, `hint`, `docs_url` and `request_id`; see [Errors](/docs/reference/errors/). Any tool can be called as a method",
         "(`box.window_focus(window_id=...)`) or with `box.tool(name, **args)`.",
     ]
 
@@ -412,13 +408,14 @@ def gen_sdk() -> None:
 # Configuration reference — from environment reads in the code
 # ---------------------------------------------------------------------------
 
-ENV_SCAN_DIRS = ["server", "integrations", "mcp_tools", "deploy/zoo"]
+ENV_SCAN_DIRS = ["server", "mcp_tools", "gateway", "node", "egress", "vm-control"]
+REMOVED_SETTINGS = {"ZOO_GATEWAY", "ZOO_GUEST_URL", "ZOO_GUEST_REMOTE_URL", "ZOO_NODE_ENDPOINTS", "ZOO_SSH_DIR"}
 DESCRIPTIONS = {
     "JWT_SECRET": "Signs sessions.",
-    "ZOO_SECRETS_KEY": "Encrypts stored secrets, agent keys, app profiles and VNC passwords. Back it up.",
+    "ZOO_SECRETS_KEY": "Wraps workspace keys that encrypt secrets, app profiles and VNC passwords. Back it up.",
     "ZOO_SECRETS_KEY_PREVIOUS": "Old keys, comma-separated, kept only until `make rotate-secrets` has run.",
     "ZOO_KMS": "Wrap workspace data keys with an external KMS: `aws:<key ARN>`, `gcp:…` or `vault:<mount>/<key>`.",
-    "ZOO_OBJECT_STORE": "Required. `s3://<bucket>[/<prefix>]`: profiles, agent screenshots, snapshots, exports, backups and moves between servers.",
+    "ZOO_OBJECT_STORE": "Required. `s3://<bucket>[/<prefix>]`: profiles, portable home snapshots and database backups.",
     "ZOO_S3_ENDPOINT": "S3-compatible endpoint for `ZOO_OBJECT_STORE` (MinIO, R2).",
     "ZOO_S3_REGION": "Region for `ZOO_OBJECT_STORE`.",
     "AWS_ACCESS_KEY_ID": "Credentials for `ZOO_OBJECT_STORE` (with `AWS_SECRET_ACCESS_KEY`).",
@@ -430,18 +427,40 @@ DESCRIPTIONS = {
     "DATABASE_URL": "A `postgresql://` URL (required).",
     "ZOO_DB_POOL_SIZE": "Postgres connections each process keeps at most.",
     "ZOO_MIGRATE": "`0` skips the migrations `scripts/start.sh` runs before the API starts.",
-    "ZOO_ROLE": "`all`, `api`, `worker` or `gateway`: which part of Zoo this process runs.",
-    "ZOO_GATEWAY": "The gateway's internal URL, when this process should reach guests and nodes through it.",
+    "ZOO_ROLE": "Python process role: all, api or worker. The gateway is a separate native Go process.",
+    "ZOO_GATEWAY_PEERS": "Gateway peer DNS name, not a URL: gateway in Compose, headless service DNS on Kubernetes, localhost for source development.",
+    "ZOO_GATEWAY_IP": "This gateway replica's own IP; must occur in peer DNS. Use the downward pod IP on Kubernetes or explicit loopback for source development.",
+    "ZOO_GATEWAY_GRPC_PORT": "Authenticated TLS RPC port shared by API clients and gateway replicas; default 7444.",
+    "ZOO_GATEWAY_HTTP_PORT": "Guest websocket and health listener; default 8001. Public ingress routes /guest/connect here.",
+    "ZOO_GATEWAY_PEER_HTTP_PORT": "Private TLS HTTP listener for gateway-to-gateway relays; default 8002. Do not expose it as a public API.",
+    "ZOO_NODE_HOST": "Public node endpoint hostname or IP without a port; defaults to the API URL's hostname. Set separately for a node load balancer.",
     "ZOO_METRICS_PORT": "Serves Prometheus metrics on this port at `/metrics`.",
-    "ZOO_NODE_PORT": "Where each API process listens for zoo-node streams (gRPC with mTLS); `off` turns it off.",
-    "ZOO_NODE_ENDPOINTS": "Comma-separated `host:port` addresses nodes dial, one per API process.",
+    "ZOO_NODE_PORT": "Native gateway's public zoo-node mTLS port; default 7443. Distinct from private gateway RPCs.",
     "ZOO_NODE_DIST": "zoo-node builds served to installers and pushed to nodes on another version.",
+    "ZOO_VM_CONTROL_TRUST_DOMAIN": "Installation-specific SPIFFE trust domain; separate from the node-enrollment CA.",
+    "ZOO_VM_CONTROL_CLIENT_CERT": "Controller leaf certificate file with the exact api or worker URI matching ZOO_ROLE; do not reuse one role's leaf for the other.",
+    "ZOO_VM_CONTROL_CLIENT_KEY": "Private key file for the process's VM-control controller leaf.",
+    "ZOO_VM_CONTROL_NODE_CA": "Public node/server CA file used to verify VM-control frontends; not the gateway CA.",
+    "ZOO_VM_CONTROL_NODE_CA_KEY": "Node signing key file mounted only in the dedicated issuer, not normal API/worker or frontend pods.",
+    "ZOO_VM_CONTROL_SERVER_NAME": "Expected VM-control frontend DNS SAN; node URI/generation is also verified.",
+    "ZOO_VM_CONTROL_NAMESPACE": "Kubernetes sandbox/VM-control namespace used for authenticated discovery.",
+    "ZOO_VM_CONTROL_SELECTOR": "Exact installation VM-control DaemonSet Pod label selector.",
+    "ZOO_VM_CONTROL_DAEMONSET": "Expected VM-control DaemonSet owner name.",
+    "ZOO_VM_CONTROL_SERVICE_ACCOUNT": "Expected VM-control node enrollment/discovery ServiceAccount.",
+    "ZOO_VM_CONTROL_NODE_NAME": "Provisioned single-Docker-host node identity name.",
+    "ZOO_VM_CONTROL_NODE_UID": "Immutable generation UUID for the single Docker host.",
+    "ZOO_VM_CONTROL_DOCKER_URL": "Explicit HTTPS frontend URL for the authenticated single-host VM controller.",
+    "ZOO_VM_CONTROL_DOCKER_NAMESPACE": "Actual Docker containerd namespace, normally moby; not the Zoo sandbox network.",
     "ZOO_MAX_SNAPSHOTS": "Snapshots kept per sandbox.",
-    "ZOO_KUBERNETES_NAMESPACE": "Runs this machine's Linux sandboxes as pods in this namespace.",
-    "ZOO_KUBERNETES_RUNTIME_CLASS": "The sandboxes' RuntimeClass; empty for the cluster's default.",
-    "ZOO_KUBERNETES_STORAGE_CLASS": "StorageClass of the home claims.",
+    "ZOO_NAMESPACE": "Namespace for Kubernetes sandbox pods and home claims.",
+    "ZOO_STORAGE_CLASS": "StorageClass of home claims; defaults to `zoo-local`.",
     "ZOO_KUBERNETES_HOME_SIZE": "Size of each home claim.",
-    "ZOO_KUBERNETES_SNAPSHOT_CLASS": "A VolumeSnapshotClass: snapshots become CSI volume snapshots.",
+    "ZOO_SNAPSHOT_CLASS": "CSI snapshot class used before home archives are uploaded; defaults to `zoo-snapshots`.",
+    "ZOO_IDLE_MEMORY_MB_DESKTOP": "Idle memory request for desktop/browser pods in MiB; defaults to 700.",
+    "ZOO_IDLE_MEMORY_MB_CODE": "Idle memory request for code pods in MiB; defaults to 250.",
+    "ZOO_SPARE_VOLUMES": "Unbound default-size home claims kept ready per Kubernetes sandbox node; defaults to 4.",
+    "ZOO_PAUSE_MINUTES": "How long a stopped Linux sandbox stays paused (resumable) before it is deleted to its volume; defaults to 30.",
+    "ZOO_API_WORKERS": "API processes (uvicorn workers); defaults to the CPU count. Ignored while reloading from source.",
     "ZOO_KUBERNETES_IMAGE_PULL_SECRET": "Pull secret for sandbox and helper pods.",
     "ZOO_KUBERNETES_EGRESS_SELECTOR": "Label selector of the egress daemon's pods.",
     "ZOO_KUBERNETES_EGRESS_NAMESPACE": "Namespace of the egress daemon (default: the sandbox namespace).",
@@ -457,9 +476,7 @@ DESCRIPTIONS = {
     "ZOO_WEBHOOK_ALLOW_PRIVATE": "`1` lets webhooks reach private addresses.",
     "ZOO_WEBHOOK_BACKOFF_SECONDS": "Seconds between a failed webhook delivery's retries, comma-separated; it fails after the last.",
     "ZOO_NETWORK": "Docker network shared by the API and sandboxes. Compose sets it to `zoo`.",
-    "ZOO_RUNTIME": "Docker runtime for sandboxes: `kata` (default) or `runc`.",
-    "ZOO_GUEST_URL": "Websocket URL Linux sandboxes on the API's docker host dial to reach the API.",
-    "ZOO_GUEST_REMOTE_URL": "The same for sandboxes on remote servers. Required for Windows sandboxes.",
+    "ZOO_RUNTIME": "Linux backend: `docker` (default) or `kube`. Both use Kata virtual machines.",
     "ZOO_GUEST_DARWIN_BINARY": "Path of the darwin zoo-guest build to install into macOS VMs.",
     "ZOO_MACOS_BASE": "zoovm VM that macOS sandboxes are cloned from.",
     "ZOO_MACOS_USER": "Guest user for macOS sandboxes.",
@@ -470,13 +487,11 @@ DESCRIPTIONS = {
     "ZOO_WINDOWS_MEMORY_MB": "Memory of each Windows sandbox.",
     "ZOO_WINDOWS_MAX_VMS": "Windows sandboxes running at once on each server.",
     "ZOO_WINDOWS_SWITCH": "Hyper-V switch for sandboxes on Windows Server hosts (no Default Switch there).",
-    "ZOO_VERSION": "Release whose images compose runs. `install.sh` pins it and `zoo upgrade` moves it.",
+    "ZOO_VERSION": "Release whose images compose runs. `install.sh` pins it; Compose or Helm upgrades it.",
     "ZOO_REGISTRY": "Where compose pulls images from.",
     "ZOO_SANDBOX_IMAGE": "Image for `desktop` and `browser` sandboxes.",
     "ZOO_CODE_IMAGE": "Image for `code` sandboxes.",
     "ZOO_BROWSER_HOME": "Start page for `browser` sandboxes.",
-    "ZOO_SSH_DIR": "SSH keys mounted into the API container.",
-    "ZOO_KNOWN_HOSTS": "Where host keys from join lines are stored.",
     "ZOO_DOMAIN": "Always-allowed domain for Caddy.",
     "ZOO_PUBLIC_IP": "This server's public address(es), used to check that a domain's DNS points here.",
     "ZOO_GRAFANA_DOMAIN": "Grafana hostname behind Caddy.",
@@ -497,23 +512,42 @@ DESCRIPTIONS = {
 
 
 def scan_env() -> dict[str, str | None]:
-    """Every environment variable the code reads, with its in-code default."""
+    """Canonical deployment settings read by Python and native components."""
     found: dict[str, str | None] = {}
-    pattern = re.compile(
-        r'(?:os\.environ\.get|os\.getenv|os\.environ\[)\(\s*["\']([A-Z][A-Z0-9_]+)["\']\s*(?:,\s*([^)]+))?\)'
-    )
     targets = [ROOT / "main.py"]
-    for d in ENV_SCAN_DIRS:
-        base = ROOT / d
+    native = []
+    for directory in ENV_SCAN_DIRS:
+        base = ROOT / directory
         if base.is_dir():
-            targets += [p for p in base.rglob("*.py") if "__pycache__" not in str(p)]
+            targets += [path for path in base.rglob("*.py") if "__pycache__" not in str(path)]
+            native += [path for path in base.rglob("*.go") if not path.name.endswith("_test.go")]
     for path in targets:
-        for m in pattern.finditer(path.read_text(errors="ignore")):
-            name, default = m.group(1), (m.group(2) or "").strip()
-            if default in ("", "None"):
-                default = ""
-            found.setdefault(name, default or None)
-    return found
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.Call) and ast.unparse(node.func) in ("os.environ.get", "os.getenv"):
+                if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                    default = ast.unparse(node.args[1]) if len(node.args) > 1 else None
+                    found.setdefault(node.args[0].value, default)
+            elif (
+                path == ROOT / "server/vm_control.py"
+                and isinstance(node, ast.Call)
+                and ast.unparse(node.func) == "setting"
+            ):
+                if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                    found.setdefault("ZOO_VM_CONTROL_" + node.args[0].value, None)
+            elif (
+                isinstance(node, ast.Subscript)
+                and ast.unparse(node.value) == "os.environ"
+                and isinstance(node.slice, ast.Constant)
+                and isinstance(node.slice.value, str)
+            ):
+                found.setdefault(node.slice.value, None)
+    for path in native:
+        text = path.read_text()
+        for match in re.finditer(r'os\.(?:Getenv|LookupEnv)\("([A-Z][A-Z0-9_]+)"\)', text):
+            found.setdefault(match[1], None)
+        for match in re.finditer(r'\bport\("([A-Z][A-Z0-9_]+)",\s*(\d+)\)', text):
+            found[match[1]] = match[2]
+    return {name: default for name, default in found.items() if name not in REMOVED_SETTINGS}
 
 
 def py_literal(raw: str | None) -> str:
@@ -530,14 +564,17 @@ def gen_config() -> None:
     out = [
         "---",
         "title: Configuration",
-        "description: Every environment variable the Zoo API reads, generated from the code.",
+        "description: Canonical deployment settings from Python and native components.",
         "---",
         "",
         GENERATED_NOTE,
         "",
-        "Every environment variable the API reads, with the default the code applies. Set them",
+        "Canonical deployment settings, parsed from Python and native source. Removed interfaces",
+        "are not configurable: guest addresses are derived, and the gateway is a native service.",
+        "Set deployment values",
         "in `/opt/zoo/.env` (the installer writes `JWT_SECRET` and `ZOO_SECRETS_KEY`) or in the",
-        "chart's `env` map on Kubernetes.",
+        "chart's documented values on Kubernetes. Peer RPCs use TLS on 7444; peer HTTP uses",
+        "TLS on 8002; guest websockets use 8001; native node enrollment uses mTLS on 7443.",
         "",
         "| Variable | Default | Purpose |",
         "| --- | --- | --- |",
@@ -557,17 +594,9 @@ def gen_config() -> None:
 # Error reference — from the statuses the OpenAPI schema actually declares
 # ---------------------------------------------------------------------------
 
+
 def gen_errors() -> None:
-    sys.path.insert(0, str(ROOT))
-    import os
-
-    os.environ.setdefault("JWT_SECRET", "docs")
-    os.environ.setdefault("ZOO_SECRETS_KEY", "docs")
-    os.environ.setdefault("DATABASE_URL", "postgresql://docs:docs@127.0.0.1:1/docs")
-    os.environ.setdefault("ZOO_OBJECT_STORE", "s3://docs")
-    from main import app
-
-    spec = app.openapi()
+    spec = api_spec()
     usage: dict[str, list[str]] = {}
     for path, methods in spec["paths"].items():
         for method, op in methods.items():
@@ -583,7 +612,7 @@ def gen_errors() -> None:
     # FastAPI doesn't declare statuses raised with HTTPException at runtime, so
     # scan the handlers too: any `status_code=<code>` the server can emit.
     raised = re.compile(r"status_code\s*=\s*(\d{3})")
-    for target in [*(ROOT / "server").glob("*.py"), *(ROOT / "integrations").glob("*.py")]:
+    for target in (ROOT / "server").glob("*.py"):
         for m in raised.finditer(target.read_text(errors="ignore")):
             usage.setdefault(m.group(1), [])
 
@@ -623,12 +652,21 @@ def gen_errors() -> None:
         "## Codes",
         "",
     ]
-    from server.errors import CODES, HINTS
+    definitions = {}
+    for node in ast.parse((ROOT / "server/errors.py").read_text()).body:
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value is not None:
+            if node.target.id in ("CODES", "HINTS"):
+                definitions[node.target.id] = ast.literal_eval(node.value)
+        elif isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "HINTS" for target in node.targets
+        ):
+            definitions["HINTS"] = ast.literal_eval(node.value)
+    codes, hints = definitions["CODES"], definitions["HINTS"]
 
-    for code, (status, meaning) in CODES.items():
+    for code, (status, meaning) in codes.items():
         out += [f"### `{code}`", "", f"HTTP `{status}`. {meaning}", ""]
-        if code in HINTS:
-            out += [f"Fix: {HINTS[code]}", ""]
+        if code in hints:
+            out += [f"Fix: {hints[code]}", ""]
     out += [
         "## Statuses",
         "",
@@ -644,6 +682,100 @@ def gen_errors() -> None:
     print(f"errors.md: {len(usage)} statuses")
 
 
+def gen_cli() -> None:
+    source = ROOT / "sdk/python/zoo_sdk/cli.py"
+    tree = ast.parse(source.read_text())
+    aliases = {
+        target.id: node.value
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        for target in node.targets
+        if isinstance(target, ast.Name)
+    }
+    out = [
+        "---",
+        "title: CLI",
+        "description: Sandbox commands and flags generated from the Python SDK CLI.",
+        "---",
+        "",
+        GENERATED_NOTE,
+        "",
+        "Install with `pip install 'zoo-sdk[cli]'`, then run `zoo login`.",
+        "`ZOO_URL` and `ZOO_API_KEY` override the stored login; `ZOO_WORKSPACE` selects a workspace.",
+        "",
+    ]
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        decorator = next(
+            (
+                item
+                for item in node.decorator_list
+                if isinstance(item, ast.Call)
+                and isinstance(item.func, ast.Attribute)
+                and isinstance(item.func.value, ast.Name)
+                and item.func.value.id == "app"
+                and item.func.attr == "command"
+            ),
+            None,
+        )
+        if decorator is None:
+            continue
+        name = ast.literal_eval(decorator.args[0]) if decorator.args else node.name.replace("_", "-")
+        out += [f"## `zoo {name}`", "", ast.get_docstring(node) or "", ""]
+        parameters = node.args.args
+        defaults = [None] * (len(parameters) - len(node.args.defaults)) + list(node.args.defaults)
+        rows = []
+        usage = ["zoo", name]
+        for parameter, default in zip(parameters, defaults, strict=True):
+            annotation = parameter.annotation
+            if isinstance(annotation, ast.Name):
+                annotation = aliases.get(annotation.id, annotation)
+            metadata = None
+            if isinstance(annotation, ast.Subscript) and isinstance(annotation.slice, ast.Tuple):
+                type_node, *extras = annotation.slice.elts
+                metadata = next((item for item in extras if isinstance(item, ast.Call)), None)
+            else:
+                type_node = annotation
+            type_name = ast.unparse(type_node) if type_node else "Any"
+            option = (
+                metadata is not None and isinstance(metadata.func, ast.Attribute) and metadata.func.attr == "Option"
+            ) or default is not None
+            help_text = (
+                next((ast.literal_eval(item.value) for item in metadata.keywords if item.arg == "help"), "")
+                if metadata
+                else ""
+            )
+            flags = (
+                [ast.literal_eval(item) for item in metadata.args if isinstance(item, ast.Constant)] if metadata else []
+            )
+            if option:
+                flag = flags[0] if flags else "--" + parameter.arg.replace("_", "-")
+                if type_name == "bool" and not flags:
+                    flag += "/--no-" + parameter.arg.replace("_", "-")
+                display = ", ".join(flags) if flags else flag
+                value = "" if type_name == "bool" else " VALUE"
+                usage.append(f"[{flag}{value}]")
+            else:
+                display = parameter.arg.upper() + ("..." if type_name.startswith("list[") else "")
+                usage.append(("-- " if parameter.arg == "command" else "") + display)
+            default_text = ast.unparse(default) if default is not None else "required"
+            rows.append(f"| `{esc(display)}` | `{esc(type_name)}` | `{esc(default_text)}` | {esc(help_text)} |")
+        out += ["```text", " ".join(usage), "```", ""]
+        if rows:
+            out += ["| Argument / option | Type | Default | Description |", "| --- | --- | --- | --- |", *rows, ""]
+    out += [
+        "## Deployment and backups",
+        "",
+        "`zoo backups [--json]` lists existing backups through `GET /v1/admin/backups` with an admin key.",
+        "There is no restore CLI or live destructive restore API. Restore remains a deliberate offline",
+        "administrator operation with API, worker and gateway stopped; see [backups](/docs/guides/domain-https-backups/).",
+        "Use `docker compose` or `helm` directly for deployment and upgrades, not sandbox CLI server commands.",
+        "See [upgrading](/docs/guides/upgrading/) and the [install guide](/docs/get-started/install/).",
+    ]
+    write("cli.md", "\n".join(out) + "\n")
+
+
 def write(name: str, text: str) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / name).write_text(text)
@@ -651,9 +783,16 @@ def write(name: str, text: str) -> None:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output-dir", type=Path, default=OUT)
+    parser.add_argument("--version-file", type=Path, default=VERSION_FILE)
+    arguments = parser.parse_args()
+    OUT = arguments.output_dir
+    VERSION_FILE = arguments.version_file
     write_version()
     gen_api()
     gen_tools()
     gen_sdk()
     gen_config()
     gen_errors()
+    gen_cli()

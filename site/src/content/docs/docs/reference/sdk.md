@@ -142,7 +142,6 @@ Zoo(self, api_key: str | None=None, base_url: str | None=None, *, timeout: float
 | [`sandbox()`](#zoosandbox) | `sandbox(id)` is an existing sandbox; `sandbox(kind=...)` creates one, which `with` deletes on exit: |
 | [`create()`](#zoocreate) | Creates a sandbox and, by default, waits until it runs. If it fails to start it is deleted, and the error raised. |
 | [`servers()`](#zooservers) |  |
-| [`add_server()`](#zooadd_server) |  |
 | [`profiles()`](#zooprofiles) |  |
 | [`tools()`](#zootools) |  |
 | [`events()`](#zooevents) | Follows the workspace's events (sandbox.state) as they happen, from after `after` (a seq) or from now. Pass the last event's seq back to resume after a disconnect. |
@@ -227,13 +226,6 @@ create(self, name: str | None=None, kind: SandboxKind='desktop', server_id: str 
 
 ```python
 servers(self) -> list[dict]
-```
-
-
-### `Zoo.add_server` {#zooadd_server}
-
-```python
-add_server(self, name: str, docker_url: str, bind_address: str) -> dict
 ```
 
 
@@ -693,5 +685,5 @@ timed_out(self) -> bool
 ## Errors
 
 Any non-2xx response raises `zoo_sdk.ZooError` with the status code and the API's
-`detail`; see [Errors](/docs/reference/errors/). Any tool can be called as a method
+stable `code`, `message`, `hint`, `docs_url` and `request_id`; see [Errors](/docs/reference/errors/). Any tool can be called as a method
 (`box.window_focus(window_id=...)`) or with `box.tool(name, **args)`.

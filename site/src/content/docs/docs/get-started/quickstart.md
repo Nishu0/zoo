@@ -1,71 +1,50 @@
 ---
 title: Quickstart
-description: Install Zoo, get an API key and let an agent drive a desktop, in about five minutes.
+description: Install a Docker/Kata host, create a sandbox, and connect an external client.
 ---
 
-## 1. Install
+## 1. Prepare a Linux KVM host
 
-On an Ubuntu or Debian server with KVM (no KVM: it falls back to `runc` and says so):
+Use a dedicated Debian/Ubuntu Linux host with working hardware or nested virtualization,
+writable `/dev/kvm`, systemd and KSM. Missing virtualization is a hard error, not a weaker
+isolation mode. See [Install](/docs/get-started/install/) for the complete requirements.
 
 ```bash
 curl -fsSL https://github.com/chann44/zoo/releases/latest/download/install.sh | sudo bash -s -- --admin-email you@example.com
 ```
 
-Or on your laptop, from a clone: `docker compose up -d`.
+Docker is the default Linux runtime. Kubernetes is an explicit install choice, not an
+automatic migration or alternate path on failure.
 
-## 2. Sign up
+## 2. Create a sandbox
 
-Open the dashboard (`http://<server>:3000`) and sign up. The first run takes you through three steps:
+Open the printed dashboard URL, normally `http://HOST:3000`, and sign up. Emails in
+`ADMIN_EMAILS` may use administrator endpoints. Create a desktop, browser or code sandbox,
+then create an API key under your profile. macOS and Windows need enrolled VM hosts.
 
-1. **Create a sandbox.** Pick *Start with a demo* for a desktop with a task ready in its Agent tab.
-2. **Copy an API key.** It's shown once; keep it somewhere safe.
-3. **Copy the MCP config.** The key is already filled in.
-
-## 3. Connect an agent
-
-Paste the MCP config into Claude Desktop, Claude Code (`.mcp.json`) or Cursor:
-
-```json
-{
-  "mcpServers": {
-    "zoo": {
-      "type": "http",
-      "url": "http://<server>:8000/v1/mcp/",
-      "headers": { "Authorization": "Bearer zoo_YOUR_KEY" }
-    }
-  }
-}
-```
-
-Ask it to *"create a desktop sandbox, open Firefox and find today's top story on Hacker News"*, and watch it work in
-the dashboard. Every sandbox's **Connect** button has the same config, plus curl, Python and TypeScript snippets.
-
-## 4. Or drive it from code
+## 3. Use the sandbox API
 
 ```bash
 pip install 'zoo-sdk[cli]'
-zoo login                          # the URL and your key
-zoo create --kind desktop          # prints its id
-zoo exec <id> -- uname -a
-zoo view <id>                      # the live screen in your browser
+zoo login --url http://localhost:8000
+zoo create --kind desktop
+zoo ls
 ```
 
 ```python
 from zoo_sdk import Zoo
 
-with Zoo().sandbox(kind="desktop") as box:   # deleted when the block ends
-    print(box.exec("uname -a")["stdout"])
-    open("screen.png", "wb").write(box.screenshot())
+with Zoo().sandbox(kind="desktop") as box:
+    image = box.screenshot()
 ```
 
-```ts
-import { Zoo } from "@zoo/sdk"
+The SDK reads `ZOO_API_KEY` and `ZOO_URL`, and adds the `/v1` API prefix. For external
+MCP clients, use [the MCP guide](/docs/get-started/mcp/). Zoo supplies sandboxes and tools;
+it does not host a model, planner, task runner or chat integration.
 
-await using box = await new Zoo().sandbox({ kind: "desktop" })
-console.log((await box.exec("uname -a")).stdout)
-```
+## Before relying on a deployment
 
-## Next
-
-- [The `zoo` CLI](/docs/reference/cli/) and [API conventions](/docs/reference/conventions/): errors, versions,
-  idempotency keys, pagination
+This implementation is not a runtime acceptance or benchmark report. Real Docker/Kata,
+CSI snapshots, VM saved-state slots, pause/resume and performance have not been validated on
+real infrastructure.
+[Performance](/docs/reference/performance/) lists targets, not achieved results.

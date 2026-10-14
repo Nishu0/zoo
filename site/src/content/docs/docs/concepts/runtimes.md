@@ -1,51 +1,46 @@
 ---
-title: Choosing a runtime
-description: runc, Kata and Kubernetes — what each isolates, what each costs, and how to pick.
+title: Isolation
+description: Kata VMs on both Linux backends and native VMs on Mac/Windows hosts.
 ---
 
-Zoo runs every Linux sandbox through a pluggable runtime. The choice is `ZOO_RUNTIME` on a
-Docker host (`kata` or `runc`) and `ZOO_KUBERNETES_RUNTIME_CLASS` in a cluster.
+## A VM boundary for every sandbox
 
-| Runtime | What it is | Isolation | Needs |
-| --- | --- | --- | --- |
-| `kata` (default) | Kata Containers: each sandbox boots in its own lightweight VM | its own kernel per sandbox — a guest kernel escape lands in a throwaway VM, not the host | KVM (`/dev/kvm`): bare metal, or cloud VMs with nested virtualization |
-| `runc` | plain containers | shares the host kernel; Zoo compensates with a tighter seccomp filter and, on AppArmor hosts, the `zoo-sandbox` profile | nothing special — works on any Docker host |
-| Kubernetes pods | one pod per sandbox, under a RuntimeClass | whatever the RuntimeClass gives: `kata` as above, or the cluster default | a cluster, [kata-deploy](https://github.com/kata-containers/kata-containers/tree/main/tools/packaging/kata-deploy), nodes with KVM (for Kata) |
+Docker and Kubernetes are deployment choices, not isolation levels. Both Linux backends
+use Kata and require hardware virtualization. Docker uses `io.containerd.kata.v2`;
+Kubernetes uses RuntimeClass `kata`. The pinned Kubernetes Cloud Hypervisor configuration
+is amd64-only; Docker's supported QEMU shim also serves arm64.
 
-macOS and Windows sandboxes don't use this setting — they are always VMs: `zoovm` on
-Apple's Virtualization.framework, and Hyper-V on Windows hosts.
+macOS runs through Virtualization.framework on an enrolled Apple Silicon host. Windows
+runs through Hyper-V on an enrolled host. Linux capacity is never borrowed from those hosts.
 
-## How to choose
+## What the boundary protects
 
-- **Bare metal or nested-virtualization cloud VM** → keep the default. Kata is the reason
-  every sandbox can run as root-equivalent inside without endangering the host, and the
-  reason the same image works for `desktop`, `browser` and `code` kinds.
-- **Development laptop or a host without KVM** → `ZOO_RUNTIME=runc`. The installer falls
-  back to it automatically (and says so); expect weaker isolation, not a different feature
-  set.
-- **Already running a cluster** → the [Kubernetes chart](/docs/guides/kubernetes/), with
-  sandboxes as Kata pods. Clusters without KVM can run `sandboxes.runtimeClass=runc`, with
-  weaker isolation: the runtime's default seccomp profile replaces Zoo's stricter one and
-  the `zoo-sandbox` AppArmor profile.
-- **Not sure** → `zoo doctor` on a candidate host checks KVM, the sandbox runtime, disk,
-  ports, DNS and the API. On Kubernetes, `helm test` runs the requirements check with a
-  probe pod that proves the runtime works on every node.
+Sandbox processes may have broad privileges inside their own VM without receiving the
+host kernel or control-plane credentials. Guest tools and the VNC path pass through the
+authenticated gateway; desktop ports are not published directly.
 
-## Why Kata, and not Firecracker
+A VM boundary is not a promise that every hypervisor, kernel or device has no vulnerability.
+Keep host, shim, guest images and helper binaries patched. Access to runtime sockets,
+VM-control credentials and VM disks remains a privileged administrative boundary.
 
-Zoo ships Kata, not Firecracker. Kata registers as an ordinary Docker/containerd runtime
-(`io.containerd.kata.v2`), which means the same code path drives a laptop with Docker, a
-bare-metal host, a remote server added through zoo-node, and a Kubernetes cluster — and
-sandboxes are just containers as far as Docker is concerned. That is what keeps the
-scheduler, the job system and the tool implementations runtime-agnostic. Firecracker
-microVMs (the choice behind several hosted sandboxes — see the [comparison
-page](/compare)) would mean maintaining a second lifecycle layer; Kata buys the same
-per-sandbox kernel boundary without it.
+## Policy is outside the guest
 
-## The cost
+Linux egress enforcement runs on the Docker host or each Kubernetes node. VM hosts use
+their native firewall/ACL enforcement plus the host proxy. Denied traffic must fail even
+when a guest process is compromised. Do not grant runtime sockets or the egress controller
+to a sandbox.
 
-A microVM uses more memory than a container — beyond each sandbox's own 2 GB guest limit,
-each VM carries a small kernel. On a 32 GB host, plan for roughly ten sandboxes; the
-[placement rules](/docs/guides/remote-servers/#placement-and-moves) spread further
-sandboxes across servers by free memory. Plain `runc` containers are lighter, at the cost
-of the kernel boundary.
+## Storage and paused memory
+
+Persistent homes, snapshots and secret handling differ by backend; see [Architecture](/docs/concepts/architecture/).
+Stopping is not a data backup. A paused VM may still occupy RAM; free-page reporting,
+actual memory pressure and measured backend behavior determine reclamation.
+
+Cloud Hypervisor uses virtio-fs without DAX or VM templating. Whole-VM pause needs a
+matching patched rootful Go shim/controller, not a workload signal. The custom shim includes
+QEMU and Cloud Hypervisor adapters; stock Kata does not expose this Zoo-specific protocol.
+
+## Validation boundary
+
+Real escape-resistance, pause/resume, disk recovery and saved-state compatibility checks
+are deferred. Static checks and target configuration are not runtime isolation certification.

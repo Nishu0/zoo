@@ -1,73 +1,76 @@
 ---
-title: Custom domain, HTTPS, backups and observability
-description: Serve the dashboard over your own domain with Caddy, back up sandboxes and the database, and watch the stack in Grafana.
+title: HTTPS, backups and observability
+description: Public TLS, independent native node endpoints and offline database restoration.
 ---
 
-## Custom domain and HTTPS
+## Public endpoints and trust
 
-The `domain` compose profile adds Caddy on ports 80 and 443:
+With `--domain`, Docker uses Caddy; Kubernetes uses ingress/cert-manager. Configure
+`ZOO_API_URL` as the public HTTP(S) API root, including any deployment path prefix.
+Public `/guest/connect` traffic routes to the native gateway guest listener on 8001.
 
-```bash
-ADMIN_EMAILS=you@example.com ZOO_PUBLIC_IP=<server ip> docker compose --profile domain up -d --build
-```
+Private gateway RPC 7444 and peer HTTP 8002 use authenticated TLS. Native host streams use
+mTLS on 7443, on a separately reachable node address if needed. `ZOO_NODE_HOST` selects that
+public hostname/IP without a port; it is not a URL or the internal peer-service DNS name.
 
-1. Point an A record at the server.
-2. Add the hostname under **Profile → Domains** (admins only). The card shows whether DNS
-   resolves to `ZOO_PUBLIC_IP` (IPv4 or IPv6); after changing the record, **Check DNS
-   again**.
-3. Open `https://your.domain`. Caddy gets a Let's Encrypt certificate on the first
-   request.
+VM guests and hosts need their own working DNS and trust configuration. Offline/self-signed
+certificates must be trusted by those clients explicitly. A working browser does not prove
+a guest can connect. Guest addresses are derived, not independently configurable.
 
-Caddy only issues certificates for hostnames listed in the database, or for `ZOO_DOMAIN`.
-It checks with `GET /domains/check?domain=<host>` — case and a trailing dot don't matter;
-anything else gets 404, so nobody can make the server request certificates for names it
-doesn't serve. On a custom domain the dashboard calls the API at `https://your.domain/api`,
-so you don't need to rebuild the web image or configure CORS.
+## What to back up
 
-## Backups and restore
+Retain Postgres contents, wrapping keys/KMS access, object-store credentials and data,
+runtime home/snapshot data and native slot/template dependencies. The node CA and VM-host
+identity are database-backed. Never restore a database while discarding the keys that
+decrypt its stored secrets and identities.
 
-- **Sandbox files**: the **Backup** button (or `GET /sandboxes/{id}/backup`) downloads
-  `/home/zoo` as a tar; `POST /sandboxes/{id}/restore` with the tar as the body restores
-  it. For keeping copies on the same server, [snapshots](#snapshots-and-backups) are the
-  faster mechanism.
-- **Database**: a worker dumps Postgres and snapshots sandbox homes to object storage every
-  `ZOO_BACKUP_INTERVAL_HOURS` (`POST /admin/backups` runs one now). Restore with
-  `python -m server.backups restore <key>`.
+Scheduled backup work is separate from runtime-specific snapshots. CSI snapshots and
+saved memory do not become a portable full-system backup merely because a database dump
+exists.
 
-### Snapshots and backups
-
-A snapshot copies a sandbox's home disk and keeps it on the same server (the **Snapshots**
-tab, or `POST /sandboxes/{id}/snapshots`). Linux copies the home volume; macOS clones the
-VM bundle as an APFS clone; Windows copies the VM's differencing disk — the latter two
-while stopped. Restoring replaces the disk and needs the sandbox stopped. A sandbox keeps
-up to `ZOO_MAX_SNAPSHOTS` (10) snapshots. The tar backup stays as an **export format**,
-for taking a home folder elsewhere.
-
-## Observability
-
-Set `OTEL_EXPORTER_OTLP_ENDPOINT` to export OpenTelemetry traces, metrics and logs. You
-get spans for HTTP requests, tool calls (`tool <name>`, with sandbox, user and channel)
-and database queries. Application logs go to the same endpoint.
-
-Metrics (Prometheus names):
-
-| Metric | Labels | |
-| --- | --- | --- |
-| `zoo_sandboxes` | `status`, `kind` | Sandboxes by state (take the max across API processes) |
-| `zoo_job_duration_seconds` | `kind`, `outcome` | How long each attempt of a boot, stop, delete or move ran |
-| `zoo_job_wait_seconds` | `kind` | Time from when a job was due to when it started |
-| `zoo_tool_duration_seconds` | `tool`, `channel`, `outcome` | Tool call latency |
-| `zoo_errors_total` | `source` | Errors from `job`, `tool`, `agent`, `chat`, `vault` and `http` (5xx) |
-| `zoo_agent_runs_total`, `zoo_agent_tokens_total` | `outcome` | Finished agent tasks and the tokens they used |
-
-The `observability` profile runs Grafana with Tempo, Loki and Prometheus
-(`grafana/otel-lgtm`):
+## List database backups
 
 ```bash
-OTEL_EXPORTER_OTLP_ENDPOINT=http://lgtm:4318 docker compose --profile observability up -d
+zoo backups --json
 ```
 
-Grafana is at `http://localhost:3001` (admin/admin), or at `ZOO_GRAFANA_DOMAIN` behind
-Caddy. The **Zoo** dashboard (Dashboards → Zoo, or `/d/zoo-overview`) is provisioned from
-`deploy/grafana`: sandbox states, lifecycle job latency and queue wait, tool latency and
-error ratio, errors by source, agent tasks and tokens, and error logs.
+This is an authenticated administrator request to `GET /v1/admin/backups`. There is no
+`zoo` restore command and no live destructive restore API.
+
+## Offline database restore
+
+Drain workload activity and **stop the API, every worker and every gateway**. Keep the
+database/object store available to the offline administrator operation. Supply the
+matching release environment, database URL, object-store access and wrapping keys.
+
+For Docker, with `BACKUP_ID` set to a listed backup key:
+
+```bash
+docker compose stop api worker gateway
+docker compose run --rm --no-deps --entrypoint python api -m server.backups restore "$BACKUP_ID"
+```
+
+Inspect the restore result before intentionally starting the control plane again:
+
+```bash
+docker compose up -d api worker gateway
+```
+
+On Kubernetes, quiesce all API/worker/gateway replicas and their autoscalers/controllers
+first; ensure none can restart during restoration. Run the same `python -m server.backups
+restore ID` operation from a matching offline administrator environment with database and
+object-store access. Record replicas, controllers and versions before stopping them;
+restore them only after the database operation and compatibility checks succeed.
+
+Do not delete a namespace or its home claims as a restore technique. Database restoration
+does not by itself restore every VM disk, saved state, CSI snapshot or profile.
+
+## Observability and measurement
+
+SSE and webhooks carry durable sandbox/job/state events. Monitoring numbers may poll.
+OpenTelemetry and the optional Grafana stack help inspect lifecycle/tool failures and
+resource use. Logs/audit entries record sandbox operations, not built-in model tasks.
+
+[Performance](/docs/reference/performance/) distinguishes the planned measurements from
+actual results. No new runtime, chaos or benchmark execution has been performed for this
+implementation work.

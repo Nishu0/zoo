@@ -84,7 +84,7 @@ const starsOf = (n: number) => Array.from({ length: 5 }, (_, i) => i < n);
                                     </a>
                                 </td>
                                 <td><span class="cell yes">yes</span></td>
-                                <td class="iso">Kata microVM — its own kernel, every sandbox</td>
+                                <td class="iso">Kata Linux VMs; native macOS and Hyper-V guests</td>
                                 <td><span class="stars" aria-label="5 of 5">{starsOf(5).map(() => <span class="star on">★</span>)}</span></td>
                                 <td><span class="cell yes">yes — one command</span></td>
                             </tr>
@@ -136,17 +136,17 @@ const starsOf = (n: number) => Array.from({ length: 5 }, (_, i) => i < n);
                         <article>
                             <h3>Open, and actually yours</h3>
                             <p>
-                                Zoo is open source and self-hosts with one command on any Ubuntu or
-                                Debian box — no BYOC sales call, no enterprise tier, no data leaving
+                                Zoo is open source and self-hosts on Ubuntu or Debian with usable KVM
+                                and the pinned Kata stack — no BYOC sales call, no enterprise tier, no data leaving
                                 your racks. Secrets encrypt with your keys, or your own KMS.
                             </p>
                         </article>
                         <article>
                             <h3>A kernel per sandbox</h3>
                             <p>
-                                Every sandbox is a Kata microVM with its own kernel and its own
-                                user — not a container sharing yours. Desktop ports bind to
-                                localhost; the API is the only door in.
+                                Linux sandboxes use Kata VMs; native Mac and Windows hosts use
+                                Virtualization.framework and Hyper-V. Guest screen traffic is relayed
+                                by the native gateway, not a public desktop port.
                             </p>
                         </article>
                         <article>

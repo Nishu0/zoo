@@ -55,6 +55,6 @@ permissions and which sandbox kinds support each tool, is generated from the cod
 
 :::note
 The MCP server serves the same tools as the REST API and the Python SDK — one registry,
-three doors. Anything you can do from the dashboard, an agent can do here.
+three doors. The sandbox tools share the registry; administrative deployment and offline restore are separate operations.
 :::
 

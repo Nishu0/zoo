@@ -14,7 +14,7 @@ const faqs = [
     },
     {
         q: "Can I watch what agents are doing?",
-        a: "Yes. Live view streams any sandbox screen in the browser, and you can take over with your own mouse and keyboard. Every tool call is logged, and agent actions replay with the screenshots they were decided on.",
+        a: "Yes. Live view streams a sandbox screen in the browser, with mouse and keyboard control. Tool calls are logged; external agent reasoning and task replay are not built-in services.",
     },
     {
         q: "Where does my data live?",
@@ -22,11 +22,11 @@ const faqs = [
     },
     {
         q: "Does it work with Claude Code?",
-        a: "Yes — code sandboxes ship with Claude Code preinstalled. Add your Anthropic key as an encrypted secret and run headless sessions with box.claude().",
+        a: "Code images include Claude Code as an external program. Supply your own credentials and run it through sandbox shell tools; Zoo does not supply a model or planner.",
     },
     {
         q: "Can it run on more than one server?",
-        a: "Yes. Register remote Linux servers, Mac and Windows hosts, and move sandboxes between them — or run the Helm chart on Kubernetes, with sandboxes as Kata pods.",
+        a: "Kubernetes distributes Linux Kata pods using node-local storage and explicit disk migration. Docker sandboxes stay on the API host. Mac and Windows hosts join for native guests; their saved slots are not portable arbitrary-identity clones.",
     },
 ];
 ---

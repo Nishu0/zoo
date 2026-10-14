@@ -1,59 +1,39 @@
 ---
 title: Your first sandbox
-description: Create a sandbox in the dashboard, drive it from the browser, and take an API key for your agents.
+description: Create, view and operate an isolated sandbox through the dashboard and external clients.
 ---
 
-Open the dashboard URL the installer printed — usually `http://<server ip>:3000` — and
-sign up. The first account works right away; admin abilities (`/admin/*`, Domains) are
-limited to the emails in `ADMIN_EMAILS`.
+Open the printed dashboard URL and sign up. Emails in `ADMIN_EMAILS` have administrator
+abilities; an API key is shown only once.
 
-## Create a sandbox
+## Choose a kind
 
-Click **Create sandbox**, give it a name, and pick a type:
+- `desktop`: Linux XFCE desktop with screen/input, shell and file tools.
+- `browser`: Linux browser-focused desktop with its allowed tool categories.
+- `code`: Linux shell/files without a graphical desktop.
+- `macos` / `windows`: the native kind on a prepared, enrolled VM host.
 
-| Type | Display | Tools available | Notes |
-| --- | --- | --- | --- |
-| `desktop` | XFCE, 1280x720 | all | Firefox, terminal, file manager |
-| `browser` | XFCE, 1280x720 | observe, mouse, keyboard, windows, browser | Firefox opens on start. No shell. |
-| `code` | none | shell, files, `fetch_url` | Claude Code is preinstalled |
-| `macos` | macOS, 1280x800 | all | Runs on a Mac server — see [macOS sandboxes](/docs/guides/macos/) |
-| `windows` | Windows, 1280x800 | all | Runs on a Windows server — see [Windows sandboxes](/docs/guides/windows/) |
+Linux kinds always run inside Kata VMs. Homes persist on the selected runtime's home
+volume/claim; native data has platform-specific disk/state dependencies. Do not assume a
+Linux home path, UID or resource default applies to every OS.
 
-Whatever the type, every sandbox:
+## Use it
 
-- runs in its own microVM with its own kernel (or a plain container on a `runc` host);
-- runs its processes as the unprivileged user `zoo` (uid 1000);
-- keeps `/home/zoo` on its own Docker volume (`zoo-home-<id>`), so files survive stop and
-  start;
-- is limited to 2 GB memory, 2 CPUs and 1024 processes, with `no-new-privileges`;
-- is reached only through the API — desktop ports bind to `127.0.0.1`, or to the compose
-  network.
+Live view and tools share the gateway's VNC session. The terminal and other in-sandbox
+tools require zoo-guest. Policies and permissions apply to every request; missing guest
+capabilities fail rather than switching execution paths.
 
-A sandbox with enough free memory starts in about a second from the [warm
-pool](/docs/concepts/architecture/#the-warm-pool) when an admin has enabled it under
-**Servers → Warm pool**.
+Use **Activity** for tool records, **Monitoring** for measured resource numbers,
+**Snapshots** for runtime-specific data snapshots, and **Profiles** for portable app data.
+Zoo does not run a built-in model or task planner; connect an external client through
+[REST, SDK or MCP](/docs/get-started/mcp/).
 
-## Drive it
+## Stop and resume
 
-- **Live view** — the dashboard opens the sandbox's VNC in the browser. Watch, or take
-  over the mouse and keyboard.
-- **Terminal** — a shell in the sandbox (PowerShell on Windows).
-- **Activity** — every tool call with its input, output and status.
-- **Monitoring** — CPU, memory, network and disk for the whole VM.
-- **Snapshots** — copy the home disk and restore it later.
-- **Profiles** — save and load app profiles (logins, cookies, settings).
+A confirmed supported VM pause can leave a stopped sandbox marked resumable until the
+configured deadline. Later teardown keeps home data for a cold start. Unsupported or
+unverified VM-control wiring must not be presented as a successful whole-VM pause.
+Deleting a sandbox removes its associated data according to the runtime's lifecycle.
 
-Stopping removes the container and keeps the volume; starting creates a fresh container on
-the current image and mounts the same volume; deleting removes both.
-
-## Take an API key
-
-Under **Profile → API keys**, create a key. It is shown once — store it. Agents use it as
-`Authorization: Bearer zoo_...` on every call. See
-[Connect Claude Code or Claude Desktop](/docs/get-started/mcp/) to plug your agent in.
-
-## Housekeeping
-
-A container reported as running in the database but gone from Docker is marked stopped
-within 15 seconds. Under the sandbox's **Overview** tab, **Restart on new image** re-creates
-a stopped-or-running sandbox on the current release's image and keeps the home directory.
+Timing, recovery and platform saved-state acceptance are deferred; do not infer a startup
+guarantee from a ready warm-pool item or static checks.

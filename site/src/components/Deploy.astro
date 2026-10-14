@@ -6,7 +6,7 @@ const steps = [
     {
         n: "01",
         title: "It installs itself",
-        body: "The script installs Docker, Kata Containers, fresh secrets and the pinned compose stack, then hands you the zoo operator CLI. No KVM? It falls back to runc and says so.",
+        body: "The script verifies KVM, configures Docker with Kata QEMU virtual machines, generates fresh secrets and installs the pinned stack. Missing virtualization support is a hard error.",
     },
     {
         n: "02",
@@ -20,7 +20,7 @@ const steps = [
     },
 ];
 
-const ops = ["zoo upgrade", "zoo backup", "zoo restore", "zoo doctor"];
+const ops = ["docker compose pull", "docker compose up -d", "zoo backups --json"];
 ---
 
 <section class="section" id="deploy">
@@ -57,7 +57,7 @@ const ops = ["zoo upgrade", "zoo backup", "zoo restore", "zoo doctor"];
         </ol>
 
         <div class="ops" data-reveal>
-            <p class="label">operate — the zoo cli</p>
+            <p class="label">operate — compose and backup listing</p>
             <ul class="ops-list mono" role="list">
                 {
                     ops.map((o) => (
@@ -68,8 +68,8 @@ const ops = ["zoo upgrade", "zoo backup", "zoo restore", "zoo doctor"];
                 }
             </ul>
             <p class="ops-note">
-                Outgrow one machine? Spread sandboxes across remote servers, add macOS and Windows
-                nodes, or run the Helm chart on Kubernetes with sandboxes as Kata pods.
+                Outgrow one machine? Opt into Kubernetes on amd64 with Cloud Hypervisor Kata pods
+                and node-local storage. Join macOS and Windows hosts for native guests; Docker stays local.
             </p>
         </div>
     </div>

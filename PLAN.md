@@ -113,8 +113,12 @@ Phases: 0 remove agent features · 1 remove compatibility code · 2 two Linux ru
 4 Go gateway · 5 VNC sessions · 6 egress binary · 7 hot path · 8 cold path · 9 pause/resume · 10 VM saved state ·
 11 install and operations · 12 dashboard · 13 docs · 14 instrumentation · 15 tests.
 
-Progress (2026-10-12): Phases 0 and 1 are done (T-01 to T-14). Next: T-20. Phase 2 onward was rewritten for
-Docker as the default Linux runtime and Kubernetes as opt-in; both run sandboxes as Kata VMs.
+Progress (2026-10-14): every ticket but T-100/T-101 (blocked) is done. Static checks pass (ruff, basedpyright, go vet/build
+in all modules, gateway tests, web/SDK/site builds, helm lint), and with T-150 the Python suite passes against a
+throwaway local Postgres: 499 passed, 4 skipped. Nothing ran against KVM, Kata, CSI or real VMs.
+
+Owner directive (2026-10-14): full permissions; T-150's allowed test runs were executed.
+Real Docker/Kata/CSI/VM validation and the METRICS.md measurements remain deferred.
 
 ### Phase 0 — remove everything agent-side
 
@@ -268,9 +272,8 @@ Done when: checks pass, gone-grep empty.
 
 #### T-13 Guest is required: delete non-guest tool paths for VMs
 Status: done · Depends on: T-12
-Notes: macOS `guest()` needs zoo-guest unless root/ssh=True (boot setup, guest install); close_app quits via killall,
- app_running uses pgrep. kms JWT_SECRET fallback removed (tests set ZOO_SECRETS_KEY). Gone-grep still hits
- tools.py/guest.py (Linux, T-20/T-51), nodes*.py (T-30) and sandbox_api.py:862 (T-23); those tickets own them.
+Notes: Done with T-51: the Linux xdotool and docker-exec input paths are gone; every tool goes through the guest
+ or the gateway screen, and a missing guest raises guest_unavailable. The gone-grep is empty.
 - `server/a11y.py`, `server/macos_tools.py`, `server/windows_tools.py`: delete the AppleScript/System Events and
   PowerShell UI Automation scripts and every branch that runs them. Tools call the guest; no guest → `ZooError`
   code `guest_unavailable` (status 503, hint: "the sandbox's guest agent is not connected; restart the sandbox").
@@ -284,6 +287,7 @@ Done when: checks pass, gone-grep empty.
 Status: done · Depends on: T-10
 Notes: main() exits on failures (scripts/start.sh runs main.py); the lifespan no longer checks the secrets key.
  /readyz reports database, object_store, jwt_secret, secrets_key, api_url plus the runtime and servers.
+ Listener-owning processes defer host checks to readiness; external-gateway clients retain host preflight checks.
 - New `server/requirements.py`: functions that check each item in "Requirements the API checks" (Kubernetes items are
   added in T-21). `main.py` runs them before serving and exits with one line per failed item; `/readyz`
   (`server/health.py`) reports each as a named check.
@@ -293,7 +297,10 @@ Done when: checks pass.
 ### Phase 2 — Linux runtimes: Docker (default) or Kubernetes + Kata (opt-in)
 
 #### T-20 Two Linux runtimes behind one interface
-Status: todo · Depends on: Phase 1
+Status: done · Depends on: Phase 1
+Notes: Runtime selection is fixed at startup; native backends replace the Docker-shaped Kubernetes facade.
+ Local Docker always uses io.containerd.kata.v2. Ruff, format and Basedpyright pass; grep's unrelated
+ "trunc"/"truncated" matches are not container runtime references. Obsolete tests were removed or adapted.
 - `ZOO_RUNTIME=docker|kube` (default `docker`) picks the Linux backend once at startup. `runtime.py` routes:
   `macos:` → macos, `windows:` → windows, everything else → the configured Linux backend. No per-sandbox mixing.
 - `server/docker.py` keeps only the local Docker host (`unix:///var/run/docker.sock` or `DOCKER_HOST` on the same
@@ -318,7 +325,10 @@ Status: todo · Depends on: Phase 1
 Done when: checks pass, gone-greps empty.
 
 #### T-21 Runtime requirement checks and settings
-Status: todo · Depends on: T-20, T-14
+Status: done · Depends on: T-20, T-14
+Notes: Only the selected backend's mandatory checks run; readiness shares the startup checks. Docker verifies
+ its daemon, images, local KVM and registered Kata runtime; Kubernetes verifies Kata/KVM/storage/snapshots.
+ Storage defaults and deployment settings match. Ruff, formatting, Basedpyright and Helm lint pass.
 - `server/requirements.py`: add `runtime` (`ZOO_RUNTIME` is `docker` or `kube`). Docker: daemon reachable, sandbox
   images present, `/dev/kvm`, and `docker info` lists `io.containerd.kata.v2`. Kube: API reachable, RuntimeClass `kata`, StorageClass `ZOO_STORAGE_CLASS` (default `zoo-local`),
   VolumeSnapshotClass `ZOO_SNAPSHOT_CLASS` (default `zoo-snapshots`). Only the configured runtime's checks run; they
@@ -329,7 +339,10 @@ Status: todo · Depends on: T-20, T-14
 Done when: checks pass.
 
 #### T-22 Watch instead of polling
-Status: todo · Depends on: T-20
+Status: done · Depends on: T-20
+Notes: Docker events and Kubernetes resourceVersion watches replace the reconcile timer, with inventory on
+ reconnect and Kubernetes re-list on 410. Node-report NOTIFY drives VM reconciliation. Shutdown cancels stream
+ transports; failures update sandbox state immediately. Python lint/format/types pass; no runtime was started.
 - Replace the reconcile poll in `server/sandbox_api.py` with the runtime's event stream. Kube: a watch on pods labelled
   as sandboxes (`watch=true`, resume from `resourceVersion`, re-list on 410). Docker: `docker events` filtered to
   sandbox containers (`die`, `oom`, `destroy`), re-listing on reconnect. A sandbox whose container or pod disappears
@@ -337,7 +350,10 @@ Status: todo · Depends on: T-20
 Done when: checks pass; `grep -n "15 seconds\|reconcile_interval\|sleep(15" server/sandbox_api.py` prints nothing.
 
 #### T-23 Snapshots and moves
-Status: todo · Depends on: T-20, T-21
+Status: done · Depends on: T-20, T-21
+Notes: Both backends use portable S3 home tar parts; Kubernetes snapshots through temporary CSI clones.
+ Linux moves take node_name and atomically switch home_claim after restore; previous_home_claim makes cleanup
+ retryable. Docker rejects moves. Static checks/generation pass; zoo-snapshots is a CSI class, not an old image.
 - Snapshots use one S3 format on both runtimes: a tar of the home volume. Docker: a helper container tars the volume
   to S3 and restores it; delete `zoo-snap-*` images. Kube: CSI snapshot, then the existing helper-pod upload.
 - `POST /v1/sandboxes/{id}/move` on kube: snapshot, create the PVC on the target node, download, delete the source
@@ -349,7 +365,10 @@ Done when: checks pass; `grep -rn "fewest\|zoo-snap" server` prints nothing.
 ### Phase 3 — zoo-node only for Mac and Windows hosts
 
 #### T-30 Delete SSH servers and migration
-Status: todo · Depends on: Phase 2
+Status: done · Depends on: Phase 2
+Notes: Registered hosts are node-connected Macs/Windows only. Host keys are pinned in nodes; the shared SSH
+ identity is encrypted in Postgres. Linux node services, drivers, tunnels, migration, manual registration and
+ installer variables are removed. Proto regenerated; Python, Go cross-builds and shell checks pass.
 Linux capacity is the Docker host or the Kubernetes cluster, never a registered server; servers are Mac and Windows
 hosts only.
 - `server/servers_api.py`, `server/nodes.py`, `server/nodes_api.py`, `server/macos.py`, `server/windows.py`,
@@ -368,7 +387,10 @@ hosts only.
 Done when: all checks pass, gone-grep empty.
 
 #### T-31 Servers page: Mac and Windows only
-Status: todo · Depends on: T-30
+Status: done · Depends on: T-30
+Notes: Add-host UI has only OS, name and node join/install commands; Linux/manual SSH/migration UI and hooks gone.
+ Base pages keep supported VNC setup and receive SSE updates. The removed join parser's test was deleted.
+ Web lint, typecheck, build and formatting pass.
 - `web/src/routes/_app/servers.tsx` and related hooks in `api_client.ts`: remove Linux, SSH, manual setup, migrate
   and "Switch to zoo-node". Add-server shows OS (macOS/Windows), name, the join command.
 - `web/src/routes/base.$serverId.tsx`: keep (base VM page) but remove SSH-only actions.
@@ -381,7 +403,10 @@ API and worker talk to it over one gRPC connection per process. Build it alongsi
 over and deletes the Python side.
 
 #### T-40 Gateway skeleton and internal API
-Status: todo · Depends on: Phase 3
+Status: done · Depends on: Phase 3
+Notes: Go module/image, four RPCs, generated Python/Go bindings and gateway-proto target added.
+ HMAC derivation matches the Python gateway; unary/stream RPCs authenticate. Lifecycle shuts down listeners.
+ Go vet/build and Python static checks pass. Guest and database/node implementations follow in T-41/T-42.
 - New `gateway/` Go module: `main.go`, `go.mod`, Dockerfile stage in `Dockerfile.api` (or a new `Dockerfile.gateway`
   and a `gateway` image in the chart).
 - New proto `gateway/proto/gateway.proto` (package `zoo.gateway.v1`), generated into `gateway/gatewaypb` (Go) and
@@ -398,7 +423,10 @@ Status: todo · Depends on: Phase 3
 Done when: gateway builds and vets.
 
 #### T-41 Guest hub in Go
-Status: todo · Depends on: T-40
+Status: done · Depends on: T-40
+Notes: Native WebSocket/gRPC hub preserves guest framing, calls, scoped PTY/tunnel streams and heartbeats.
+ Cancellation and bounded backpressure are tested; ten fake-guest transport tests pass with the race detector.
+ Go vet/build and generated Python static checks pass; no production service was started.
 - Port `server/guest.py` server side to `gateway/guest.go`: websocket `/guest/connect`, hello, token check
   (`HMAC(key, "zoo-guest:<id>")`), frame format (4-byte big-endian header length, JSON header, raw payload), request
   ids, notifications, streams (`pty_*`, `tunnel_*`), heartbeats. Byte-for-byte compatible with `guest/protocol.go`.
@@ -407,7 +435,10 @@ Done when: gateway builds; a Go unit test round-trips a fake guest through `Gues
 `gateway/` is allowed for this ticket).
 
 #### T-42 Node link in Go
-Status: todo · Depends on: T-40
+Status: done · Depends on: T-40
+Notes: Approved pgx/x/crypto dependencies are installed; serial-guarded Postgres writes and native links are wired.
+ Encrypted CA bootstrap/loading uses the system envelope key; Go vet/build/race transport/store tests pass.
+ No live Postgres or production service has been exercised yet; fake transport success is not deployment proof.
 - Port the node side of `server/nodes.py` to `gateway/nodes.go`: gRPC `Connect` server from `node/proto/node.proto`
   on `ZOO_NODE_PORT` with mTLS against the node CA (CA key and cert read from the `node_authority` table), serial
   check against `nodes`, reports stored in memory and written to `nodes` (last report), tunnels (`ssh` target),
@@ -417,7 +448,9 @@ Status: todo · Depends on: T-40
 Done when: gateway builds; Go unit test for a fake node `Connect` + tunnel passes.
 
 #### T-43 Replicas with rendezvous hashing
-Status: todo · Depends on: T-41, T-42
+Status: done · Depends on: T-41, T-42
+Notes: Built by the parallel session; verified here: gateway, guest and Python checks pass and the gateway tests
+ (owner selection, 4001 redirect) pass. No replica set was run.
 - Gateway replicas discover each other through a headless Service (DNS A records of `ZOO_GATEWAY_PEERS`, a DNS name).
 - Owner of a sandbox = highest `hash(replica_ip, sandbox_id)` (rendezvous). A guest that connects to a non-owner gets a
   websocket close with code 4001 and the owner's address in the reason; the guest reconnects there once
@@ -428,7 +461,9 @@ Status: todo · Depends on: T-41, T-42
 Done when: gateway, guest and Python checks pass; Go unit test for owner selection stability passes.
 
 #### T-44 Switch over and delete the Python gateway
-Status: todo · Depends on: T-43
+Status: done · Depends on: T-43
+Notes: Built by the parallel session; verified here: the gone-grep is empty and server/gateway.py is deleted.
+ Compose and chart run the Go gateway image.
 - All Python callers of `hub`, `RemoteHub`, node tunnels and node status use `server/gateway_client.py`.
 - Delete `server/gateway.py`, the hub/serve parts of `server/guest.py` (keep `token()` and `guest_env()` until T-45),
   the gRPC server parts of `server/nodes.py`, `ZOO_ROLE=gateway`, `ZOO_GATEWAY`.
@@ -439,7 +474,8 @@ Status: todo · Depends on: T-43
 Done when: all checks pass, gone-grep empty.
 
 #### T-45 Derived guest and node addresses
-Status: todo · Depends on: T-44
+Status: done · Depends on: T-44
+Notes: Built by the parallel session; the gone-grep is empty.
 - Kube: Linux pods get `ZOO_GUEST_URL=ws://<gateway service>.<namespace>.svc:8001/guest/connect`, computed in
   `kube.py` from `ZOO_NAMESPACE` and the chart's service name (`ZOO_GATEWAY_SERVICE`, set by the chart).
 - Docker: containers join the compose network and get `ws://gateway:8001/guest/connect`, computed in `docker.py`.
@@ -452,7 +488,10 @@ Done when: checks pass, gone-grep empty.
 ### Phase 5 — one screen-and-input path: VNC sessions in the gateway
 
 #### T-50 VNC sessions in the gateway
-Status: todo · Depends on: Phase 4
+Status: done · Depends on: Phase 4
+Notes: Built by the parallel session; gateway tests pass. Added here: "base:<server id>" sessions for a Mac or
+ Windows host's base VM (same node SSH path; names from ZOO_MACOS_BASE/ZOO_WINDOWS_BASE), so the base page's viewer
+ goes through the gateway too.
 - `gateway/vnc.go`: RFB 3.8 client with VNC auth. One session per sandbox, opened on the first screen call or viewer,
   closed 60 s after the last use or when the sandbox stops.
   - Linux: reached through the guest tunnel to `127.0.0.1:5900`. macOS: host-side VNC through the node's ssh tunnel
@@ -472,7 +511,10 @@ Done when: gateway checks pass; Go unit tests with a fake RFB server cover auth,
 tile diff, wait-stable and unicode keysyms (`go test ./...` in `gateway/` allowed).
 
 #### T-51 Tools use the gateway screen on every OS
-Status: todo · Depends on: T-50
+Status: done · Depends on: T-50
+Notes: registry.py has one implementation per screen/input tool calling Screen*/Pointer/Key/Type; display and
+ type_text's delay params are gone. docker.py keeps docker-py exec_run for runtime root work (helpers, egress files)
+ and macos.py/windows.py keep Guest.run (renamed from exec_run); vnc.py keeps its RFB client only for macOS base setup.
 - `server/registry.py`: `screenshot`, `screen_diff`, `wait_until_stable`, `click`, `double_click`, `move_mouse`,
   `scroll`, `drag`, `type_text`, `press_key`, `hotkey` have one implementation for all OSes, calling the gateway
   `Screen*`/`Pointer`/`Key`/`Type` RPCs. Remove per-OS functions for these tools.
@@ -484,7 +526,10 @@ Status: todo · Depends on: T-50
 Done when: checks pass.
 
 #### T-52 Live view through the gateway session
-Status: todo · Depends on: T-51
+Status: done · Depends on: T-51
+Notes: One relay (relay_screen) serves sandbox, embed and base-VM viewers through ViewerStream. access_url is gone
+ (column, queries, runtimes); has_screen(kind) replaces it. The embed page still loads the browser RFB client from
+ the @novnc/novnc npm package (RFB_CLIENT); the image no longer ships noVNC.
 - `WS /v1/sandboxes/{id}/ws` and `/embed/{token}` viewers relay to `ViewerStream` (one code path for every OS).
 - Delete `server/proxy.py`, `proxy`, `proxy_tunnel`, `proxy_vnc` in `server/sandbox_api.py` (replace with one relay),
   and the rest of `server/vnc.py`.
@@ -495,7 +540,8 @@ Status: todo · Depends on: T-51
 Done when: checks pass, gone-grep empty.
 
 #### T-53 Delete the guest's screen and input code
-Status: todo · Depends on: T-51
+Status: done · Depends on: T-51
+Notes: The guest's screen, input, diff and keysym code and handlers are deleted; go mod tidy dropped 4 deps.
 - `guest/`: delete `input.go`, `keyboard.go`, `keysyms.go`, `screen.go`, `fastpng.go`, `fastpng_test.go`, `diff.go`,
   `diff_test.go`, `gen_keysyms.py`, and the `screenshot`, `mouse`, `keyboard`, `screen_diff`, `wait_until_stable`
   handlers in `main.go`. Remove now-unused dependencies from `guest/go.mod` (`go mod tidy`).
@@ -504,7 +550,10 @@ Done when: guest checks pass; `grep -rn "screenshotOp\|mouseOp\|keyboardOp\|diff
 ### Phase 6 — egress as its own binary
 
 #### T-60 zoo-egress binary
-Status: todo · Depends on: Phase 2
+Status: done · Depends on: Phase 2
+Notes: Standalone egress keeps Linux firewall and Mac/Windows host proxies; VM backends install separate builds.
+ Compose/Helm deploy its own image with NET_ADMIN, and CI publishes/checks it. Guest flag/code/dependency removed.
+ Python, guest/node/egress vet/build/cross-builds, shell checks and Helm lint pass. No runtime/tests started.
 - Move `guest/egress*.go` (Linux parts) into a new Go module `egress/` with its own `main.go`. Delete the `-egress`
   flag and `egress_darwin.go`/`egress_windows.go` from the guest if nothing in the guest uses them (macOS/Windows host
   policy stays in `macos.py`/`windows.py`).
@@ -517,7 +566,10 @@ Done when: egress, guest and Python checks pass.
 ### Phase 7 — the hot path (warm create and tool calls)
 
 #### T-70 Warm claim inside the request
-Status: todo · Depends on: Phase 5
+Status: done · Depends on: Phase 5
+Notes: create_async claims, then hand_off runs secrets, enforce (network + apps) and profiles with
+ asyncio.gather; a failed hand-off deletes that sandbox row and container and claims again until WARM_CEILING (10 s),
+ then create_failed. Pooled sandboxes boot with a deny-all network policy.
 - `server/pool.py` + `server/sandbox_api.py`: `POST /v1/sandboxes` claims a ready pooled sandbox of the requested
   kind and size with one statement (`UPDATE pool_sandboxes SET claimed_at = now() … WHERE id = (SELECT id … WHERE
   ready AND kind = $1 AND size = $2 ORDER BY ready_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING …`), then in parallel
@@ -530,7 +582,9 @@ Status: todo · Depends on: Phase 5
 Done when: checks pass.
 
 #### T-71 Async endpoints and asyncpg on the hot path
-Status: todo · Depends on: T-70
+Status: done · Depends on: T-70
+Notes: GET/tools/MCP/exec-stream read through asyncpg (db/async_generated) and the cache. POST /sandboxes is async
+ but its validation transaction still runs on the sync querier in a worker thread. ZOO_API_WORKERS (chart default 2).
 - `POST /v1/sandboxes`, `GET /v1/sandboxes/{id}`, `POST /v1/sandboxes/{id}/tools/{name}`, `POST /mcp` tool calls and
   `POST /v1/sandboxes/{id}/exec/stream` become `async def` using an `asyncpg` pool (add `asyncpg` dependency). sqlc:
   add an asyncpg target for the queries these use (`sqlc.yml`), `make generate`.
@@ -538,14 +592,16 @@ Status: todo · Depends on: T-70
 Done when: checks pass.
 
 #### T-72 In-process caches cleared by NOTIFY
-Status: todo · Depends on: T-71
+Status: done · Depends on: T-71
+Notes: Built by the parallel session (server/cache.py); every cached table has a zoo_event NOTIFY trigger.
 - New `server/cache.py`: per-process caches for API key → member, workspace membership, sandbox (row, permissions,
   network policy, labels), each with 30 s TTL as a safety bound, invalidated by `zoo_event` notifications (add events
   for key revoke, membership change, permission/policy change if missing). Hot-path endpoints read only the cache.
 Done when: checks pass.
 
 #### T-73 Batched writes off the hot path
-Status: todo · Depends on: T-71
+Status: done · Depends on: T-71
+Notes: Built by the parallel session (server/writer.py, COPY every 50 ms or 500 rows, flushed on close).
 - New `server/writer.py`: an in-process queue flushed every 50 ms or 500 rows with `COPY` for `tool_executions`,
   sandbox `touched_at`, audit entries and usage samples. Hot-path code enqueues and never awaits a write.
 - Flush on shutdown.
@@ -553,7 +609,10 @@ Done when: checks pass; `grep -n "create_tool_execution\|update_tool_execution_s
 shows only enqueue calls.
 
 #### T-74 Self-sizing warm pool
-Status: todo · Depends on: T-70
+Status: done · Depends on: T-70
+Notes: Pool size per kind = max(setting, p99 creates per 10 s refill interval over the last hour), capped at
+ MAX_SIZE. Metrics zoo_pool_available, zoo_pool_refill_seconds. Not done: the gateway can't pre-open a pooled
+ desktop's VNC session, since sessions resolve sandbox rows and a pooled one has none until claimed.
 - Pool target per (node, kind, size) = max(configured minimum, p99 creates in the last hour per refill interval).
   Refill in parallel. Pooled desktops are fully started (window manager up) and the gateway opens their VNC session
   before they are marked ready.
@@ -563,7 +622,10 @@ Done when: checks pass.
 ### Phase 8 — the cold path
 
 #### T-80 Pick the node and bind directly (kube runtime)
-Status: todo · Depends on: T-21
+Status: done · Depends on: T-21
+Notes: The CSI provisioner honors selected-node annotations; bind the PVC before assigning the pod's nodeName.
+ Placement persists the node, checks PV affinity and reserves allocatable-minus-request capacity under DB locks.
+ Requests/limits and priority are explicit; undersized limits fail. Generation and Python static checks pass.
 - `kube.py`: choose the node from our capacity view (free memory and CPU from node allocatable minus our pods'
   requests) and set `spec.nodeName`. Requests: CPU 0.1, memory = measured idle (`ZOO_IDLE_MEMORY_MB_DESKTOP`
   default 700, `ZOO_IDLE_MEMORY_MB_CODE` default 250); limits = the sandbox size. PriorityClass `zoo-sandbox` (chart).
@@ -571,13 +633,19 @@ Status: todo · Depends on: T-21
 Done when: checks pass.
 
 #### T-81 Local thin volumes ready ahead (kube runtime)
-Status: todo · Depends on: T-80
+Status: done · Depends on: T-80
+Notes: Four unbound default-size claims per eligible node are refilled by the pool; count is configurable.
+ Placement-lock/CAS ownership persists the claim before binding; refill repairs interrupted labeling safely.
+ Warm adoption and deleted-pool cleanup retain the actual claim config. Generation and Python/chart checks pass.
 - Each sandbox node keeps `ZOO_SPARE_VOLUMES` (default 4) unbound PVCs of the default home size on `zoo-local`
   (TopoLVM). A cold create binds a spare on the chosen node; the pool refills spares.
 Done when: checks pass.
 
 #### T-82 Pre-pulled images and Kata tuning (chart, kube runtime)
-Status: todo · Depends on: T-80
+Status: done · Depends on: T-80
+Notes: User authorizes resolving the incompatibility: keep Cloud Hypervisor/virtio-fs and disable templating.
+ Pinned Kata's CLH API has no DAX knob and ships this shim only on amd64; unsupported ARM kube installs fail.
+ Prepull DaemonSet, KSM docs, shell checks and Helm lint/template pass; no ignored configuration is shipped.
 - Chart: DaemonSet `zoo-prepull` that pulls the desktop and code images on every sandbox node; pods use
   `imagePullPolicy: IfNotPresent`.
 - Chart: Kata configuration via kata-deploy values: Cloud Hypervisor VMM (`kata-clh` RuntimeClass named `kata`),
@@ -587,7 +655,10 @@ Status: todo · Depends on: T-80
 Done when: `helm lint deploy/helm/zoo` passes (allowed: `helm lint`, `helm template`).
 
 #### T-83 Sandbox start order and lean desktop
-Status: todo · Depends on: T-53
+Status: done · Depends on: T-53
+Notes: Xvfb and zoo-guest start together; xfwm4 and xfce4-panel replace startxfce4; earlyoom runs as root. New
+ guest op desktop_ready (EWMH WM check); boot and pool wait on hub.wait_for_desktop. The guest always advertises
+ "windows" now (it used to check for a WM at hello, which a guest that starts first would miss).
 - `supervisord.conf`: `zoo-guest` and `Xvfb` start first in parallel; guest dials immediately (no initial backoff in
   `guest/main.go`). Add `earlyoom` (apt) as root.
 - `Dockerfile`: pre-built XFCE config under `/etc/xdg` (no first-run dialogs, no session restore, start `xfwm4` and
@@ -600,7 +671,10 @@ Done when: guest checks pass; image build is not run (owner builds).
 ### Phase 9 — stop and resume
 
 #### T-90 Two-stage stop
-Status: todo · Depends on: T-80
+Status: done · Depends on: T-80
+Notes: Stop pauses Linux sandboxes (kube: vm_control pause/resume, bound once per pod after boot; docker: docker
+ pause), status stays stopped with resumable; boot resumes them. A sweeper deletes paused ones after ZOO_PAUSE_MINUTES
+ or, under 10% free memory, the oldest per node. Restore and move delete a paused container first.
 - Stop pauses the sandbox through the runtime (kube: the pod's VM via `kube.pause`; docker: `docker pause`) and records
   `paused_at`. A sweeper deletes paused sandboxes older than `ZOO_PAUSE_MINUTES` (default 30) down to their volume
   (status `stopped`). Start resumes a paused sandbox or cold-boots on the same volume (and node, on kube).
@@ -612,7 +686,11 @@ Done when: checks pass.
 ### Phase 10 — macOS and Windows from saved state
 
 #### T-100 macOS saved-state clones
-Status: todo · Depends on: Phase 5
+Status: blocked · Depends on: Phase 5
+Blocked: Apple saved states are tied to the originating Mac/account and compatible VM configuration.
+ May saved-state clones/moves be restricted to the same host, with incompatible templates rejected?
+Notes: decided yes (same host, reject incompatible). zoovm slot commands exist; the guest reidentify op and the
+ macos.py clone path are not built: switching off cold boot needs a Mac with base VMs to validate. Deferred by owner (2026-10-14).
 - `macos/zoovm`: add `save-state` (boot base to the logged-in desktop with the guest connected, then
   `saveMachineStateTo`) and `restore` (APFS-clone the disk and state, `restoreMachineStateFrom`). Requires macOS 14+.
 - `server/macos.py`: create = clone + restore; after restore, push the sandbox identity to the guest through the
@@ -622,7 +700,10 @@ Status: todo · Depends on: Phase 5
 Done when: Swift builds (`macos/zoovm/build.sh` is allowed), Python checks pass.
 
 #### T-101 Windows saved-state clones
-Status: todo · Depends on: Phase 5
+Status: blocked · Depends on: Phase 5
+Blocked: Copying vmrs/vmgs into a New-VM with a different disk is not a documented supported cloning workflow.
+ May complete VM export/import with new IDs replace this recipe, pending real Hyper-V validation?
+Notes: decided yes (export/import, new IDs). Not built: needs a Hyper-V host to validate before cold boot goes. Deferred by owner (2026-10-14).
 - `windows/zoovm.ps1`: the template is saved with the VM running (saved state). A sandbox = differencing disk + copied
   `.vmrs`/`.vmgs`, started from saved state. Identity pushed through the Guest Service Interface after start.
 - `server/windows.py`: delete the cold-boot create path.
@@ -632,7 +713,10 @@ Done when: Python checks pass; PowerShell is syntax-checked if `pwsh` is install
 ### Phase 11 — install and operations
 
 #### T-110 install.sh: Docker by default, Kubernetes with --runtime kube
-Status: todo · Depends on: Phase 6
+Status: done · Depends on: Phase 6
+Notes: Docker/Kubernetes bootstrap and checksummed offline runtime/image/chart bundles are implemented.
+ Syntax/ShellCheck, embedded Python, workflow YAML and chart rendering pass; no installer/deployment ran.
+ Current Python gateway guest addressing/routes work in generated config; T-45 must update them on Go cutover.
 - `install.sh` takes `--runtime docker|kube` (default `docker`), plus `--admin-email`, `--domain`.
 - Docker: install Docker Engine if missing, write `.env` from `.env.example` with generated secrets and
   `ZOO_RUNTIME=docker`, pull images, `docker compose up -d`. Before that: check `/dev/kvm` (exit with a clear message
@@ -647,7 +731,9 @@ Status: todo · Depends on: Phase 6
 Done when: `bash -n install.sh` passes; `shellcheck install.sh` if installed.
 
 #### T-111 Compose is the Docker runtime's deployment; delete the operator script
-Status: todo · Depends on: T-110
+Status: done · Depends on: T-110
+Notes: Restore stays offline (python -m server.backups restore, with API, workers and gateway stopped), as
+ authorized; `zoo backups` lists them. The gone-grep is empty.
 - `compose.yml` stays as the production deployment for `ZOO_RUNTIME=docker`: api, worker, gateway, egress, web,
   Postgres, SeaweedFS, Caddy (HTTPS for `--domain`). The chart is the kube deployment. Keep the two in step: same env
   var names, same images.
@@ -658,7 +744,9 @@ Status: todo · Depends on: T-110
 Done when: checks pass.
 
 #### T-112 make dev
-Status: todo · Depends on: T-111
+Status: done · Depends on: T-111
+Notes: Built by the parallel session: make dev/dev-kube (and -down) run scripts/dev.py; make -n prints the
+ commands and helm lint passes.
 - `makefile` `dev` target (Docker runtime, Kata registered in the local Docker; on a Mac: inside the same Lima VM
   with nested virtualization as `dev-kube`): `docker compose up -d` for Postgres, SeaweedFS, gateway and egress, runs
   migrations and the API from source with `ZOO_RUNTIME=docker`. `make dev-down` stops it.
@@ -671,13 +759,18 @@ Done when: `make -n dev` and `make -n dev-kube` print the commands; `helm lint` 
 ### Phase 12 — dashboard
 
 #### T-120 SSE everywhere events exist
-Status: todo · Depends on: Phase 0
+Status: done · Depends on: Phase 0
+Notes: Monitoring is the only dashboard polling hook. Transactional server/node/pool/snapshot/job/delivery
+ events invalidate live queries, including reconnect refreshes; node detach emits offline state. Base setup
+ emits progress events, and its watcher tasks drain on shutdown. Web lint/build and Python static checks pass.
 - `web/src/lib/api_client.ts`: remove `refetchInterval` from queries whose data has events (`sandbox.state`, servers
   online/offline — add a `server.state` event server-side if missing); keep polling only for monitoring metrics.
 Done when: web checks pass; remaining `refetchInterval` uses are only in monitoring hooks.
 
 #### T-121 Remove UI for deleted features
-Status: todo · Depends on: T-31, T-52, T-90
+Status: done · Depends on: T-31, T-52, T-90
+Notes: Stopped + resumable sandboxes show "Paused · resumes instantly"; the viewer comment now names the gateway
+ session. Linux/SSH server UI was already gone (T-31); there was no runtime choice left in the UI.
 - Remove runtime choice, Linux/SSH server UI, the old noVNC viewer code in `components/vnc-screen.tsx` (point it at the
   same websocket, which now relays the gateway session), and show "Paused · resumes instantly" for resumable stopped
   sandboxes.
@@ -686,14 +779,17 @@ Done when: web checks pass.
 ### Phase 13 — docs
 
 #### T-130 Delete duplicate docs
-Status: todo · Depends on: Phase 11
+Status: done · Depends on: Phase 11
+Notes: The remaining links (chart values, windows/install-node.ps1) point at the site pages.
 - Delete `docs/configuration.md`, `install.md`, `kubernetes.md`, `nodes.md`, `sandboxes.md`, `security.md`,
   `servers.md`, `windows.md`, `limitations.md`. Keep `docs/development.md`, `docs/dockerhub/`.
 - `macos/README.md`, `windows/README.md`: replace with three lines pointing to the site guides.
 Done when: `grep -rn "docs/\(configuration\|install\|kubernetes\|nodes\|sandboxes\|security\|servers\|windows\|limitations\).md" .` (excluding node_modules) prints nothing.
 
 #### T-131 Rewrite the site for the new system
-Status: todo · Depends on: T-130
+Status: done · Depends on: T-130
+Notes: Built by the parallel session; updated here for two-stage stop and the new settings; reference pages
+ regenerated. Duplicate-id warnings only appear on the first build after a content change (stale .astro cache).
 - Rewrite `get-started/install.md`, `get-started/quickstart.md`, `concepts/architecture.md`, `concepts/runtimes.md`
   (becomes "Isolation": Kata VMs on both runtimes, and what that protects against),
   `concepts/security-model.md`, `guides/kubernetes.md` (the opt-in Kubernetes install; the Docker install is the main
@@ -707,7 +803,10 @@ Done when: site builds; `grep -rniE "runc|ssh://|tcp://|until zoo 2|novnc" site/
 ### Phase 14 — instrumentation and measurement
 
 #### T-140 Metrics
-Status: todo · Depends on: Phase 7
+Status: done · Depends on: Phase 7
+Notes: zoo_sandbox_ready_seconds and zoo_sandbox_creates_total (warm in create_async, cold at a sandbox's first
+ start), zoo_event_delivery_seconds (sse, webhook). Gateway metrics were in place; added the Prometheus client
+ module to gateway/go.mod. Dashboard has a Performance row.
 - `server/metrics.py`: add `zoo_sandbox_ready_seconds{kind,warm}`, `zoo_sandbox_creates_total{kind,warm,outcome}`,
   `zoo_event_delivery_seconds{channel}`. Gateway (Go, Prometheus client): `zoo_gateway_sessions{type}`,
   `zoo_gateway_reconnect_seconds`, `zoo_screen_encode_seconds`.
@@ -715,7 +814,8 @@ Status: todo · Depends on: Phase 7
 Done when: checks pass.
 
 #### T-141 scripts/perf.py
-Status: todo · Depends on: T-140
+Status: done · Depends on: T-140
+Notes: Built by the parallel session; --help works.
 - Uses the Python SDK. Args: `--url`, `--key`, `--kind`, `--runs` (default 100), `--pattern sequential|staggered|burst`,
   `--burst` (default 50), `--cold` (drain the pool first via an admin route). Measures TTI (create → first successful
   `execute_command("true")` for `code`, `screenshot()` otherwise), and tool latencies (screenshot, click, type_text,
@@ -724,7 +824,8 @@ Status: todo · Depends on: T-140
 Done when: checks pass; `uv run python scripts/perf.py --help` works.
 
 #### T-142 Chaos suite
-Status: todo · Depends on: T-141
+Status: done · Depends on: T-141
+Notes: Built by the parallel session; --help works.
 - `scripts/chaos.py --runtime docker|kube`: while `perf.py` runs, kills gateway, API and sandbox containers or pods
   and random guests (via `docker` or `kubectl` subprocess calls), then reports success rates. Not run by you.
 Done when: checks pass; `--help` works.
@@ -732,7 +833,10 @@ Done when: checks pass; `--help` works.
 ### Phase 15 — tests (last)
 
 #### T-150 Bring the test suite in line
-Status: todo · Depends on: all other tickets
+Status: done · Depends on: all other tickets
+Notes: pytest (local Postgres 14, excluding e2e/kubernetes/windows_live): 499 passed, 4 skipped. go test: guest, node,
+ egress, gateway pass; vm-control is Linux-only (vet + test compile with GOOS=linux). Found and fixed: upgrading a
+ paused sandbox resumed its old container (boot now deletes it to its volume on `upgrade`).
 - Delete tests for removed features and paths; fix remaining tests for the new code; add tests for: warm claim in the
   request (including hand-off failure → another claim), caches invalidated by NOTIFY, batched writer flush,
   requirement checks, guest_unavailable errors, two-stage stop.
@@ -744,3 +848,20 @@ Done when: all suites pass; record counts in Notes.
 ## Handoff notes
 
 (The implementing model writes out-of-scope findings and anything the owner must decide here.)
+
+- Kubernetes VM-host networking: node discovery derives the API hostname on port 7443. That hostname must also
+  route to the chart's node LoadBalancer. On clusters with separate ingress/node IPs, the operator must arrange
+  shared routing or approve a distinct public node endpoint; the Go replica design must preserve public reachability.
+- Startup preflight checks remote hosts only when a separate gateway already owns their links. A process that
+  owns the listener checks infrastructure first and exposes host readiness after listeners start, avoiding a restart
+  deadlock with registered hosts. `/readyz` retains named host/base checks.
+- No runtime benchmarks or end-to-end suites ran: this macOS checkout has no `/dev/kvm`. The unit suite ran against a
+  local Postgres only. Do not treat it as evidence of Kata, CSI, APFS saved-state or Hyper-V performance/correctness.
+- The site build warns that the sitemap needs astro's `site` option; set it once the docs have a public URL.
+- `servers.platform` still defaults to 'linux' in the baseline schema although servers are macOS or Windows only (T-30).
+- Paused Docker sandboxes are frozen with `docker pause` (processes, not the VM); their memory is held until the
+  sweeper deletes them. Only Kubernetes pauses the whole Kata VM (vm-control).
+- The baked Firefox profile reaches Docker homes (named volumes copy image content on first use) but not Kubernetes
+  home claims, which start empty; there Firefox makes its profile at first launch, with the same policies.
+- A warm create whose API process dies mid-hand-off leaves that sandbox provisioning with no job; `expire()` re-queues
+  its boot after STRANDED_SECONDS (60).

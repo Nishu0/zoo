@@ -10,8 +10,8 @@ The API is served under `/v1`: `https://zoo.example.com/v1/sandboxes`.
 Within a version, changes only add: new endpoints, new optional fields, new error codes. Anything else ships as a new
 version. Clients should ignore fields they don't know.
 
-Health checks (`/healthz`, `/readyz`), the embed page (`/embed/...`), the guest connection (`/guest/connect`) and MCP
-(`/mcp/`) aren't versioned.
+Health checks (`/healthz`, `/readyz`), the embed page (`/embed/...`) and the guest connection
+(`/guest/connect`) are not versioned. MCP uses `/mcp/`.
 
 ## Errors
 
@@ -49,8 +49,7 @@ Lists are newest first, and a cursor is a position, not an offset, so rows added
 
 ## Events
 
-`GET /v1/events/stream` is a server-sent event stream of the workspace's events (`sandbox.state`, `run.started`,
-`run.step`, `run.finished`, `takeover.started`, `takeover.ended`); reconnect with `Last-Event-ID` to get what you
+`GET /v1/events/stream` is a server-sent event stream of the workspace's events (including `sandbox.state`, server/node changes, pool changes and job progress); reconnect with `Last-Event-ID` to get what you
 missed. The same events go to [webhooks](/docs/guides/building-on-zoo/). The dashboard uses this stream instead of
 polling.
 

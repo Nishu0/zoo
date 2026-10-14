@@ -17,7 +17,7 @@ command; on macOS and Windows every command sources `~/.zoo/env` (or `env.ps1`).
 running keep the environment they started with. GUI apps don't see secrets.
 
 Secrets can carry an expiry date and a rotation interval; the Vault page,
-`GET /vault/reminders` and the worker's log flag the ones expiring or due.
+`GET /v1/vault/reminders` and the worker's log flag the ones expiring or due.
 
 ```python
 box.set_secret("GITHUB_TOKEN", "ghp_...")  # a sandbox-level secret
@@ -59,6 +59,7 @@ other.apply_profile(profile_id, version=2)  # a specific one
 
 :::note
 On macOS, Safari profiles (`Library/Containers/com.apple.Safari`) need Full Disk Access
-for `/bin/zsh` in the base VM. On Windows, Chrome and Edge profiles are encrypted with
-keys every clone of a base VM shares, so they only load into clones of the same base VM.
+for `/bin/zsh` in the base VM. On Windows, native app encryption can bind a profile to the
+account and machine identity of its reserved slot; do not assume it loads into a different
+identity or onto unrelated disks.
 :::

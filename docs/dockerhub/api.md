@@ -1,6 +1,6 @@
 # Zoo API
 
-The FastAPI server: REST API, MCP endpoint (`/mcp`), the VNC viewer proxy and the job worker that boots, stops and moves sandboxes. It drives Docker through `/var/run/docker.sock` and keeps its data in Postgres (`DATABASE_URL`) and object storage (`ZOO_OBJECT_STORE`); migrations run when it starts.
+The Python API and job worker serve versioned REST (`/v1`) and the unprefixed MCP endpoint (`/mcp/`). A separate native Go gateway owns guest/node connections and viewer transport. `ZOO_RUNTIME=docker` uses the local Docker socket and Kata QEMU; `kube` uses Kubernetes and amd64 Cloud Hypervisor Kata pods. State lives in Postgres and S3-compatible object storage. The deployment migration job completes before gateway and API startup.
 
 Part of [Zoo](https://github.com/chann44/zoo), self-hosted sandboxes for AI agents. Install a whole stack with:
 
@@ -24,7 +24,7 @@ Images are built for `linux/amd64` and `linux/arm64` and mirrored to `ghcr.io/ch
 | --- | --- |
 | `JWT_SECRET` | signs sessions |
 | `ZOO_SECRETS_KEY` | encrypts stored secrets; required for new installs |
-| `ZOO_RUNTIME` | `kata` (default) or `runc` |
+| `ZOO_RUNTIME` | `docker` (default) or `kube`; both use Kata VMs |
 | `ZOO_SANDBOX_IMAGE`, `ZOO_CODE_IMAGE` | sandbox images to launch |
 
 ## Verify

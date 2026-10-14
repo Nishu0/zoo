@@ -1,87 +1,98 @@
 ---
 title: Install
-description: One command installs Zoo on a single Ubuntu or Debian host, with Kata microVMs when the host has KVM and plain containers when it doesn't.
+description: Docker by default, Kubernetes by explicit choice, with hardware virtualization required.
 ---
 
-Zoo installs on a fresh Ubuntu or Debian server — bare metal, or a cloud VM with nested
-virtualization:
+## Default: Docker on one Linux host
+
+The installer prepares Docker Engine, the pinned Kata Go QEMU shim, KSM, release images,
+Postgres, SeaweedFS, a native Go gateway, egress, the Python API/worker and the dashboard.
+With `--domain`, Caddy provides the public HTTPS endpoint.
 
 ```bash
 curl -fsSL https://github.com/chann44/zoo/releases/latest/download/install.sh | sudo bash -s -- --admin-email you@example.com
 ```
 
-The installer:
+Use a dedicated Debian/Ubuntu systemd host. Both amd64 and arm64 Docker installations use
+Kata VMs. The daemon must list runtime `io.containerd.kata.v2`; the API uses only its local
+Docker daemon. There is no remote Linux host enrollment.
 
-1. installs Docker if it's missing;
-2. installs [Kata Containers](https://katacontainers.io) and registers it with Docker when
-   the host has KVM (`/dev/kvm`), so each sandbox boots in its own lightweight VM. Without
-   KVM, or if Kata can't start a test VM, it falls back to `runc` (plain containers sharing
-   the host kernel) and says so;
-3. writes `/opt/zoo/.env` with a fresh `JWT_SECRET` and `ZOO_SECRETS_KEY` (back the latter
-   up: it encrypts stored secrets);
-4. downloads the release's pinned `compose.yml`, pulls its signed images and starts the stack;
-5. installs the `zoo` operator CLI.
+## Requirements checked by the API
 
-It prints the dashboard URL when the stack is healthy, usually `http://<server ip>:3000`.
-The API is on `:8000`, with OpenAPI docs at `/docs`.
+- `DATABASE_URL` reachable; `ZOO_OBJECT_STORE` reachable; `JWT_SECRET`; `ZOO_SECRETS_KEY` or `ZOO_KMS`; `ZOO_API_URL`;
+  `ZOO_RUNTIME` is `docker` or `kube`.
+- `/dev/kvm` exists on every machine that runs Linux sandboxes (both runtimes; Kata needs hardware virtualization).
+- `ZOO_RUNTIME=docker`: the local Docker daemon is reachable; it lists the Kata runtime (`io.containerd.kata.v2`);
+  the sandbox images are present.
+- `ZOO_RUNTIME=kube`: Kubernetes API reachable; RuntimeClass `kata` exists; StorageClass `ZOO_STORAGE_CLASS` (default
+  `zoo-local`, TopoLVM) exists; VolumeSnapshotClass `ZOO_SNAPSHOT_CLASS` exists.
+- macOS hosts: Apple Silicon, macOS 14+, zoo-node, zoovm, base VM with guest + Accessibility grant.
+- Windows hosts: Hyper-V capable edition, zoo-node, base VM with guest.
+- Development: Docker runtime by default (`make dev`); the Kubernetes runtime on a local k3s with Kata (`make dev-kube`;
+  on a Mac: M3+, macOS 15+, Lima VM with nested virtualization).
 
-Installer options: `--version X.Y.Z`, `--dir PATH`, `--domain HOST` (HTTPS through Caddy,
-see [Custom domain and HTTPS](/docs/guides/domain-https-backups/)), and `--runc` to skip
-Kata even when KVM is present.
+Development uses `make dev` on the same Linux KVM host as Docker. M3+ Macs on macOS 15+
+can use a nested-virtualization Lima guest for Docker development. **Architecture restriction:** the pinned Kubernetes
+Cloud Hypervisor deployment requires amd64; native ARM Lima is not an equivalent setup.
+See [development documentation](https://github.com/chann44/zoo/blob/main/docs/development.md).
 
-## With KVM, and without
+Startup collects named requirement failures before serving. `/readyz` exposes readiness;
+a passing static build does not establish host/runtime readiness.
 
-| Host | Runtime | Isolation |
-| --- | --- | --- |
-| KVM present (`ls /dev/kvm`) | Kata (default) | each sandbox is its own microVM with its own kernel |
-| No KVM, or `--runc` | `runc` | plain containers sharing the host kernel, with a tighter seccomp filter and, on AppArmor hosts, the `zoo-sandbox` profile |
+## Configuration and options
 
-Check a host with `zoo doctor`: it checks KVM, the sandbox runtime, disk, ports, DNS and
-the API. On a machine without KVM — for development — set `ZOO_RUNTIME=runc` in `.env`.
+The installer creates its own configuration under the chosen directory, normally
+`/opt/zoo`. Back up both the database and encryption keys. Do not reuse placeholder secrets.
 
-Kata needs nested virtualization on cloud VMs: GCE with it enabled, Azure Dv3/Ev3 and
-newer, AWS `*.metal` or instance families that support it.
+- `--runtime docker|kube`: choose the Linux runtime; Docker is the default.
+- `--version VERSION`, `--dir PATH`, `--admin-email EMAIL`, `--domain HOST`.
+- `--check`: preflight only; do not assume it provisions missing capabilities.
+- Kubernetes storage: `--device EMPTY_BLOCK_DEVICE` or `--disk-gb GB` for a development loop file.
+- `--bundle PATH`: consume a matching architecture/release archive or its split-parts index.
 
-## From a checkout
+A loop file is for development, not durable storage. Device preparation is destructive:
+supply only the explicitly selected empty block device. For Kubernetes prerequisites and
+storage behavior, see [Kubernetes](/docs/guides/kubernetes/).
+
+## Offline bundles
+
+Release bundles contain pinned runtime binaries, charts, manifests and component images,
+not just Zoo images. Required host tools must already exist: Python, OpenSSL, zstd, tar,
+systemd, iptables and networking tools; Kubernetes also needs LVM/thin-provisioning tools.
+Bundle version, architecture, component pins and checksums must match the installer.
+
+Offline HTTPS certificates are not automatically trusted. Browsers, enrolled hosts and
+VM guests must trust the issuing CA or use a certificate from an already trusted issuer.
+Their DNS must resolve the public API and native node endpoint; host-only address entries
+do not configure a guest VM's DNS.
+
+## KSM, supported Kata tuning and whole-VM pause
+
+Enable KSM on every sandbox node and persist that setting at reboot:
 
 ```bash
-cp .env.example .env        # set JWT_SECRET and ZOO_SECRETS_KEY to two different long random strings
-docker compose up -d --build
+echo 1 | sudo tee /sys/kernel/mm/ksm/run
 ```
 
-`--build` builds the four images from the checkout instead of pulling them. To set up Kata
-by hand:
+The Kubernetes deployment pins Kata 4.2.0's Go `clh` shim, with RuntimeClass name `kata`
+and handler `kata-clh`, on amd64. Its drop-in sets `shared_fs = "virtio-fs"`,
+`enable_mem_prealloc = false`, `reclaim_guest_freed_memory = true` and
+`enable_template = false`. Disabling templating is an intentional correctness requirement,
+not an alternate implementation. The current Cloud Hypervisor filesystem API does not
+support DAX/cache windows. Docker keeps the upstream-supported Go QEMU shim.
 
-```bash
-ls /dev/kvm                                  # bare metal, or a cloud VM with nested virtualization
-# install Kata Containers 3.x: https://github.com/kata-containers/kata-containers/releases
-sudo tee /etc/docker/daemon.json <<'JSON'
-{ "runtimes": { "kata": { "runtimeType": "io.containerd.kata.v2" } } }
-JSON
-sudo systemctl restart docker
-docker run --rm --runtime kata alpine uname -r   # prints the guest kernel, not the host's
-```
+KSM merges eligible private anonymous pages, not shared file-backed guest RAM. Free-page
+reporting reclaims pages a running guest frees; freezing a VM does not itself prove memory
+reclamation. Pre-pulling keeps desktop/code image references on eligible nodes.
 
-The API talks to Docker through `/var/run/docker.sock` and stores its data in the
-`postgres` and `seaweedfs` services. Migrations run on boot.
+True VM pause requires the matching Zoo-patched Kata shim and authenticated node-local
+VM-control service. Stock workload freezing is not whole-VM pause. The source-pinned rootful
+Go shim contains QEMU and Cloud Hypervisor adapters. Matching shim/controller wiring,
+generation-bound certificates and real lifecycle validation are
+required before advertising resumable VM stop on a backend.
 
-## What gets installed
+## Validation status
 
-Releases publish signed, multi-arch (`linux/amd64`, `linux/arm64`) images to Docker Hub,
-mirrored to `ghcr.io/chann44`:
-
-| Image | Used for |
-| --- | --- |
-| `chann44/zoo-api` | FastAPI server, MCP endpoint and job worker |
-| `chann44/zoo-web` | the dashboard |
-| `chann44/zoo-sandbox-desktop` | `desktop` and `browser` sandboxes (Debian, XFCE, Firefox, noVNC) |
-| `chann44/zoo-sandbox-code` | `code` sandboxes (Python 3.12, Node, git, ripgrep, Claude Code) |
-
-Tags: `1.4.2`, `1.4`, `1` and `latest` for releases; `edge` and `sha-<commit>` from `main`.
-Each tag is signed with cosign keyless and carries an SBOM and build provenance.
-
-## Next steps
-
-- [Your first sandbox in the dashboard](/docs/get-started/first-sandbox/)
-- [Connect Claude Code or Claude Desktop through MCP](/docs/get-started/mcp/)
-- Upgrades, backups and the `zoo` CLI: [Upgrading](/docs/guides/upgrading/)
+Installer code and static artifacts are not deployment certification. Real installation,
+runtime isolation, disk/snapshot recovery, VM pause/resume, saved-state slots and the
+[performance targets](/docs/reference/performance/) remain to be validated.
