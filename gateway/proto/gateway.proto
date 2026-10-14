@@ -1,0 +1,128 @@
+syntax = "proto3";
+
+package zoo.gateway.v1;
+
+option go_package = "zoo/gateway/gatewaypb";
+
+service Gateway {
+  rpc GuestCall(GuestCallRequest) returns (GuestCallReply);
+  rpc GuestStream(stream Frame) returns (stream Frame);
+  rpc GuestStatus(GuestStatusRequest) returns (GuestStatusReply);
+  rpc NodeTunnel(stream Bytes) returns (stream Bytes);
+  rpc NodeStatus(NodeStatusRequest) returns (NodeStatusReply);
+  rpc RelayNode(stream NodeRelayFrame) returns (stream Bytes);
+  rpc ScreenShot(ScreenRequest) returns (ScreenReply);
+  rpc ScreenDiff(ScreenRequest) returns (ScreenReply);
+  rpc WaitStable(ScreenRequest) returns (ScreenReply);
+  rpc Pointer(ScreenRequest) returns (ScreenReply);
+  rpc Key(ScreenRequest) returns (ScreenReply);
+  rpc Type(ScreenRequest) returns (ScreenReply);
+  rpc CloseScreen(ScreenRequest) returns (ScreenReply);
+  rpc ViewerStream(stream ViewerFrame) returns (stream Bytes);
+}
+
+message ScreenRequest {
+  string sandbox_id = 1;
+  string format = 2;
+  double scale = 3;
+  uint32 quality = 4;
+  string session = 5;
+  uint32 timeout_ms = 6;
+  uint32 quiet_ms = 7;
+  double threshold = 8;
+  int32 x = 9;
+  int32 y = 10;
+  uint32 mask = 11;
+  uint32 keysym = 12;
+  bool down = 13;
+  string text = 14;
+  uint64 since_version = 15;
+}
+
+message ScreenReply {
+  bytes image = 1;
+  uint32 width = 2;
+  uint32 height = 3;
+  bool changed = 4;
+  uint32 x = 5;
+  uint32 y = 6;
+  uint32 region_width = 7;
+  uint32 region_height = 8;
+  bool stable = 9;
+  uint64 elapsed_ms = 10;
+  uint64 version = 11;
+  repeated ScreenTile changed_tiles = 12;
+  repeated ScreenBox boxes = 13;
+}
+
+message ScreenTile {
+  uint32 x = 1;
+  uint32 y = 2;
+  uint32 width = 3;
+  uint32 height = 4;
+  uint64 hash = 5;
+  bytes data = 6;
+}
+
+message ScreenBox {
+  uint32 x = 1;
+  uint32 y = 2;
+  uint32 width = 3;
+  uint32 height = 4;
+}
+
+message ViewerFrame {
+  string sandbox_id = 1;
+  bytes data = 2;
+  bool view_only = 3;
+}
+
+message GuestCallRequest {
+  string sandbox_id = 1;
+  string op = 2;
+  bytes header_json = 3;
+  bytes payload = 4;
+}
+
+message GuestCallReply {
+  bytes header_json = 1;
+  bytes payload = 2;
+}
+
+message Frame {
+  string sandbox_id = 1;
+  bytes header_json = 2;
+  bytes payload = 3;
+}
+
+message Bytes {
+  bytes data = 1;
+}
+
+message NodeRelayFrame {
+  bytes certificate_der = 1;
+  bytes message = 2;
+}
+
+message NodeStatusRequest {
+  string server_id = 1;
+}
+
+message NodeStatusReply {
+  bool online = 1;
+  bytes report_json = 2;
+}
+
+message GuestStatusRequest {
+  string sandbox_id = 1;
+}
+
+message GuestStatusReply {
+  bool connected = 1;
+  uint32 version = 2;
+  string os = 3;
+  repeated string services = 4;
+  bytes metrics_json = 5;
+  double quiet_seconds = 6;
+  bool heartbeat = 7;
+}
