@@ -43,7 +43,7 @@ x-zoo: &zoo
     ZOO_NODE_PORT: ${ZOO_NODE_PORT:-7443}
     ZOO_NODE_HOST: ${ZOO_NODE_HOST:-}
     # how hosts reach the API: put in join tokens and installer commands
-    ZOO_API_URL: ${ZOO_API_URL:-}
+    ZOO_API_URL: ${ZOO_API_URL:-http://localhost:8000}
     ZOO_BROWSER_HOME: ${ZOO_BROWSER_HOME:-https://duckduckgo.com}
     ZOO_DOMAIN: ${ZOO_DOMAIN:-}
     ZOO_PUBLIC_IP: ${ZOO_PUBLIC_IP:-}
