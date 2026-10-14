@@ -1,6 +1,6 @@
 package main
 
-// The host side of sandbox network policy, run once per host as `zoo-guest -egress DIR`, outside every sandbox, so
+// The host side of sandbox network policy, run once per host as `zoo-egress -dir DIR`, outside every sandbox, so
 // nothing an agent does inside one (as root or admin) can change it. The API writes one JSON policy per sandbox
 // into DIR and the daemon picks up changes within a second. It serves:
 //   - a filtering proxy: HTTP CONNECT and plain proxy requests, plus HTTP and TLS that the host firewall redirects

@@ -1,0 +1,14 @@
+FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS build
+ARG TARGETOS TARGETARCH
+WORKDIR /src
+COPY egress/go.mod egress/go.sum ./
+RUN go mod download
+COPY egress/ ./
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /zoo-egress .
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends nftables coreutils tar \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=build /zoo-egress /usr/local/bin/zoo-egress
+ENTRYPOINT ["/usr/local/bin/zoo-egress"]
+CMD ["-dir", "/run/zoo-egress"]
