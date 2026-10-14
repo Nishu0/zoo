@@ -1,0 +1,209 @@
+diff --git a/src/runtime/virtcontainers/sandbox.go b/src/runtime/virtcontainers/sandbox.go
+--- a/src/runtime/virtcontainers/sandbox.go
++++ b/src/runtime/virtcontainers/sandbox.go
+@@ -241,6 +241,7 @@ type Sandbox struct {
+ 	ephemeralDisks []EphemeralDisk
+ 
+ 	monitor         *monitor
++	zooVM           zooVMControl
+ 	config          *SandboxConfig
+ 	annotationsLock *sync.RWMutex
+ 	wg              *sync.WaitGroup
+@@ -2216,6 +2217,10 @@ func (s *Sandbox) Stop(ctx context.Context, force bool) error {
+ 		return err
+ 	}
+ 
++	if err := s.ZooResumeVMForTeardown(ctx); err != nil {
++		return err
++	}
++
+ 	for _, c := range s.containers {
+ 		if err := c.stop(ctx, force); err != nil {
+ 			return err
+diff --git a/src/runtime/virtcontainers/monitor.go b/src/runtime/virtcontainers/monitor.go
+--- a/src/runtime/virtcontainers/monitor.go
++++ b/src/runtime/virtcontainers/monitor.go
+@@ -140,8 +140,14 @@ func (m *monitor) stop() {
+ }
+ 
+ func (m *monitor) watchAgent(ctx context.Context) {
++	m.sandbox.zooVM.gate.RLock()
++	defer m.sandbox.zooVM.gate.RUnlock()
++	if m.sandbox.zooVM.paused {
++		return
++	}
+ 	err := m.sandbox.agent.check(ctx)
+ 	if err != nil {
++		m.sandbox.zooVM.failed.Store(true)
+ 		// TODO: define and export error types
+ 		m.notify(ctx, errors.Wrapf(err, "failed to ping agent"))
+ 	}
+diff --git a/src/runtime/virtcontainers/container.go b/src/runtime/virtcontainers/container.go
+--- a/src/runtime/virtcontainers/container.go
++++ b/src/runtime/virtcontainers/container.go
+@@ -1615,6 +1615,10 @@ func (c *Container) stop(ctx context.Context, force bool) error {
+ 	span, ctx := katatrace.Trace(ctx, c.Logger(), "stop", containerTracingTags, map[string]string{"container_id": c.id})
+ 	defer span.End()
+ 
++	if err := c.sandbox.ZooResumeVMForTeardown(ctx); err != nil {
++		return err
++	}
++
+ 	// In case the container status has been updated implicitly because
+ 	// the container process has terminated, it might be possible that
+ 	// someone try to stop the container, and we don't want to issue an
+diff --git a/src/runtime/pkg/containerd-shim-v2/create.go b/src/runtime/pkg/containerd-shim-v2/create.go
+--- a/src/runtime/pkg/containerd-shim-v2/create.go
++++ b/src/runtime/pkg/containerd-shim-v2/create.go
+@@ -208,6 +208,12 @@ func create(ctx context.Context, s *service, r *taskAPI.CreateTaskRequest) (_ *container, err error) {
+ 		}
+ 		s.hpid = uint32(pid)
+ 
++		if err := s.startZooVMControlServer(s.ctx); err != nil {
++			stopErr := s.sandbox.Stop(s.ctx, true)
++			deleteErr := s.sandbox.Delete(s.ctx)
++			return nil, fmt.Errorf("Zoo VM control startup failed: %w (stop=%v delete=%v)", err, stopErr, deleteErr)
++		}
++
+ 		if defaultStartManagementServerFunc != nil {
+ 			defaultStartManagementServerFunc(s, ctx, ociSpec)
+ 		}
+diff --git a/src/runtime/pkg/containerd-shim-v2/service.go b/src/runtime/pkg/containerd-shim-v2/service.go
+--- a/src/runtime/pkg/containerd-shim-v2/service.go
++++ b/src/runtime/pkg/containerd-shim-v2/service.go
+@@ -860,6 +860,14 @@ func (s *service) Kill(ctx context.Context, r *taskAPI.KillRequest) (_ *emptypb.Empty, err error) {
+ 		return empty, nil
+ 	}
+ 
++	if r.ExecID == "" && (signum == syscall.SIGKILL || signum == syscall.SIGTERM) {
++		backend, supported := s.sandbox.(zooVMBackend)
++		if !supported {
++			return nil, errors.New("pinned Zoo VM extension is unavailable")
++		}
++		if err := backend.ZooResumeVMForTeardown(spanCtx); err != nil { return nil, err }
++	}
++
+ 	return empty, s.sandbox.SignalProcess(spanCtx, c.id, processID, signum, r.All)
+ }
+ 
+diff --git a/src/runtime/virtcontainers/qemu.go b/src/runtime/virtcontainers/qemu.go
+--- a/src/runtime/virtcontainers/qemu.go
++++ b/src/runtime/virtcontainers/qemu.go
+@@ -1997,6 +1997,6 @@ func (q *qemu) togglePauseSandbox(ctx context.Context, pause bool) error {
+ 
+ 	if pause {
+-		return q.qmpMonitorCh.qmp.ExecuteStop(q.qmpMonitorCh.ctx)
++		return q.qmpMonitorCh.qmp.ExecuteStop(ctx)
+ 	}
+-	return q.qmpMonitorCh.qmp.ExecuteCont(q.qmpMonitorCh.ctx)
++	return q.qmpMonitorCh.qmp.ExecuteCont(ctx)
+ }
+diff --git a/src/runtime/pkg/containerd-shim-v2/service.go b/src/runtime/pkg/containerd-shim-v2/service.go
+--- a/src/runtime/pkg/containerd-shim-v2/service.go
++++ b/src/runtime/pkg/containerd-shim-v2/service.go
+@@ -487,11 +487,15 @@ func (s *service) Start(ctx context.Context, r *taskAPI.StartRequest) (_ *taskAPI.StartResponse, err error) {
+ 	defer func() {
+ 		err = toGRPC(err)
+ 		rpcDurationsHistogram.WithLabelValues("start").Observe(float64(time.Since(start).Nanoseconds() / int64(time.Millisecond)))
+ 	}()
+ 
+ 	s.mu.Lock()
+ 	defer s.mu.Unlock()
+ 
++	if err := s.zooRequireRunningVM(); err != nil {
++		return nil, err
++	}
++
+ 	c, err := s.getContainer(r.ID)
+ 	if err != nil {
+ 		return nil, err
+@@ -635,11 +639,15 @@ func (s *service) ResizePty(ctx context.Context, r *taskAPI.ResizePtyRequest) (_ *emptypb.Empty, err error) {
+ 	defer func() {
+ 		err = toGRPC(err)
+ 		rpcDurationsHistogram.WithLabelValues("resize_pty").Observe(float64(time.Since(start).Nanoseconds() / int64(time.Millisecond)))
+ 	}()
+ 
+ 	s.mu.Lock()
+ 	defer s.mu.Unlock()
+ 
++	if err := s.zooRequireRunningVM(); err != nil {
++		return nil, err
++	}
++
+ 	c, err := s.getContainer(r.ID)
+ 	if err != nil {
+ 		return nil, err
+@@ -731,11 +739,15 @@ func (s *service) Pause(ctx context.Context, r *taskAPI.PauseRequest) (_ *emptypb.Empty, err error) {
+ 	defer func() {
+ 		err = toGRPC(err)
+ 		rpcDurationsHistogram.WithLabelValues("pause").Observe(float64(time.Since(start).Nanoseconds() / int64(time.Millisecond)))
+ 	}()
+ 
+ 	s.mu.Lock()
+ 	defer s.mu.Unlock()
+ 
++	if err := s.zooRequireRunningVM(); err != nil {
++		return nil, err
++	}
++
+ 	c, err := s.getContainer(r.ID)
+ 	if err != nil {
+ 		return nil, err
+@@ -772,11 +784,15 @@ func (s *service) Resume(ctx context.Context, r *taskAPI.ResumeRequest) (_ *emptypb.Empty, err error) {
+ 	defer func() {
+ 		err = toGRPC(err)
+ 		rpcDurationsHistogram.WithLabelValues("resume").Observe(float64(time.Since(start).Nanoseconds() / int64(time.Millisecond)))
+ 	}()
+ 
+ 	s.mu.Lock()
+ 	defer s.mu.Unlock()
+ 
++	if err := s.zooRequireRunningVM(); err != nil {
++		return nil, err
++	}
++
+ 	c, err := s.getContainer(r.ID)
+ 	if err != nil {
+ 		return nil, err
+@@ -1035,11 +1051,15 @@ func (s *service) Stats(ctx context.Context, r *taskAPI.StatsRequest) (_ *taskAPI.StatsResponse, err error) {
+ 	defer func() {
+ 		err = toGRPC(err)
+ 		rpcDurationsHistogram.WithLabelValues("stats").Observe(float64(time.Since(start).Nanoseconds() / int64(time.Millisecond)))
+ 	}()
+ 
+ 	s.mu.Lock()
+ 	defer s.mu.Unlock()
+ 
++	if err := s.zooRequireRunningVM(); err != nil {
++		return nil, err
++	}
++
+ 	c, err := s.getContainer(r.ID)
+ 	if err != nil {
+ 		return nil, err
+@@ -1075,11 +1095,15 @@ func (s *service) Update(ctx context.Context, r *taskAPI.UpdateTaskRequest) (_ *emptypb.Empty, err error) {
+ 	defer func() {
+ 		err = toGRPC(err)
+ 		rpcDurationsHistogram.WithLabelValues("update").Observe(float64(time.Since(start).Nanoseconds() / int64(time.Millisecond)))
+ 	}()
+ 
+ 	s.mu.Lock()
+ 	defer s.mu.Unlock()
+ 
++	if err := s.zooRequireRunningVM(); err != nil {
++		return nil, err
++	}
++
+ 	var resources *specs.LinuxResources
+ 	v, err := typeurl.UnmarshalAny(r.Resources)
+ 	if err != nil {
+diff --git a/src/runtime/Makefile b/src/runtime/Makefile
+--- a/src/runtime/Makefile
++++ b/src/runtime/Makefile
+@@ -999,5 +999,5 @@ $(GENERATED_FILES): %: %.in $(MAKEFILE_LIST) VERSION .git-commit
+ $(GENERATED_FILES): %: %.in $(MAKEFILE_LIST) VERSION .git-commit
+ 	$(QUIET_GENERATE)$(SED) \
+-		-e "s|@COMMIT@|$(shell git rev-parse HEAD)|g" \
++		-e "s|@COMMIT@|$(COMMIT)|g" \
+ 		$(foreach v,$(GENERATED_VARS),-e "s|@$v@|$($v)|g") \
+ 		$< > $@

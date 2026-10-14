@@ -1,0 +1,4 @@
+KATA_VERSION=4.2.0
+KATA_REVISION=c7351e797efff8bfc6bd73da0eb1909be12e2cfe
+KATA_SOURCE_SHA256=550542a1d053657807fe883185ce041bab1540229ef89c5d5ea4b82c91fd6b8c
+KATA_SOURCE_URL=https://github.com/kata-containers/kata-containers/archive/refs/tags/4.2.0.tar.gz
