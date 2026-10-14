@@ -1,5 +1,5 @@
 """Kubernetes without a cluster: the pod spec, kubeconfig access, the pieces of the API's protocol, the routing from
-the Docker backend, and the deployment pieces that go with it (Postgres dialect, pod identity, readiness). The
+the configured runtime, and the deployment pieces that go with it (Postgres dialect, pod identity, readiness). The
 driver against a real cluster is in tests/kubernetes."""
 
 import json
@@ -7,11 +7,12 @@ import os
 import stat
 import sys
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import httpx
 import pytest
 
-from server import docker, kms, kube, objects
+from server import docker, kms, kube, objects, runtime
 from tests.conftest import ADMIN_EMAIL, signup
 
 
@@ -25,7 +26,7 @@ def test_quantities():
         kube.quantity("2Zi")
 
 
-def test_exec_runs_as_docker_exec_would():
+def test_exec_sets_user_environment_and_workdir():
     assert kube.user_argv(["ls"], None, None, None) == ["ls"]
     assert kube.user_argv(["ls"], "root", None, None) == ["ls"]
     argv = kube.user_argv(["ls", "-la"], "zoo", {"A": "1"}, "/home/zoo")
@@ -90,8 +91,14 @@ def test_why_a_pod_waits():
 
 
 def test_a_sandbox_pod(monkeypatch):
-    monkeypatch.setattr(kube, "RUNTIME_CLASS", "kata")
+    monkeypatch.setattr(
+        kube, "home_config", lambda sandbox_id: {"home_claim": "configured-home", "node_name": "node-a"}
+    )
     monkeypatch.setattr(kube, "PULL_SECRET", "regcred")
+    monkeypatch.setattr(kube, "IDLE_MEMORY_MB_DESKTOP", 700)
+    monkeypatch.setattr(kube, "IDLE_MEMORY_MB_CODE", 250)
+    bound = Mock(return_value={"status": {"phase": "Bound"}})
+    monkeypatch.setattr(kube, "bound_claim", bound)
     pod = kube.sandbox_pod("zoo-sandbox-sb1", "img:1", "sb1", {"ZOO_GUEST_TOKEN": "t"}, desktop=True)
     spec = pod["spec"]
     assert pod["metadata"]["labels"]["app.kubernetes.io/component"] == "sandbox"
@@ -103,12 +110,19 @@ def test_a_sandbox_pod(monkeypatch):
     assert container["resources"]["limits"] == {"cpu": "2", "memory": "2Gi"}
     assert container["securityContext"]["capabilities"] == {"drop": ["NET_RAW"]}
     assert container["securityContext"]["allowPrivilegeEscalation"] is False
-    assert container["ports"] == [{"name": "vnc", "containerPort": 6080}]
-    assert {"name": "home", "persistentVolumeClaim": {"claimName": "zoo-home-sb1"}} in spec["volumes"]
+    # nothing listens for the API: the guest dials the gateway
+    assert "ports" not in container
+    assert {"name": "home", "persistentVolumeClaim": {"claimName": "configured-home"}} in spec["volumes"]
+    assert spec["nodeName"] == "node-a" and spec["priorityClassName"] == "zoo-sandbox"
+    assert "affinity" not in spec
+    assert container["resources"]["requests"] == {"cpu": "100m", "memory": "700Mi"}
     # a new home claim gets the image's /home/zoo, as a new Docker volume does
     assert "cp -a /home/zoo/. /seed/" in spec["initContainers"][0]["command"][2]
     code = kube.sandbox_pod("zoo-sandbox-sb2", "img:1", "sb2", {}, desktop=False)
     assert "ports" not in code["spec"]["containers"][0]
+    assert code["spec"]["containers"][0]["resources"]["requests"] == {"cpu": "100m", "memory": "250Mi"}
+    assert bound.call_count == 2
+    bound.assert_called_with(kube.NAMESPACE, "configured-home", "node-a")
 
 
 def test_kubeconfig_with_an_exec_plugin(tmp_path, monkeypatch):
@@ -160,25 +174,25 @@ def test_kubeconfig_credentials_from_data_are_private_files(tmp_path):
     os.unlink(path)
 
 
-def test_the_docker_backend_hands_this_machine_to_the_cluster(monkeypatch):
-    assert docker.client_for(None) is docker.docker_client
-    monkeypatch.setattr(kube, "NAMESPACE", "zoo-sandboxes")
-    assert docker.client_for(None) is kube.cluster
+@pytest.mark.parametrize("name,backend", [("docker", docker), ("kube", kube)])
+def test_runtime_routes_linux_to_the_selected_backend(monkeypatch, name, backend):
+    monkeypatch.setattr(runtime, "NAME", name)
+    monkeypatch.setattr(runtime, "LINUX", backend)
     found = SimpleNamespace(name="pod")
-    monkeypatch.setattr(kube, "container", lambda rid: found if rid == "k8s:zoo-sandboxes/p" else None)
-    assert docker.container("k8s:zoo-sandboxes/p") is found
-    # images are the kubelets' business
-    docker.ensure_image(kube.cluster, "anything:1")
-    assert docker.csi(None) is False
-    monkeypatch.setattr(kube, "SNAPSHOT_CLASS", "csi-snapclass")
-    assert docker.csi(None) and not docker.csi(SimpleNamespace(id="s"))
+    monkeypatch.setattr(backend, "container", lambda rid: found)
+    assert runtime.backend("linux-sandbox") is backend
+    assert runtime.container("linux-sandbox") is found
+    assert runtime.is_kube() == (name == "kube")
+    monkeypatch.setattr(kube, "NAMESPACE", "another-namespace")
+    assert runtime.backend("linux-sandbox") is backend
+    assert runtime.csi(None) == (name == "kube")
+    assert not runtime.csi(SimpleNamespace(id="s"))
 
 
-def test_missing_objects_are_dockers_not_found_too():
-    import docker.errors
-
+def test_missing_kubernetes_objects_use_native_errors():
     error = kube.NotFound(404, 'pods "x" not found')
-    assert isinstance(error, docker.errors.NotFound) and str(error) == 'pods "x" not found'
+    assert isinstance(error, kube.KubeError) and str(error) == 'pods "x" not found'
+    assert isinstance(error, runtime.NOT_FOUND_ERRORS)
 
 
 def test_aws_credentials_from_a_pod_identity(tmp_path, monkeypatch):
@@ -236,18 +250,25 @@ def test_aws_credentials_from_eks_pod_identity(tmp_path, monkeypatch):
     assert kms.aws_credentials() == ("AK2", "SK2", "T2")
 
 
-def test_readiness_can_leave_remote_servers_out(client, alice, monkeypatch):
+def test_readiness_can_leave_remote_servers_out(client, alice, monkeypatch, runtime_requirements):
     from server import health
+    from tests.test_sandboxes import add_server
 
-    pinged = []
-    monkeypatch.setattr(health, "ping", lambda server: pinged.append(server.id))
-    client.post(
-        "/servers", json={"name": "box", "docker_url": "ssh://zoo@box", "bind_address": "10.0.0.2"}, headers=alice
-    )
-    monkeypatch.setattr(docker.docker_client, "ping", lambda: True, raising=False)
+    checked = []
+    monkeypatch.setattr(health, "host_requirements", lambda server: checked.append(server.id))
+    add_server("alice@example.com", "macos")
+    monkeypatch.setenv("ZOO_API_URL", "http://zoo.test")
     res = client.get("/readyz?servers=false")
-    assert set(res.json()["checks"]) == {"database", "object_store", "jwt_secret", "secrets_key", "api_url", "docker"}
-    assert not pinged
+    assert res.status_code == 200
+    assert set(res.json()["checks"]) == runtime_requirements | {
+        "database",
+        "object_store",
+        "jwt_secret",
+        "secrets_key",
+        "api_url",
+        "gateway",
+    }
+    assert not checked
 
 
 def test_the_kubernetes_status(client, alice, monkeypatch):
@@ -257,6 +278,8 @@ def test_the_kubernetes_status(client, alice, monkeypatch):
         "runtime_class": "",
         "checks": [],
     }
+    monkeypatch.setattr(runtime, "NAME", "kube")
+    monkeypatch.setattr(runtime, "LINUX", kube)
     monkeypatch.setattr(kube, "NAMESPACE", "zoo-sandboxes")
     asked = []
 

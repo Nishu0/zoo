@@ -1,12 +1,16 @@
+import asyncio
 import io
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from PIL import Image
 
+from db.connection import db_manager
 from server import security
+from server.cache import Cache
 from server.images import encode
-from tests.conftest import runtime_of
-from tests.test_sandboxes import add_server
+from server.writer import BATCH_ROWS, writer
+from tests.conftest import present, runtime_of, sql
 
 
 def png(width=40, height=20) -> bytes:
@@ -41,10 +45,11 @@ def test_running_sandbox_is_redacted_against_its_boot_secrets(client, alice, san
     sid = sandbox["id"]
     client.put(f"/sandboxes/{sid}/secrets", json={"name": "API_TOKEN", "value": "first-value"}, headers=alice)
     client.post(f"/sandboxes/{sid}/stop", headers=alice)
-    assert sid not in security._booted
+    # a paused sandbox still holds what it had; resuming it hands over the current values
+    assert sid in security._booted
     client.post(f"/sandboxes/{sid}/start", headers=alice)
     assert "first-value" in security._booted[sid]
-    # the container keeps the value it booted with, so that's still the one to mask
+    # the sandbox may still hold the value it resumed with, so that's still one to mask
     client.put(f"/sandboxes/{sid}/secrets", json={"name": "API_TOKEN", "value": "second-value"}, headers=alice)
     out = client.post(f"/sandboxes/{sid}/exec", json={"command": "echo first-value"}, headers=alice).json()
     assert out["stdout"] == "echo [redacted]"
@@ -58,13 +63,46 @@ def test_failed_tool_rows_are_written_in_the_background(client, alice, sandbox, 
     assert runtime_of(sandbox["id"])
 
 
-def test_prepull_skips_servers_without_linux(alice, fake):
-    from db.connection import db_manager
-    from server.servers_api import prepull_images
-
-    add_server("alice@example.com", "linux", "a")
-    add_server("alice@example.com", "macos", "b")
-    add_server("alice@example.com", "macos", "c", capabilities="macos,linux")
+def test_usage_rows_beyond_one_batch_are_all_written(sandbox):
     with db_manager.session() as db:
-        prepull_images(list(db.list_all_servers())).join()
-    assert sorted(c[1] for c in fake.calls if c[0] == "prepull") == ["a-linux", "c-macos"]
+        workspace_id = present(db.get_sandbox(id=sandbox["id"])).workspace_id
+    at = datetime.now(UTC)
+    for _ in range(BATCH_ROWS + 3):
+        writer.usage(workspace_id, sandbox["id"], "cpu_minutes", 1, at)
+    writer.flush_sync()
+    with db_manager.session() as db:
+        rows = list(
+            db.usage_report(
+                workspace_id=workspace_id, since=at - timedelta(days=1), until=at + timedelta(days=1), metric=None
+            )
+        )
+    assert [(r.metric, r.quantity) for r in rows] == [("cpu_minutes", BATCH_ROWS + 3)]
+
+
+def test_a_committed_notification_drops_that_workspaces_cached_entries(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", db_manager.url)
+
+    async def scenario():
+        cache = Cache()
+        await cache.start()
+        loads = []
+
+        async def loader(workspace_id):
+            loads.append(workspace_id)
+            return {"workspace_id": workspace_id}
+
+        try:
+            for workspace_id in ("a", "b", "a", "b"):
+                await cache.get("workspace", workspace_id, lambda w=workspace_id: loader(w))
+            assert loads == ["a", "b"]
+            await asyncio.to_thread(sql, "SELECT pg_notify('zoo_event', %s)", "a")
+            async with asyncio.timeout(5):
+                while ("workspace", "a") in cache.entries:
+                    await asyncio.sleep(0.01)
+            await cache.get("workspace", "a", lambda: loader("a"))
+            await cache.get("workspace", "b", lambda: loader("b"))
+            assert loads == ["a", "b", "a"]
+        finally:
+            await cache.close()
+
+    asyncio.run(scenario())

@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from cryptography.fernet import InvalidToken
 
@@ -43,11 +45,13 @@ def test_each_workspace_has_its_own_wrapped_data_key():
 
 
 def test_secrets_key_rotation(client, alice, sandbox, monkeypatch):
+    monkeypatch.setenv("ZOO_SECRETS_KEY_PREVIOUS", os.environ["ZOO_SECRETS_KEY"])
     monkeypatch.setenv("ZOO_SECRETS_KEY", "old-key")
     client.post("/vault/secrets", json={"name": "VAULT", "value": "vault-value"}, headers=alice)
     client.put(f"/sandboxes/{sandbox['id']}/secrets", json={"name": "LOCAL", "value": "local-value"}, headers=alice)
     with db_manager.session() as db:
         security.rotate(db)  # the workspace's key predates old-key; wrap it with old-key only
+    monkeypatch.delenv("ZOO_SECRETS_KEY_PREVIOUS")
 
     monkeypatch.setenv("ZOO_SECRETS_KEY", "new-key")
     security._data_keys.clear()

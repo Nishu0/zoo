@@ -16,7 +16,7 @@ from server.sandbox_api import AUTO, CreateSandboxRequest
 from tests.conftest import member, present
 from tests.test_sandboxes import add_server
 
-SERVER = SimpleNamespace(id="mac", docker_url="ssh://zoo@mac")
+SERVER = SimpleNamespace(id="mac", docker_url="node://zoo@mac")
 VERSION = b'{"os":"15.6.1","build":"24G90"}'
 
 
@@ -67,7 +67,7 @@ def test_a_full_mac_makes_the_boot_wait(mac):
     assert not any("zoovm clone" in c for c in mac.commands)
     # a VM already running (a retried boot) doesn't count against itself
     mac.running = mac.vms = {"zoo-a", "zoo-c"}
-    assert macos.start("c", SERVER, {})[1].startswith("vnc://")
+    assert macos.start("c", SERVER, {}) == "macos:mac:zoo-c"
 
 
 def test_a_clone_records_its_base_version(mac):
@@ -120,7 +120,7 @@ def test_a_hung_vm_is_found_after_two_quiet_checks(zoo, monkeypatch):
     monkeypatch.setattr(sandbox_api, "time", SimpleNamespace(monotonic=lambda: now[0]))
     heartbeat, drawing = [True], [True]
     monkeypatch.setattr(sandbox_api.hub, "heartbeat", lambda sandbox_id: heartbeat[0])
-    monkeypatch.setattr(macos, "responsive", lambda rid: drawing[0])
+    monkeypatch.setattr(sandbox_api, "responsive", lambda rid: drawing[0])
     vm = SimpleNamespace(id="s", kind="macos", runtime_id="macos:mac:zoo-s")
     assert not api.hung(vm)
     heartbeat[0] = False
@@ -168,7 +168,9 @@ def store(monkeypatch):
 def test_a_vm_moves_through_object_storage(mac, store, monkeypatch):
     removed = []
     monkeypatch.setattr(macos, "delete", lambda sandbox_id, server: removed.append(server.id))
-    macos.move("s", SimpleNamespace(id="a", docker_url="ssh://a"), SimpleNamespace(id="b", docker_url="ssh://b"))
+    macos.move(
+        "s", SimpleNamespace(id="a", docker_url="node://zoo@a"), SimpleNamespace(id="b", docker_url="node://zoo@b")
+    )
     upload = next(c for c in mac.commands if "curl -fsS --retry 3 -T" in c)
     assert upload.count(" -T ") == 2 and "https://minio.example:9000/vms/zoo/moves/s/part.ab?X-Amz-" in upload
     download = next(c for c in mac.commands if "tar -xzf" in c)
@@ -181,7 +183,9 @@ def test_a_failed_move_keeps_the_source_and_cleans_up(mac, store, monkeypatch):
     monkeypatch.setattr(macos, "delete", lambda sandbox_id, server: removed.append(server.id))
     mac.fail = "tar -xzf"
     with pytest.raises(RuntimeError):
-        macos.move("s", SimpleNamespace(id="a", docker_url="ssh://a"), SimpleNamespace(id="b", docker_url="ssh://b"))
+        macos.move(
+            "s", SimpleNamespace(id="a", docker_url="node://zoo@a"), SimpleNamespace(id="b", docker_url="node://zoo@b")
+        )
     assert removed == [] and len(store) == 2 and any(c.startswith("rm -rf ~/.zoovm/move-zoo-s") for c in mac.commands)
 
 

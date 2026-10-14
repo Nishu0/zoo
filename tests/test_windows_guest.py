@@ -1,6 +1,6 @@
 import pytest
 
-from server import guest, windows, windows_tools
+from server import windows, windows_tools
 from server.errors import ZooError
 
 
@@ -12,7 +12,7 @@ class Agent:
     def has(self, service):
         return service in self.services
 
-    def exec_run(self, argv, stdin=b"", timeout=600):
+    def run(self, argv, stdin=b"", timeout=600):
         self.calls.append((argv, stdin))
         return 0, b"True\r\n", b""
 
@@ -66,7 +66,8 @@ def test_window_tools_use_the_window_service(monkeypatch):
 
 
 def test_network_policy_keeps_the_guest_reaching_the_api(monkeypatch):
-    monkeypatch.setattr(guest, "REMOTE_URL", "ws://10.0.0.5:8000/guest/connect")
+    monkeypatch.setenv("ZOO_API_URL", "http://10.0.0.5:8000")
     assert windows.guest_rule()[1] == "if ($ips) { Rule zoo-guest Allow $ips TCP 8000 }"
-    monkeypatch.setattr(guest, "REMOTE_URL", "")
-    assert windows.guest_rule() == []
+    monkeypatch.delenv("ZOO_API_URL", raising=False)
+    with pytest.raises(ZooError, match="ZOO_API_URL"):
+        windows.guest_rule()

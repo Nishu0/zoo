@@ -1,9 +1,9 @@
 """End to end against a real stack: real containers, real tools, real network policy.
 
-    ZOO_RUNTIME=runc docker compose up -d --build
+    ZOO_RUNTIME=docker docker compose up -d --build
     scripts/e2e.sh        # signs up, makes an API key and runs this suite
 
-runc keeps it runnable on CI machines without nested virtualisation; Kata gets the same test on a KVM runner.
+Linux sandboxes require Kata Containers and a host with KVM.
 ZOO_E2E_KINDS picks the sandbox kinds (default desktop,browser,code) and ZOO_E2E_SERVER_ID the server for macos and
 windows ones, so the nightly Mac and Hyper-V runners run the same suite.
 """
@@ -21,7 +21,6 @@ import websockets
 from zoo_sdk import Zoo, ZooError
 
 from server.registry import KINDS, TOOLS
-from server.vnc import NO_AUTH, VERSION, Buffered
 from tests.tool_args import SAMPLE_ARGS
 
 pytestmark = [
@@ -150,19 +149,23 @@ def test_viewer_gets_the_screen_without_a_password(make, kind):
 
     async def handshake() -> bytes:
         async with websockets.connect(socket, max_size=None) as ws:
+            buffer = b""
 
-            async def receive() -> bytes:
-                message = await ws.recv()
-                return message if isinstance(message, bytes) else message.encode()
+            async def read(n: int) -> bytes:
+                nonlocal buffer
+                while len(buffer) < n:
+                    message = await ws.recv()
+                    buffer += message if isinstance(message, bytes) else message.encode()
+                data, buffer = buffer[:n], buffer[n:]
+                return data
 
-            screen = Buffered(receive)
-            assert await screen.read(12) == VERSION
-            await ws.send(VERSION)
-            assert await screen.read(2) == bytes([1, NO_AUTH])
-            await ws.send(bytes([NO_AUTH]))
-            assert await screen.read(4) == b"\0\0\0\0"
+            assert await read(12) == b"RFB 003.008\n"
+            await ws.send(b"RFB 003.008\n")
+            assert await read(2) == bytes([1, 1])  # one security type: none
+            await ws.send(bytes([1]))
+            assert await read(4) == b"\0\0\0\0"
             await ws.send(b"\x01")  # ClientInit, shared
-            return await screen.read(4)  # ServerInit starts with the framebuffer width and height
+            return await read(4)  # ServerInit starts with the framebuffer width and height
 
     size = asyncio.run(asyncio.wait_for(handshake(), 30))
     assert int.from_bytes(size[:2], "big") > 0 and int.from_bytes(size[2:], "big") > 0

@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 
-from server import macos, macos_tools, vnc_tools, windows, windows_tools
+from server import macos, macos_tools, registry, windows, windows_tools
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SEAMS: dict[str, dict[str, list[Any]]] = {
@@ -65,13 +65,13 @@ def rebuild(error: dict) -> Exception:
 
 
 def ssh_tools(platform: str) -> list[str]:
-    """Tools whose implementation on this platform goes over SSH rather than VNC."""
+    """Tools whose implementation on this platform goes through the guest rather than the gateway screen."""
     from server.registry import TOOLS
 
     return [
         name
         for name, tool in TOOLS.items()
-        if getattr(tool, "mac" if platform == "macos" else "win").__module__ != vnc_tools.__name__
+        if getattr(tool, "mac" if platform == "macos" else "win").__module__ != registry.__name__
     ]
 
 

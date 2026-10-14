@@ -2,7 +2,7 @@
 (which stay, as an export)."""
 
 from db.connection import db_manager
-from server import sandbox_api
+from server import runtime, sandbox_api
 from tests.conftest import sql
 from tests.test_sandboxes import add_server
 
@@ -74,15 +74,38 @@ def test_vm_snapshots_need_the_vm_stopped(client, alice, sandbox):
     assert res.status_code == 409 and "stop the sandbox" in res.json()["error"]["message"]
 
 
-def test_linux_snapshots_move_with_the_sandbox_and_go_with_it(client, alice, sandbox, fake):
+def test_linux_snapshots_are_removed_with_the_sandbox(client, alice, sandbox, fake):
     snap = client.post(f"/sandboxes/{sandbox['id']}/snapshots", headers=alice).json()
     client.post(f"/sandboxes/{sandbox['id']}/stop", headers=alice)
-    target = add_server("alice@example.com")
-    # they live in object storage, not on the host
-    res = client.post(f"/sandboxes/{sandbox['id']}/move", json={"server_id": target}, headers=alice)
-    assert res.status_code == 200, res.text
-
     assert client.delete(f"/sandboxes/{sandbox['id']}", headers=alice).status_code in (200, 202, 204)
     assert fake.snapshots == {} and ("remove_snapshot", snap["id"], {}) in fake.calls
     with db_manager.session() as db:
         assert db.get_snapshot(id=snap["id"]) is None
+
+
+def test_docker_sandboxes_cannot_move(client, alice, sandbox):
+    client.post(f"/v1/sandboxes/{sandbox['id']}/stop", headers=alice)
+    response = client.post(f"/v1/sandboxes/{sandbox['id']}/move", json={"node_name": "node-b"}, headers=alice)
+    assert response.status_code == 501
+    assert response.json()["error"]["code"] == "not_supported"
+
+
+def test_kubernetes_moves_keep_existing_snapshots(client, alice, sandbox, fake, monkeypatch):
+    snapshot = client.post(f"/v1/sandboxes/{sandbox['id']}/snapshots", headers=alice).json()
+    client.post(f"/v1/sandboxes/{sandbox['id']}/stop", headers=alice)
+    monkeypatch.setattr(runtime, "NAME", "kube")
+    moved = []
+    monkeypatch.setattr(runtime, "move_volume", lambda sandbox_id, node: moved.append((sandbox_id, node)))
+    response = client.post(f"/v1/sandboxes/{sandbox['id']}/move", json={"node_name": "node-b"}, headers=alice)
+    assert response.status_code == 200
+    assert moved == [(sandbox["id"], "node-b")]
+    assert snapshot["id"] in fake.snapshots
+    assert client.get(f"/v1/sandboxes/{sandbox['id']}/snapshots", headers=alice).json()[0]["id"] == snapshot["id"]
+
+
+def test_kubernetes_moves_require_a_node(client, alice, sandbox, monkeypatch):
+    client.post(f"/v1/sandboxes/{sandbox['id']}/stop", headers=alice)
+    monkeypatch.setattr(runtime, "NAME", "kube")
+    for payload in ({}, {"server_id": "registered-server"}, {"server_id": "registered-server", "node_name": "node-b"}):
+        response = client.post(f"/v1/sandboxes/{sandbox['id']}/move", json=payload, headers=alice)
+        assert response.status_code == 400 and response.json()["error"]["code"] == "bad_request"

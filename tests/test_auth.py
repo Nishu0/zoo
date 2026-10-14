@@ -1,3 +1,4 @@
+from server.writer import writer
 from tests.conftest import PASSWORD, signup
 
 
@@ -45,6 +46,8 @@ def test_api_key_lifecycle(client, alice):
     as_key = {"Authorization": f"Bearer {key}"}
     assert client.get("/auth/me", headers=as_key).json()["email"] == "alice@example.com"
 
+    # last use is written in the background, batched
+    writer.flush_sync()
     listed = client.get("/api-keys", headers=alice).json()
     assert [k["name"] for k in listed] == ["ci"]
     assert "key" not in listed[0]

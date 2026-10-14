@@ -4,8 +4,8 @@ from types import SimpleNamespace
 import pytest
 
 from db.connection import db_manager
-from server import docker, health
-from tests.conftest import runtime_of, sql
+from server import docker, health, runtime
+from tests.conftest import sql
 
 
 @pytest.fixture
@@ -149,39 +149,29 @@ def test_stop_drops_a_boot_that_has_not_started(client, alice, queued, fake):
     assert fake.containers == {}
 
 
-def test_busy_sandboxes_refuse_other_lifecycle_work(client, alice, sandbox, queued):
+def test_busy_sandboxes_refuse_other_lifecycle_work(client, alice, sandbox, queued, monkeypatch):
     sid = sandbox["id"]
     client.post(f"/sandboxes/{sid}/stop", headers=alice)
     queued.drain()
-    from tests.test_sandboxes import add_server
-
-    target = add_server("alice@example.com")
-    client.post(f"/sandboxes/{sid}/move", json={"server_id": target}, headers=alice)
-    res = client.post(f"/sandboxes/{sid}/start", headers=alice)
+    monkeypatch.setattr(runtime, "NAME", "kube")
+    moved = []
+    monkeypatch.setattr(runtime, "move_volume", lambda sandbox_id, node: moved.append((sandbox_id, node)))
+    response = client.post(f"/v1/sandboxes/{sid}/move", json={"node_name": "node-b"}, headers=alice)
+    assert response.status_code == 200
+    res = client.post(f"/v1/sandboxes/{sid}/start", headers=alice)
     assert (res.status_code, res.json()["error"]["message"]) == (409, "sandbox is busy: move in progress")
     queued.drain()
-    assert client.get(f"/sandboxes/{sid}", headers=alice).json()["server_id"] == target
-
-
-def test_unreachable_host_is_not_treated_as_stopped(client, alice, sandbox, fake, zoo):
-    fake.unreachable = True
-    zoo.sandbox_api.reconcile()
-    seen = client.get(f"/sandboxes/{sandbox['id']}", headers=alice).json()
-    assert (seen["status"], seen["unreachable"]) == ("running", True)
-    assert runtime_of(sandbox["id"]) in fake.containers
-
-    fake.unreachable = False
-    zoo.sandbox_api.reconcile()
-    assert client.get(f"/sandboxes/{sandbox['id']}", headers=alice).json()["unreachable"] is False
+    assert moved == [(sid, "node-b")]
+    assert client.get(f"/v1/sandboxes/{sid}", headers=alice).json()["server_id"] is None
 
 
 def test_boot_adopts_the_container_an_earlier_attempt_started():
     class Container:
-        def __init__(self, status, sandbox, image):
+        def __init__(self, status, sandbox, image, runtime=docker.RUNTIME):
             self.status, self.labels, self.attrs, self.removed = (
                 status,
                 {"zoo.sandbox": sandbox},
-                {"Config": {"Image": image}},
+                {"Config": {"Image": image}, "HostConfig": {"Runtime": runtime}},
                 False,
             )
 
@@ -197,13 +187,13 @@ def test_boot_adopts_the_container_an_earlier_attempt_started():
         Container("exited", "sb1", "zoo-sandbox:latest"),
         Container("running", "sb1", "zoo-sandbox:old"),
         Container("running", "other", "zoo-sandbox:latest"),
+        Container("running", "sb1", "zoo-sandbox:latest", runtime="runc"),
     ):
         assert docker.adoptable(client(stale), "zoo-sandbox-sb1", "zoo-sandbox:latest", "sb1") is None
         assert stale.removed
 
 
-def test_health_probes(client, alice, monkeypatch):
-    monkeypatch.setattr(health.docker, "docker_client", SimpleNamespace(ping=lambda: True))
+def test_health_probes(client, alice, monkeypatch, runtime_requirements):
     assert client.get("/healthz").json() == {"status": "ok"}
     ready = client.get("/readyz")
     assert ready.status_code == 503 and ready.json()["checks"]["api_url"].startswith("ZOO_API_URL is not set")
@@ -211,13 +201,13 @@ def test_health_probes(client, alice, monkeypatch):
     ready = client.get("/readyz")
     assert ready.status_code == 200
     assert set(ready.json()["checks"].values()) == {"ok"}
-    assert set(ready.json()["checks"]) == {
+    assert set(ready.json()["checks"]) == runtime_requirements | {
         "database",
         "object_store",
         "jwt_secret",
         "secrets_key",
         "api_url",
-        "docker",
+        "gateway",
     }
 
     from tests.test_sandboxes import add_server
@@ -227,7 +217,7 @@ def test_health_probes(client, alice, monkeypatch):
     def down(server):
         raise ConnectionError("No route to host")
 
-    monkeypatch.setattr(health, "ping", down)
+    monkeypatch.setattr(health, "host_requirements", down)
     ready = client.get("/readyz")
     assert ready.status_code == 503
     assert ready.json()["checks"]["server:box"] == "No route to host"

@@ -10,7 +10,7 @@ def test_sandboxes_keep_their_image_across_upgrades(client, alice, sandbox, fake
     old = image_of(fake, sid)
     assert sandbox["image"] == old and not sandbox["image_outdated"]
 
-    monkeypatch.setattr("server.docker.IMAGE", "docker.io/chann44/zoo-sandbox-desktop:9.9.9")
+    monkeypatch.setattr("server.runtime.IMAGE", "docker.io/chann44/zoo-sandbox-desktop:9.9.9")
     assert client.get(f"/sandboxes/{sid}", headers=alice).json()["image_outdated"]
     client.post(f"/sandboxes/{sid}/stop", headers=alice)
     client.post(f"/sandboxes/{sid}/start", headers=alice)
@@ -19,7 +19,7 @@ def test_sandboxes_keep_their_image_across_upgrades(client, alice, sandbox, fake
 
 def test_restart_on_new_image(client, alice, sandbox, fake, monkeypatch):
     sid = sandbox["id"]
-    monkeypatch.setattr("server.docker.IMAGE", "docker.io/chann44/zoo-sandbox-desktop:9.9.9")
+    monkeypatch.setattr("server.runtime.IMAGE", "docker.io/chann44/zoo-sandbox-desktop:9.9.9")
     assert client.post(f"/sandboxes/{sid}/upgrade", headers=alice).status_code == 200
 
     after = client.get(f"/sandboxes/{sid}", headers=alice).json()
@@ -32,7 +32,7 @@ def test_restart_on_new_image(client, alice, sandbox, fake, monkeypatch):
 def test_restart_on_new_image_boots_a_stopped_sandbox(client, alice, make_sandbox, fake, monkeypatch):
     code = make_sandbox("code")
     client.post(f"/sandboxes/{code['id']}/stop", headers=alice)
-    monkeypatch.setattr("server.docker.CODE_IMAGE", "docker.io/chann44/zoo-sandbox-code:9.9.9")
+    monkeypatch.setattr("server.runtime.CODE_IMAGE", "docker.io/chann44/zoo-sandbox-code:9.9.9")
     res = client.post(f"/sandboxes/{code['id']}/upgrade", headers=alice)
     assert res.status_code == 200, res.text
     assert client.get(f"/sandboxes/{code['id']}", headers=alice).json()["status"] == "running"

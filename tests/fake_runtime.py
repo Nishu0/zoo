@@ -1,15 +1,18 @@
 """An in-memory stand-in for the Docker backend, so API tests run without Docker, Kata or VMs.
 
-It replaces the functions server/runtime.py dispatches to for Linux sandboxes, plus the names other
-modules import from server.docker directly. Tools are served by fake implementations that record calls.
+It replaces the native functions server/runtime.py dispatches to for Linux sandboxes.
+Tools are served by fake implementations that record calls.
 """
 
 import base64
+import io
 import itertools
+import json
+import tarfile
 from dataclasses import dataclass, field
 from typing import Any
 
-from server import docker, macos, sandbox_api
+from server import docker, guest, sandbox_api
 from server.registry import Tool
 
 # a 1x1 PNG, enough for anything that decodes the screenshot
@@ -26,9 +29,8 @@ class Container:
     image: str
     env: dict[str, str]
     desktop: bool
-    # the remote server it runs on, None for the API's own Docker
-    server_id: str | None = None
     running: bool = True
+    paused: bool = False
     network: tuple | None = None
     apps: dict[str, str] = field(default_factory=dict)
     dirs: dict[str, bytes] = field(default_factory=dict)
@@ -50,6 +52,8 @@ class FakeRuntime:
         # runtime call name -> how many more times it fails, like a host that drops off for a moment
         self.flaky: dict[str, int] = {}
         self.unreachable = False
+        # nodes the pause sweeper sees short of memory
+        self.pressured: set[str] = set()
         self.ids = itertools.count(1)
         # snapshot id -> sandbox id
         self.snapshots: dict[str, str] = {}
@@ -60,7 +64,6 @@ class FakeRuntime:
         patched = (
             "remove_container",
             "remove_volume",
-            "copy_volume",
             "export_dir",
             "import_dir",
             "app_running",
@@ -69,26 +72,25 @@ class FakeRuntime:
             "apply_apps",
             "export_home",
             "import_home",
-            "connect",
             "run_container",
-            "wait_for_vnc",
+            "pause",
+            "resume",
+            "pressured_nodes",
             "snapshot",
             "restore_snapshot",
             "remove_snapshot",
+            "write_secrets",
         )
         self.originals = {name: getattr(docker, name) for name in ("container", *patched)}
         for name in patched:
             mp.setattr(docker, name, getattr(self, name))
-        for name in ("run_container", "wait_for_vnc", "copy_volume"):
-            mp.setattr(sandbox_api, name, getattr(self, name))
         mp.setattr(
             sandbox_api, "open_url", lambda runtime_id, url: self.calls.append(("open_url", runtime_id, {"url": url}))
         )
-        mp.setattr("server.servers_api.connect", self.connect)
-        mp.setattr("server.servers_api.prepull", lambda server: self.calls.append(("prepull", server.id, {})))
-        mp.setattr(macos, "local_zoovm", lambda: False)
         fake = self
         mp.setattr(Tool, "impl", lambda tool, runtime_id: fake.tool(tool))
+        # a fake container's desktop is up as soon as it runs
+        mp.setattr(guest.hub, "wait_for_desktop", lambda sandbox_id, timeout=30: True)
 
     def flake(self, name: str):
         if self.flaky.get(name, 0) > 0:
@@ -97,43 +99,45 @@ class FakeRuntime:
 
     # Docker backend
 
-    def run_container(self, name, image, sandbox_id, env, server=None, desktop=True, size=None):
+    def run_container(self, name, image, sandbox_id, env, desktop=True, size=None):
         if self.fail_boot:
             raise RuntimeError(self.fail_boot)
         self.flake("run_container")
         runtime_id = f"fake-{next(self.ids)}"
-        self.containers[runtime_id] = Container(
-            sandbox_id, image, dict(env), desktop, server_id=server.id if server else None
-        )
+        self.containers[runtime_id] = Container(sandbox_id, image, dict(env), desktop)
         self.volumes.add(sandbox_id)
-        return runtime_id, "127.0.0.1", 6080
+        return runtime_id, "127.0.0.1"
 
-    def wait_for_vnc(self, host, port, timeout=30):
-        return True
+    def pause(self, runtime_id):
+        self.flake("pause")
+        self.containers[runtime_id].paused = True
 
-    def remove_container(self, runtime_id, client=None):
+    def resume(self, runtime_id):
+        self.containers[runtime_id].paused = False
+
+    def pressured_nodes(self, share):
+        return set(self.pressured)
+
+    def remove_container(self, runtime_id):
         self.containers.pop(runtime_id, None)
 
-    def remove_volume(self, sandbox_id, server=None):
+    def remove_volume(self, sandbox_id):
         self.flake("remove_volume")
         self.volumes.discard(sandbox_id)
 
-    def copy_volume(self, sandbox_id, source, target, image=None):
-        self.calls.append(("copy_volume", sandbox_id, {"source": source, "target": target}))
-
-    def snapshot(self, sandbox_id, snapshot_id, server=None):
+    def snapshot(self, sandbox_id, snapshot_id):
         self.flake("snapshot")
         self.snapshots[snapshot_id] = sandbox_id
-        self.calls.append(("snapshot", sandbox_id, {"snapshot_id": snapshot_id, "server": server}))
+        self.calls.append(("snapshot", sandbox_id, {"snapshot_id": snapshot_id}))
         return 4096
 
-    def restore_snapshot(self, sandbox_id, snapshot_id, server=None):
+    def restore_snapshot(self, sandbox_id, snapshot_id):
         self.flake("restore_snapshot")
         if self.snapshots.get(snapshot_id) != sandbox_id:
             raise RuntimeError("the snapshot's volume is gone from the host")
         self.calls.append(("restore_snapshot", sandbox_id, {"snapshot_id": snapshot_id}))
 
-    def remove_snapshot(self, snapshot_id, server=None):
+    def remove_snapshot(self, snapshot_id):
         self.snapshots.pop(snapshot_id, None)
         self.calls.append(("remove_snapshot", snapshot_id, {}))
 
@@ -143,8 +147,16 @@ class FakeRuntime:
         container = self.containers.get(runtime_id)
         return container is not None and container.running
 
-    def connect(self, server_id, url):
-        return None
+    def write_secrets(self, runtime_id, values):
+        self.import_dir(runtime_id, "/run/zoo", docker.tar_file("env.json", json.dumps(values).encode()))
+
+    @staticmethod
+    def secrets_of(container: Container) -> dict[str, str]:
+        if "/run/zoo" not in container.dirs:
+            return {}
+        with tarfile.open(fileobj=io.BytesIO(container.dirs["/run/zoo"])) as tar:
+            member = tar.extractfile("env.json")
+            return json.load(member) if member else {}
 
     def apply_network(self, runtime_id, default_action, allow_dns, rules):
         self.containers[runtime_id].network = (default_action, allow_dns, list(rules))
@@ -181,7 +193,9 @@ class FakeRuntime:
             if tool.name == "installed_apps":
                 return {"gui_apps": APPS}
             if tool.name == "execute_command":
-                env = self.containers[runtime_id].env
+                container = self.containers[runtime_id]
+                # the guest adds the secrets the API wrote to /run/zoo/env.json to every command's environment
+                env = {**container.env, **self.secrets_of(container)}
                 stdout = "\n".join(f"{k}={v}" for k, v in env.items()) if args["command"] == "env" else args["command"]
                 return {"exit_code": 0, "stdout": stdout, "stderr": "", "timed_out": False}
             return {"tool": tool.name, "args": args}

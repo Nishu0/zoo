@@ -18,7 +18,7 @@ from tests.tool_args import SAMPLE_ARGS
 @pytest.fixture
 def live(live_url):
     """A user, an API key and a running desktop sandbox on the live server."""
-    with httpx.Client(base_url=live_url) as http:
+    with httpx.Client(base_url=f"{live_url}/v1") as http:
         token = http.post("/auth/signup", json={"email": "contract@example.com", "password": "correct-horse"}).json()[
             "access_token"
         ]
@@ -66,7 +66,7 @@ def test_rest_mcp_and_sdk_agree(live, fake):
     fake.calls.clear()
 
     rest_args, sdk_args = {}, {}
-    with httpx.Client(base_url=url, headers=headers) as http:
+    with httpx.Client(base_url=f"{url}/v1", headers=headers) as http:
         for name in TOOLS:
             res = http.post(f"/sandboxes/{sandbox.id}/tools/{name}", json=SAMPLE_ARGS[name])
             assert res.status_code == 200, f"REST {name}: {res.text}"

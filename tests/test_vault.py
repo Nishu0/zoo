@@ -139,7 +139,7 @@ def test_a_failed_push_does_not_fail_the_change(client, alice, make_sandbox, fak
     def unreachable(*args):
         raise ConnectionError("host down")
 
-    monkeypatch.setattr("server.docker.write_secrets", unreachable)
+    monkeypatch.setattr("server.vault_sync.write_secrets", unreachable)
     res = client.patch(f"/vault/secrets/{secret['id']}", json={"value": "ghp_still_saved"}, headers=alice)
     assert res.status_code == 200
 

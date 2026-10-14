@@ -46,7 +46,7 @@ def test_request_ids_are_echoed(client):
 
 
 def test_routes_are_v1_only(client, alice):
-    assert client.get("/sandboxes", headers=alice).status_code == 404
+    assert client.get("http://testserver/sandboxes", headers=alice).status_code == 404
     # not part of the versioned API
     assert client.get("/healthz").status_code == 200
 

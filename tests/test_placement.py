@@ -3,6 +3,7 @@ from fastapi import HTTPException
 
 from db.connection import db_manager
 from db.generated.query import CreateProfileParams
+from server.errors import ZooError
 from server.sandbox_api import AUTO, CreateSandboxRequest
 from tests.conftest import member
 from tests.test_sandboxes import add_server
@@ -23,33 +24,35 @@ def create(zoo, user, kind, server_id=None):
         return zoo.sandbox_api.create(CreateSandboxRequest(kind=kind, server_id=server_id), user, db)
 
 
-def test_linux_defaults_to_local(zoo, user):
-    assert place(zoo, user, None) is None
+@pytest.mark.parametrize("kind", ["desktop", "browser", "code"])
+@pytest.mark.parametrize("server_id", [None, AUTO])
+def test_linux_uses_the_configured_runtime(zoo, user, kind, server_id):
+    assert place(zoo, user, server_id, kind) is None
 
 
 def test_explicit_server_must_belong_to_user(zoo, user, bob):
-    mine = add_server("alice@example.com")
-    theirs = add_server("bob@example.com", name="other")
-    assert place(zoo, user, mine) == mine
+    mine = add_server("alice@example.com", "windows")
+    theirs = add_server("bob@example.com", "windows", name="other")
+    assert place(zoo, user, mine, "windows") == mine
     with pytest.raises(HTTPException) as e:
-        place(zoo, user, theirs)
+        place(zoo, user, theirs, "windows")
     assert e.value.status_code == 404
 
 
-def test_linux_server_cannot_host_vms(zoo, user):
-    linux = add_server("alice@example.com")
+def test_a_mac_cannot_host_windows_vms(zoo, user):
+    mac = add_server("alice@example.com", "macos")
     with pytest.raises(HTTPException) as e:
-        place(zoo, user, linux, "windows")
+        place(zoo, user, mac, "windows")
     assert e.value.status_code == 400
 
 
-def test_auto_prefers_the_least_loaded_host(zoo, client, alice, make_sandbox, user):
-    remote = add_server("alice@example.com")
-    assert place(zoo, user, AUTO) is None
-    make_sandbox()
-    assert place(zoo, user, AUTO) == remote
-    make_sandbox(server_id=remote)
-    assert place(zoo, user, AUTO) is None
+@pytest.mark.parametrize("kind", ["desktop", "browser", "code"])
+def test_linux_rejects_explicit_servers(zoo, user, kind):
+    remote = add_server("alice@example.com", "windows")
+    for server_id in (remote, "missing"):
+        with pytest.raises(ZooError) as error:
+            place(zoo, user, server_id, kind)
+        assert error.value.code == "not_supported"
 
 
 def test_vms_need_a_server(zoo, user):

@@ -7,11 +7,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from server import guest as guest_module
 from server import objects, sandbox_api, windows
+from server.errors import ZooError
+from server.guest import token
 
-SOURCE = SimpleNamespace(id="winsrc-1234", docker_url="ssh://zoo@a")
-TARGET = SimpleNamespace(id="wintgt", docker_url="ssh://zoo@b")
+SOURCE = SimpleNamespace(id="winsrc-1234", docker_url="node://zoo@winsrc-1234")
+TARGET = SimpleNamespace(id="wintgt", docker_url="node://zoo@wintgt")
 VERSION = "windows-26100.4061-202610071200"
 
 
@@ -111,17 +112,16 @@ def test_helpers_upload_only_what_differs_and_are_checked(monkeypatch):
 
 
 def test_a_clone_records_its_template_version(host, monkeypatch):
-    monkeypatch.setattr(guest_module, "REMOTE_URL", "ws://10.0.0.5:8000/guest/connect")
+    monkeypatch.setenv("ZOO_API_URL", "http://10.0.0.5:8000")
     for name in ("push_identity", "wait_for_guest", "update_guest", "set_vnc_password", "write_env"):
         monkeypatch.setattr(windows, name, lambda *a, **k: None)
     monkeypatch.setattr(windows.hub, "bind", lambda rid, sandbox_id: None)
     monkeypatch.setattr(windows, "guest_ip", lambda rid: "172.20.0.5")
-    rid, url = windows.start("new", SOURCE, {})
+    rid = windows.start("new", SOURCE, {})
     assert (
         "winsrc-1234",
         ("clone", windows.BASE_VM, "zoo-new", "-Cpu", str(windows.CPUS), "-Memory", str(windows.MEMORY_MB)),
     ) in host.zoovm
-    assert url == "vnc://172.20.0.5:5900"
     assert windows.base_of(rid) == VERSION
 
 
@@ -130,7 +130,7 @@ def test_a_hung_windows_vm_is_found_after_two_quiet_checks(zoo, monkeypatch):
     monkeypatch.setattr(sandbox_api, "time", SimpleNamespace(monotonic=lambda: now[0]))
     monkeypatch.setattr(sandbox_api.hub, "heartbeat", lambda sandbox_id: False)
     drawing = [True]
-    monkeypatch.setattr(windows, "responsive", lambda rid: drawing[0])
+    monkeypatch.setattr(sandbox_api, "responsive", lambda rid: drawing[0])
     vm = SimpleNamespace(id="w", kind="windows", runtime_id="windows:srv:zoo-w")
     assert not api.hung(vm)
     drawing[0] = False
@@ -182,13 +182,13 @@ def test_moved_templates_keep_their_first_name():
 
 
 def test_windows_needs_a_guest_url(host, monkeypatch):
-    monkeypatch.setattr(guest_module, "REMOTE_URL", "")
-    with pytest.raises(RuntimeError, match="ZOO_GUEST_REMOTE_URL"):
+    monkeypatch.delenv("ZOO_API_URL", raising=False)
+    with pytest.raises(ZooError, match="ZOO_API_URL"):
         windows.start("new", SOURCE, {})
 
 
 def test_the_identity_goes_in_through_hyper_v_and_leaves_no_copy_on_the_host(host, monkeypatch):
-    monkeypatch.setattr(guest_module, "REMOTE_URL", "ws://10.0.0.5:8000/guest/connect")
+    monkeypatch.setenv("ZOO_API_URL", "http://10.0.0.5:8000")
     monkeypatch.setattr(windows, "host_home", lambda server_id: r"C:\Users\ci")
     monkeypatch.setattr(windows, "time", SimpleNamespace(monotonic=lambda: 0.0, sleep=lambda s: None))
     written, removed, attempts = {}, [], []
@@ -203,7 +203,7 @@ def test_the_identity_goes_in_through_hyper_v_and_leaves_no_copy_on_the_host(hos
     monkeypatch.setattr(windows, "push", push)
     windows.push_identity("winsrc-1234", "zoo-s", "s")
     env = written["env-zoo-s.env"].decode()
-    assert "ZOO_SANDBOX_ID=s\n" in env and f"ZOO_GUEST_TOKEN={guest_module.token('s')}" in env
+    assert "ZOO_SANDBOX_ID=s\n" in env and f"ZOO_GUEST_TOKEN={token('s')}" in env
     assert attempts[-1] == (r"C:\Users\ci\.zoovm\env-zoo-s.env", windows.GUEST_ENV) and len(attempts) == 3
     assert "env-zoo-s.env" in removed[0]
 
@@ -215,12 +215,15 @@ class Guest:
     def has(self, service):
         return True
 
-    def exec_run(self, argv, stdin=b"", timeout=600):
+    def run(self, argv, stdin=b"", timeout=600):
+        # the update waits for the replacement process, which reports its parent as the old guest's helper
+        if b"ParentProcessId" in stdin:
+            return 0, b"4242", b""
         return 0, self.hash.encode(), b""
 
     def call(self, op, args, payload=b"", timeout=600):
         self.calls.append(op)
-        return {}, b""
+        return {"pid": 4242}, b""
 
 
 def test_an_outdated_guest_updates_itself_and_reconnects(monkeypatch, tmp_path):
@@ -237,6 +240,8 @@ def test_an_outdated_guest_updates_itself_and_reconnects(monkeypatch, tmp_path):
     monkeypatch.setattr(windows.time, "sleep", lambda s: current.__setitem__(0, new))
     windows.update_guest("windows:srv:zoo-s", "s")
     assert pushed == [windows.GUEST_EXE + ".new"] and old.calls == ["update"]
+    # the replacement is the new build
+    current[0] = new
     pushed.clear()
     windows.update_guest("windows:srv:zoo-s", "s")  # already current
     assert pushed == []

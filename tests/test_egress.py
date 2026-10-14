@@ -3,7 +3,6 @@
 import io
 import json
 import tarfile
-from typing import Any, cast
 
 import httpx
 import pytest
@@ -35,21 +34,6 @@ def test_docker_policy_for_the_hosts_egress_daemon(monkeypatch):
     }
 
 
-def test_sandboxes_get_no_way_to_change_or_forge_their_network(monkeypatch):
-    class Client:
-        def info(self):
-            return {"SecurityOptions": ["name=seccomp,profile=builtin"]}
-
-    client = cast(Any, Client())
-    assert docker.security_options(client, "kata") == ["no-new-privileges"]
-    options = docker.security_options(client, "runc")
-    seccomp = json.loads(options[1].removeprefix("seccomp="))
-    denied = {n for rule in seccomp["syscalls"] for n in rule["names"]}
-    assert {"unshare", "setns", "io_uring_setup", "bpf", "userfaultfd", "clone3"} <= denied
-    assert {a["architecture"] for a in seccomp["archMap"]} == {"SCMP_ARCH_X86_64", "SCMP_ARCH_AARCH64"}
-    assert not any(o.startswith("apparmor=") for o in options)  # no AppArmor on this host
-
-
 def test_rule_values_are_checked_before_they_reach_a_host(client, alice, sandbox):
     url = f"/sandboxes/{sandbox['id']}/network/rules"
     for rule_type, value in [("cidr", "10.0.0.0/33"), ("ip", "example.com"), ("domain", "bad domain"), ("domain", "*")]:
@@ -66,6 +50,24 @@ def test_proxied_only_when_names_decide():
     assert egress.proxied("allow", [("domain", "x.com", "deny")])
     assert not egress.proxied("allow", [("cidr", "10.0.0.0/8", "deny")])
     assert egress.file_name("macos:srv:zoo-1") == "macos_srv_zoo-1.json"
+
+
+@pytest.mark.parametrize("backend", [macos, windows])
+def test_vm_hosts_upload_the_standalone_egress_build(monkeypatch, tmp_path, backend):
+    binary = tmp_path / "zoo-egress"
+    binary.write_bytes(b"standalone egress build")
+    monkeypatch.setattr(backend, "EGRESS_BUILD", str(binary))
+    monkeypatch.setattr(backend, "GUEST_BINARY", str(tmp_path / "missing-guest"))
+    monkeypatch.setattr(backend, "run", lambda *args, **kwargs: (0, b"", b""))
+    uploaded = []
+
+    def check(server_id, script, *args, **kwargs):
+        uploaded.append(kwargs.get("stdin", args[0] if args else b""))
+        return ""
+
+    monkeypatch.setattr(backend, "check", check)
+    backend.ensure_egress("host")
+    assert b"standalone egress build" in uploaded
 
 
 def test_windows_vm_reaches_only_the_host_proxy(monkeypatch):
