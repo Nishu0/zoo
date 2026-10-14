@@ -114,6 +114,7 @@ jobs:
       - run: uv run pytest tests/kubernetes -v
         env:
           ZOO_TEST_KUBERNETES: zoo-ci
+          ZOO_STORAGE_CLASS: standard
           ZOO_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
       - name: Pods
         if: failure()

@@ -153,7 +153,11 @@ func TestTerminal(t *testing.T) {
 			continue
 		}
 		if r.Op != "pty_exit" || r.Exit == nil || *r.Exit != 7 {
-			t.Fatalf("expected pty_exit with code 7, got %+v", r)
+			code := -1
+			if r.Exit != nil {
+				code = *r.Exit
+			}
+			t.Fatalf("expected pty_exit with code 7, got %s (exit %d) after output %q", r.Op, code, out.String())
 		}
 		break
 	}

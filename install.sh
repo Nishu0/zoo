@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# `[ … ] && [ … ] || die` checks: die runs whenever a check fails, which is the intent
+# shellcheck disable=SC2015
 set -euo pipefail
 
 REPO="chann44/zoo"
