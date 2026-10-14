@@ -57,6 +57,9 @@ data/
 # zoo-guest builds
 guest/dist/
 guest/guest
+egress/egress
+gateway/gateway
+vm-control/vm-control
 
 # JS dependencies, anywhere (sdk/, examples/, web/)
 node_modules/

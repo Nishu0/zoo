@@ -7,3 +7,4 @@ backups
 .env
 sdk
 node/dist
+egress/dist

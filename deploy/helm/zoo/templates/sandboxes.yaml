@@ -17,7 +17,7 @@ metadata:
 {{- if .Values.sandboxes.networkPolicy.enabled }}
 ---
 # Sandboxes reach the internet (each one's own policy narrows that, through the egress daemon), the gateway and
-# DNS; nothing else in the cluster. Only Zoo reaches them, for the desktop.
+# DNS; nothing else in the cluster. Nothing reaches them: their guest dials the gateway.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -30,17 +30,7 @@ spec:
     matchLabels:
       app.kubernetes.io/component: sandbox
   policyTypes: [Ingress, Egress]
-  ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ .Release.Namespace }}
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/instance: {{ .Release.Name }}
-              zoo.dev/server: "true"
-      ports:
-        - {port: 6080, protocol: TCP}
+  ingress: []
   egress:
     - to:
         - namespaceSelector:
@@ -50,7 +40,7 @@ spec:
             matchLabels:
               {{- include "zoo.selector" (list . "gateway") | nindent 14 }}
       ports:
-        - {port: 8000, protocol: TCP}
+        - {port: 8001, protocol: TCP}
     - to:
         - namespaceSelector: {}
           podSelector:
@@ -79,7 +69,7 @@ spec:
 {{- end }}
 {{- if .Values.sandboxes.egress.enabled }}
 ---
-# zoo-guest -egress on every node: the API writes each sandbox's policy into /run/zoo-egress on the sandbox's node
+# The API writes each sandbox's policy into /run/zoo-egress on the sandbox's node.
 # and the daemon enforces it with nftables in the host's network namespace, outside the sandbox (server/kube.py)
 apiVersion: apps/v1
 kind: DaemonSet
@@ -108,9 +98,9 @@ spec:
       {{- end }}
       containers:
         - name: egress
-          image: {{ include "zoo.desktopImage" . }}
+          image: {{ include "zoo.image" (list . "egress") }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["/usr/local/bin/zoo-guest", "-egress", "/run/zoo-egress"]
+          command: ["/usr/local/bin/zoo-egress", "-dir", "/run/zoo-egress"]
           securityContext:
             runAsUser: 0
             allowPrivilegeEscalation: false

@@ -1,0 +1,45 @@
+image:
+  registry: zoo-dev
+  pullPolicy: Never
+env:
+  ADMIN_EMAILS: dev@example.com
+ingress:
+  enabled: false
+  scheme: http
+  host: localhost:3000
+  apiHost: localhost:8000
+api:
+  replicas: 0
+  autoscaling:
+    enabled: false
+worker:
+  replicas: 0
+gateway:
+  replicas: 1
+  nodes:
+    host: ""
+    service:
+      type: ClusterIP
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {memory: 256Mi}
+web:
+  replicas: 0
+  autoscaling:
+    enabled: false
+database:
+  mode: external
+  external:
+    existingSecret: zoo-database
+    key: url
+secrets:
+  existingSecret: zoo-config
+  create: false
+objectStorage:
+  url: s3://zoo
+  endpoint: http://zoo-object-store:8333
+sandboxes:
+  namespace: zoo-dev-sandboxes
+  createNamespace: false
+  storageClass: zoo-local
+  snapshotClass: zoo-snapshots

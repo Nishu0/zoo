@@ -1,4 +1,4 @@
-{{- range $role := list "api" "gateway" }}
+{{- range $role := list "api" }}
 ---
 apiVersion: v1
 kind: Service
@@ -15,6 +15,41 @@ spec:
       port: 8000
       targetPort: http
 {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "zoo.fullname" . }}-gateway
+  labels:
+    {{- include "zoo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  selector:
+    {{- include "zoo.selector" (list . "gateway") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8001
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "zoo.fullname" . }}-gateway-peers
+  labels:
+    {{- include "zoo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    {{- include "zoo.selector" (list . "gateway") | nindent 4 }}
+  ports:
+    - name: grpc
+      port: 7444
+      targetPort: grpc
+    - name: peers
+      port: 8002
+      targetPort: peers
 ---
 apiVersion: v1
 kind: Service

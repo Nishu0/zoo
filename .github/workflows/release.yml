@@ -44,6 +44,28 @@ jobs:
       version: ${{ needs.release-please.outputs.created == 'true' && needs.release-please.outputs.version || '' }}
     secrets: inherit
 
+  bundles:
+    name: Offline bundle (${{ matrix.arch }})
+    needs: [release-please, images]
+    if: needs.release-please.outputs.created == 'true'
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.release-please.outputs.version }}
+      TAG: ${{ needs.release-please.outputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+      ZOO_REGISTRY: docker.io/${{ vars.DOCKERHUB_NAMESPACE || 'chann44' }}
+    steps:
+      - uses: actions/checkout@v5
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends zstd
+      - run: bash scripts/build-bundle.sh "$VERSION" dist "${{ matrix.arch }}"
+      - run: gh release upload "$TAG" dist/zoo-bundle-* --clobber
+
   zoovm:
     needs: release-please
     if: needs.release-please.outputs.created == 'true'
@@ -131,7 +153,6 @@ jobs:
           grep -q "ZOO_VERSION:-$VERSION" dist/compose.yml
           # the Windows helpers on their own too: install-node.ps1 -Iso downloads them and zoo-guest, and checks them against SHA256SUMS
           cp Caddyfile install.sh windows/*.ps1 dist/
-          cp deploy/zoo dist/zoo
           (cd windows && zip -q "../dist/zoo-windows-$VERSION.zip" ./*.ps1 README.md)
           (cd dist && sha256sum ./* > SHA256SUMS)
       - run: gh release upload "$TAG" dist/* --clobber

@@ -1,7 +1,5 @@
 # Images come from ZOO_REGISTRY at ZOO_VERSION. `docker compose up --build` builds them from this checkout instead.
 
-# the API, the background worker and the connection gateway: one image, three roles (server/workers.py,
-# server/gateway.py)
 x-zoo: &zoo
   image: ${ZOO_REGISTRY:-docker.io/chann44}/zoo-api:${ZOO_VERSION:-latest}
   depends_on:
@@ -9,7 +7,11 @@ x-zoo: &zoo
       condition: service_completed_successfully
     code-image:
       condition: service_completed_successfully
+    egress:
+      condition: service_started
     postgres:
+      condition: service_healthy
+    gateway:
       condition: service_healthy
     seaweedfs-init:
       condition: service_completed_successfully
@@ -36,22 +38,23 @@ x-zoo: &zoo
     ADMIN_EMAILS: ${ADMIN_EMAILS:-}
     CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
     OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
-    ZOO_ROLE: api
-    # guests and zoo-nodes connect to the gateway; the API and the worker reach them through it
-    ZOO_GATEWAY: http://gateway:8000
-    # zoo-node streams: nodes dial ZOO_NODE_ENDPOINTS (host:port; default: ZOO_API_URL's host on this port)
+    ZOO_GATEWAY_PEERS: gateway
+    ZOO_GATEWAY_GRPC_PORT: "7444"
     ZOO_NODE_PORT: ${ZOO_NODE_PORT:-7443}
-    ZOO_NODE_ENDPOINTS: ${ZOO_NODE_ENDPOINTS:-}
+    ZOO_NODE_HOST: ${ZOO_NODE_HOST:-}
     # how hosts reach the API: put in join tokens and installer commands
     ZOO_API_URL: ${ZOO_API_URL:-}
     ZOO_BROWSER_HOME: ${ZOO_BROWSER_HOME:-https://duckduckgo.com}
     ZOO_DOMAIN: ${ZOO_DOMAIN:-}
     ZOO_PUBLIC_IP: ${ZOO_PUBLIC_IP:-}
-    ZOO_RUNTIME: ${ZOO_RUNTIME:-kata}
-    ZOO_GUEST_URL: ${ZOO_GUEST_URL:-ws://gateway:8000/guest/connect}
-    ZOO_GUEST_REMOTE_URL: ${ZOO_GUEST_REMOTE_URL:-}
+    ZOO_RUNTIME: docker
+    ZOO_NETWORK: zoo
+    ZOO_NAMESPACE: ${ZOO_NAMESPACE:-zoo}
+    ZOO_STORAGE_CLASS: ${ZOO_STORAGE_CLASS:-zoo-local}
+    ZOO_SNAPSHOT_CLASS: ${ZOO_SNAPSHOT_CLASS:-zoo-snapshots}
     ZOO_SANDBOX_IMAGE: ${ZOO_SANDBOX_IMAGE:-${ZOO_REGISTRY:-docker.io/chann44}/zoo-sandbox-desktop:${ZOO_VERSION:-latest}}
     ZOO_CODE_IMAGE: ${ZOO_CODE_IMAGE:-${ZOO_REGISTRY:-docker.io/chann44}/zoo-sandbox-code:${ZOO_VERSION:-latest}}
+    ZOO_PAUSE_MINUTES: ${ZOO_PAUSE_MINUTES:-30}
     ZOO_MACOS_BASE: ${ZOO_MACOS_BASE:-zoo-macos-base}
     ZOO_MACOS_USER: ${ZOO_MACOS_USER:-admin}
     ZOO_WINDOWS_BASE: ${ZOO_WINDOWS_BASE:-zoo-windows-base}
@@ -67,16 +70,28 @@ x-zoo: &zoo
     timeout: 3s
     retries: 3
     start_period: 30s
-  # shutdown drains lifecycle jobs and agent runs; unfinished jobs resume on the next start
   stop_grace_period: 60s
   volumes:
     - /var/run/docker.sock:/var/run/docker.sock
-    - zoo-data:/data
-    - ${ZOO_SSH_DIR:-~/.ssh}:/root/.ssh:ro
+    - /dev/kvm:/dev/kvm
   networks:
     - zoo
 
 services:
+  migrate:
+    image: ${ZOO_REGISTRY:-docker.io/chann44}/zoo-api:${ZOO_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: ["sh", "scripts/start.sh", "migrate"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://zoo:zoo@postgres:5432/zoo}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - zoo
+
   sandbox-image:
     build: .
     image: ${ZOO_SANDBOX_IMAGE:-${ZOO_REGISTRY:-docker.io/chann44}/zoo-sandbox-desktop:${ZOO_VERSION:-latest}}
@@ -88,6 +103,24 @@ services:
       dockerfile: Dockerfile.code
     image: ${ZOO_CODE_IMAGE:-${ZOO_REGISTRY:-docker.io/chann44}/zoo-sandbox-code:${ZOO_VERSION:-latest}}
     entrypoint: ["true"]
+
+  egress:
+    image: ${ZOO_REGISTRY:-docker.io/chann44}/zoo-egress:${ZOO_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.egress
+    container_name: zoo-egress
+    command: ["-dir", "/run/zoo-egress"]
+    network_mode: host
+    user: "0:0"
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    volumes:
+      - zoo-egress:/run/zoo-egress
+    labels:
+      zoo.egress: "1"
 
   postgres:
     image: postgres:17
@@ -151,6 +184,7 @@ services:
     environment:
       <<: *zoo-env
       ZOO_ROLE: api
+      ZOO_API_WORKERS: ${ZOO_API_WORKERS:-}
     ports:
       - "8000:8000"
 
@@ -161,15 +195,29 @@ services:
       <<: *zoo-env
       ZOO_ROLE: worker
 
-  # holds every zoo-guest websocket and zoo-node stream; exactly one
   gateway:
-    <<: *zoo
+    image: ${ZOO_REGISTRY:-docker.io/chann44}/zoo-gateway:${ZOO_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
     environment:
       <<: *zoo-env
-      ZOO_ROLE: gateway
-      ZOO_GATEWAY: ""
+      ZOO_GATEWAY_IP: ""
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     ports:
-      - "${ZOO_NODE_PORT:-7443}:${ZOO_NODE_PORT:-7443}"
+      - "${ZOO_NODE_PORT:-7443}:7443"
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/zoo-gateway", "-healthcheck", "http://127.0.0.1:8001/readyz"]
+      interval: 5s
+      timeout: 4s
+      retries: 6
+      start_period: 30s
+    stop_grace_period: 15s
+    restart: unless-stopped
+    networks:
+      - zoo
   web:
     image: ${ZOO_REGISTRY:-docker.io/chann44}/zoo-web:${ZOO_VERSION:-latest}
     build: ./web
@@ -231,7 +279,8 @@ configs:
       {"identities": [{"name": "zoo", "credentials": [{"accessKey": "${AWS_ACCESS_KEY_ID:-zoo}", "secretKey": "${AWS_SECRET_ACCESS_KEY:-zoozoozoo}"}], "actions": ["Admin", "Read", "Write", "List", "Tagging"]}]}
 
 volumes:
-  zoo-data:
+  zoo-egress:
+    name: zoo-egress
   pg-data:
   seaweedfs-data:
   caddy-data:

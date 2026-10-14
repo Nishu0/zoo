@@ -1,4 +1,4 @@
-# Zoo on Kubernetes. See docs/kubernetes.md for a walkthrough; the smallest install sets the two hostnames:
+# Zoo on Kubernetes. See site/src/content/docs/docs/guides/kubernetes.md for a walkthrough; the smallest install sets the two hostnames:
 #
 #   helm install zoo oci://registry-1.docker.io/chann44/zoo --namespace zoo --create-namespace \
 #     --set ingress.host=zoo.example.com --set ingress.apiHost=api.zoo.example.com
@@ -10,7 +10,7 @@ image:
   pullPolicy: IfNotPresent
 imagePullSecrets: []
 
-# Environment for every Zoo pod (api, worker, gateway): any setting from docs/configuration.md
+# Environment for every Zoo pod (api, worker, gateway): any setting from site/src/content/docs/docs/reference/configuration.md
 env: {}
 # Environment from existing secrets or config maps, for every Zoo pod (valueFrom/secretRef entries)
 envFrom: []
@@ -31,6 +31,8 @@ ingress:
 
 api:
   replicas: 2
+  # uvicorn processes per pod (ZOO_API_WORKERS); match the CPU the pod gets
+  workers: 2
   autoscaling:
     enabled: true
     minReplicas: 2
@@ -55,10 +57,8 @@ worker:
   affinity: {}
   podAnnotations: {}
 
-# The connection gateway holds every long-lived connection: guests in sandboxes and zoo-nodes on hosts outside the
-# cluster. The API and worker reach them through it (server/gateway.py). One replica: when it restarts, guests and
-# nodes dial it again within seconds.
 gateway:
+  replicas: 2
   resources:
     requests: {cpu: 100m, memory: 256Mi}
     limits: {memory: 1Gi}
@@ -66,17 +66,16 @@ gateway:
   tolerations: []
   affinity: {}
   podAnnotations: {}
-  # zoo-node on Macs, Hyper-V hosts and Linux servers outside the cluster dials this, over its own mutual TLS: it
+  # zoo-node on Macs and Hyper-V hosts dials this, over its own mutual TLS: it
   # can't go through the ingress
   nodes:
     enabled: true
+    host: ""
     service:
       type: LoadBalancer
       port: 7443
       annotations: {}
       loadBalancerSourceRanges: []
-    # host:port the nodes dial: the load balancer's DNS name or address. Required for zoo-node.
-    endpoint: ""
 
 web:
   replicas: 2
@@ -113,7 +112,7 @@ database:
 
 # Zoo's own secrets: JWT_SECRET signs logins, ZOO_SECRETS_KEY wraps the keys that encrypt stored secrets.
 secrets:
-  # an existing secret with JWT_SECRET and ZOO_SECRETS_KEY (and anything else from docs/configuration.md)
+  # an existing secret with JWT_SECRET and ZOO_SECRETS_KEY (and anything else from the configuration reference)
   existingSecret: ""
   # without one, the chart generates both once and keeps them across upgrades
   create: true
@@ -176,19 +175,6 @@ objectStorage:
   # a secret with AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY; on EKS the pods' identity can stand in
   existingSecret: ""
 
-# SSH host keys and zoo-node release files live under /data, which every Zoo pod shares. With more than one
-# pod it needs ReadWriteMany storage (EFS, Filestore, Azure Files, CephFS, NFS); a single-node cluster can use
-# ReadWriteOnce.
-persistence:
-  existingClaim: ""
-  accessMode: ReadWriteMany
-  size: 20Gi
-  storageClass: ""
-
-# For servers added over SSH: a secret with the private key (id_ed25519) Zoo uses, mounted at /root/.ssh
-ssh:
-  existingSecret: ""
-
 serviceAccount:
   create: true
   name: ""
@@ -215,12 +201,14 @@ sandboxes:
   # defaults to <release namespace>-sandboxes
   namespace: ""
   createNamespace: true
-  # Kata Containers (kata-deploy installs the RuntimeClass); runc runs plain containers, for clusters without KVM
-  runtimeClass: kata
-  storageClass: ""
+  storageClass: zoo-local
   homeSize: 10Gi
-  # a VolumeSnapshotClass makes snapshots CSI volume snapshots; without one they are copies into a new claim
-  snapshotClass: ""
+  snapshotClass: zoo-snapshots
+  idleMemoryMbDesktop: 700
+  idleMemoryMbCode: 250
+  spareVolumes: 4
+  # a stopped sandbox stays paused (resumes instantly) this long, then is deleted down to its volume
+  pauseMinutes: 30
   # images; default to the release's zoo-sandbox-desktop and zoo-sandbox-code
   images:
     desktop: ""
@@ -244,3 +232,10 @@ sandboxes:
     resources:
       requests: {cpu: 50m, memory: 64Mi}
       limits: {memory: 256Mi}
+  prepull:
+    enabled: true
+    nodeSelector: {}
+    tolerations: []
+    resources:
+      requests: {cpu: 5m, memory: 8Mi}
+      limits: {memory: 16Mi}

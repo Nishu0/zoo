@@ -6,7 +6,7 @@ Zoo is starting in {{ .Release.Namespace }}.
 Sign up there; addresses in ADMIN_EMAILS (env) become admins.
 {{- if .Values.sandboxes.enabled }}
 
-Linux sandboxes run as pods in {{ include "zoo.sandboxNamespace" . }} with RuntimeClass {{ .Values.sandboxes.runtimeClass | quote }}.
+Linux sandboxes run as pods in {{ include "zoo.sandboxNamespace" . }} with RuntimeClass kata.
 Check that the cluster can run them (RuntimeClass, KVM on the nodes, storage, the egress daemon):
 
   helm test {{ .Release.Name }} --namespace {{ .Release.Namespace }} --logs

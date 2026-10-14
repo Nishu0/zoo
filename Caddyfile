@@ -1,6 +1,6 @@
 {
 	on_demand_tls {
-		ask http://api:8000/domains/check
+		ask http://api:8000/v1/domains/check
 	}
 }
 
@@ -13,6 +13,10 @@ https:// {
 		on_demand
 	}
 	encode gzip
+	handle /api/guest/connect {
+		uri strip_prefix /api
+		reverse_proxy gateway:8001
+	}
 	handle_path /api/* {
 		reverse_proxy api:8000
 	}

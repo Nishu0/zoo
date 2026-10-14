@@ -38,10 +38,6 @@ app.kubernetes.io/component: {{ index . 1 }}
 {{- default (printf "%s-sandboxes" .Release.Namespace) .Values.sandboxes.namespace -}}
 {{- end -}}
 
-{{- define "zoo.dataClaim" -}}
-{{- default (printf "%s-data" (include "zoo.fullname" .)) .Values.persistence.existingClaim -}}
-{{- end -}}
-
 {{- define "zoo.tag" -}}
 {{- default .Chart.AppVersion .Values.image.tag -}}
 {{- end -}}
@@ -70,6 +66,8 @@ app.kubernetes.io/component: {{ index . 1 }}
 
 {{/* Environment for every Zoo pod; the component's ZOO_ROLE is set where it is used */}}
 {{- define "zoo.env" -}}
+- name: ZOO_RUNTIME
+  value: kube
 - name: ZOO_API_URL
   value: {{ include "zoo.apiUrl" . | quote }}
 - name: CORS_ORIGINS
@@ -82,14 +80,16 @@ app.kubernetes.io/component: {{ index . 1 }}
   value: {{ include "zoo.desktopImage" . | quote }}
 - name: ZOO_CODE_IMAGE
   value: {{ default (include "zoo.image" (list . "sandbox-code")) .Values.sandboxes.images.code | quote }}
-- name: ZOO_GUEST_URL
-  value: {{ printf "ws://%s:8000/guest/connect" (include "zoo.gatewayHost" .) | quote }}
-- name: ZOO_GUEST_REMOTE_URL
-  value: {{ printf "%s://%s/guest/connect" (ternary "wss" "ws" (eq .Values.ingress.scheme "https")) .Values.ingress.apiHost | quote }}
-{{- with .Values.gateway.nodes.endpoint }}
-- name: ZOO_NODE_ENDPOINTS
-  value: {{ . | quote }}
-{{- end }}
+- name: ZOO_GATEWAY_PEERS
+  value: {{ printf "%s-gateway-peers.%s.svc.cluster.local" (include "zoo.fullname" .) .Release.Namespace | quote }}
+- name: ZOO_GATEWAY_SERVICE
+  value: {{ printf "%s-gateway.%s.svc.cluster.local" (include "zoo.fullname" .) .Release.Namespace | quote }}
+- name: ZOO_GATEWAY_GRPC_PORT
+  value: "7444"
+- name: ZOO_NODE_HOST
+  value: {{ default .Values.ingress.apiHost .Values.gateway.nodes.host | quote }}
+- name: ZOO_NODE_PORT
+  value: {{ .Values.gateway.nodes.service.port | quote }}
 - name: DATABASE_URL
   valueFrom:
     secretKeyRef:
@@ -117,16 +117,22 @@ app.kubernetes.io/component: {{ index . 1 }}
   value: {{ . | quote }}
 {{- end }}
 {{- if .Values.sandboxes.enabled }}
-- name: ZOO_KUBERNETES_NAMESPACE
+- name: ZOO_NAMESPACE
   value: {{ include "zoo.sandboxNamespace" . | quote }}
-- name: ZOO_KUBERNETES_RUNTIME_CLASS
-  value: {{ .Values.sandboxes.runtimeClass | quote }}
-- name: ZOO_KUBERNETES_STORAGE_CLASS
+- name: ZOO_STORAGE_CLASS
   value: {{ .Values.sandboxes.storageClass | quote }}
 - name: ZOO_KUBERNETES_HOME_SIZE
   value: {{ .Values.sandboxes.homeSize | quote }}
-- name: ZOO_KUBERNETES_SNAPSHOT_CLASS
+- name: ZOO_SNAPSHOT_CLASS
   value: {{ .Values.sandboxes.snapshotClass | quote }}
+- name: ZOO_IDLE_MEMORY_MB_DESKTOP
+  value: {{ .Values.sandboxes.idleMemoryMbDesktop | quote }}
+- name: ZOO_IDLE_MEMORY_MB_CODE
+  value: {{ .Values.sandboxes.idleMemoryMbCode | quote }}
+- name: ZOO_SPARE_VOLUMES
+  value: {{ .Values.sandboxes.spareVolumes | quote }}
+- name: ZOO_PAUSE_MINUTES
+  value: {{ .Values.sandboxes.pauseMinutes | quote }}
 - name: ZOO_KUBERNETES_IMAGE_PULL_SECRET
   value: {{ .Values.sandboxes.imagePullSecret | quote }}
 - name: ZOO_KUBERNETES_EGRESS_SELECTOR
@@ -197,12 +203,9 @@ containers:
     env:
       - name: ZOO_ROLE
         value: {{ $role }}
-      {{- if eq $role "gateway" }}
-      - name: ZOO_NODE_PORT
-        value: "7443"
-      {{- else }}
-      - name: ZOO_GATEWAY
-        value: {{ printf "http://%s:8000" (include "zoo.gatewayHost" $root) | quote }}
+      {{- if $values.workers }}
+      - name: ZOO_API_WORKERS
+        value: {{ $values.workers | quote }}
       {{- end }}
       {{- include "zoo.env" $root | nindent 6 }}
     envFrom:
@@ -212,10 +215,6 @@ containers:
         containerPort: 8000
       - name: metrics
         containerPort: {{ $root.Values.metrics.port }}
-      {{- if eq $role "gateway" }}
-      - name: nodes
-        containerPort: 7443
-      {{- end }}
     # migrations run as each pod starts (under a lock, scripts/start.sh), after the database is up
     startupProbe:
       httpGet: {path: /healthz, port: http}
@@ -239,24 +238,6 @@ containers:
     securityContext:
       {{- toYaml . | nindent 6 }}
     {{- end }}
-    volumeMounts:
-      - name: data
-        mountPath: /data
-      {{- if $root.Values.ssh.existingSecret }}
-      - name: ssh
-        mountPath: /root/.ssh
-        readOnly: true
-      {{- end }}
-volumes:
-  - name: data
-    persistentVolumeClaim:
-      claimName: {{ include "zoo.dataClaim" $root }}
-  {{- with $root.Values.ssh.existingSecret }}
-  - name: ssh
-    secret:
-      secretName: {{ . }}
-      defaultMode: 0400
-  {{- end }}
 {{- with $values.nodeSelector }}
 nodeSelector:
   {{- toYaml . | nindent 2 }}

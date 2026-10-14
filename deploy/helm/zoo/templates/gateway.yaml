@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "zoo.fullname" . }}-gateway
+  labels:
+    {{- include "zoo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  replicas: {{ .Values.gateway.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  selector:
+    matchLabels:
+      {{- include "zoo.selector" (list . "gateway") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zoo.labels" . | nindent 8 }}
+        app.kubernetes.io/component: gateway
+        zoo.dev/server: "true"
+      {{- with .Values.gateway.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "zoo.serviceAccount" . }}
+      terminationGracePeriodSeconds: 20
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: migrate
+          image: {{ include "zoo.image" (list . "api") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["sh", "scripts/start.sh", "migrate"]
+          env:
+            {{- include "zoo.env" . | nindent 12 }}
+          envFrom:
+            {{- include "zoo.envFrom" . | nindent 12 }}
+      containers:
+        - name: gateway
+          image: {{ include "zoo.image" (list . "gateway") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: ZOO_GATEWAY_IP
+              valueFrom:
+                fieldRef: {fieldPath: status.podIP}
+            {{- include "zoo.env" . | nindent 12 }}
+          envFrom:
+            {{- include "zoo.envFrom" . | nindent 12 }}
+          ports:
+            - {name: http, containerPort: 8001}
+            - {name: grpc, containerPort: 7444}
+            - {name: peers, containerPort: 8002}
+            - {name: nodes, containerPort: 7443}
+          startupProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 5
+            failureThreshold: 120
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 4
+          {{- with .Values.gateway.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.gateway.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.gateway.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.gateway.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "zoo.fullname" . }}-gateway
+  labels:
+    {{- include "zoo.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "zoo.selector" (list . "gateway") | nindent 6 }}

@@ -1,0 +1,64 @@
+{{- if and .Values.sandboxes.enabled .Values.sandboxes.prepull.enabled }}
+{{- $nodeSelector := mergeOverwrite (deepCopy .Values.sandboxes.prepull.nodeSelector) (dict "katacontainers.io/kata-runtime" "true" "kubernetes.io/arch" "amd64") }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "zoo.fullname" . }}-prepull
+  namespace: {{ include "zoo.sandboxNamespace" . }}
+  labels:
+    {{- include "zoo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prepull
+spec:
+  selector:
+    matchLabels:
+      {{- include "zoo.selector" (list . "prepull") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zoo.labels" . | nindent 8 }}
+        app.kubernetes.io/component: prepull
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 10
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      {{- with .Values.sandboxes.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ . }}
+      {{- end }}
+      containers:
+        - name: desktop
+          image: {{ include "zoo.desktopImage" . }}
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sleep", "infinity"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          {{- with .Values.sandboxes.prepull.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        - name: code
+          image: {{ default (include "zoo.image" (list . "sandbox-code")) .Values.sandboxes.images.code }}
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sleep", "infinity"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          {{- with .Values.sandboxes.prepull.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      nodeSelector:
+        {{- toYaml $nodeSelector | nindent 8 }}
+      {{- with .Values.sandboxes.prepull.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

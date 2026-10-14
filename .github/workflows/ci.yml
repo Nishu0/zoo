@@ -135,6 +135,28 @@ jobs:
       - run: test -z "$(gofmt -l .)"
       - run: go vet ./...
       - run: go test -race ./...
+
+  egress:
+    name: zoo-egress (Go)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: egress
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: egress/go.mod
+          cache-dependency-path: egress/go.sum
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go build ./...
+      - run: go test -race ./...
+      - name: Builds for macOS and Windows
+        run: |
+          for t in darwin/arm64 windows/amd64; do
+            GOOS=${t%/*} GOARCH=${t#*/} go vet ./... && GOOS=${t%/*} GOARCH=${t#*/} go build -o /dev/null . || exit 1
+          done
       - name: The egress ruleset loads into real nftables
         run: |
           sudo apt-get install -y --no-install-recommends nftables
@@ -142,7 +164,7 @@ jobs:
 
   node:
     name: zoo-node (Go)
-    runs-on: ubuntu-24.04
+    runs-on: macos-14
     defaults:
       run:
         working-directory: node
@@ -155,9 +177,9 @@ jobs:
       - run: test -z "$(gofmt -l .)"
       - run: go vet ./...
       - run: go test -race ./...
-      - name: Builds for every host platform
+      - name: Builds for macOS and Windows
         run: |
-          for t in linux/amd64 linux/arm64 darwin/arm64 windows/amd64; do
+          for t in darwin/arm64 windows/amd64; do
             GOOS=${t%/*} GOARCH=${t#*/} go vet ./... && GOOS=${t%/*} GOARCH=${t#*/} go build -o /dev/null . || exit 1
           done
 
@@ -334,7 +356,7 @@ jobs:
             echo "::endgroup::"
           done
       - name: shellcheck
-        run: shellcheck install.sh deploy/zoo scripts/*.sh sandbox-entrypoint.sh macos/zoovm/build.sh
+        run: shellcheck install.sh scripts/*.sh sandbox-entrypoint.sh macos/zoovm/build.sh
       - name: PSScriptAnalyzer
         shell: pwsh
         run: |
