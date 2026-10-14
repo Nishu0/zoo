@@ -307,7 +307,7 @@ func (*ApiMessage_Renewal) isApiMessage_Body() {}
 
 type Driver struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"` // kata, runc, zoovm, hyperv
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"` // zoovm, hyperv
 	Available     bool                   `protobuf:"varint,2,opt,name=available,proto3" json:"available,omitempty"`
 	Detail        string                 `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"` // why it isn't available, or its version
 	unknownFields protoimpl.UnknownFields
@@ -369,11 +369,11 @@ func (x *Driver) GetDetail() string {
 type Hello struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
-	Os            string                 `protobuf:"bytes,2,opt,name=os,proto3" json:"os,omitempty"` // linux, darwin, windows
+	Os            string                 `protobuf:"bytes,2,opt,name=os,proto3" json:"os,omitempty"` // darwin, windows
 	Arch          string                 `protobuf:"bytes,3,opt,name=arch,proto3" json:"arch,omitempty"`
 	Hostname      string                 `protobuf:"bytes,4,opt,name=hostname,proto3" json:"hostname,omitempty"`
 	Drivers       []*Driver              `protobuf:"bytes,5,rep,name=drivers,proto3" json:"drivers,omitempty"`
-	Targets       []string               `protobuf:"bytes,6,rep,name=targets,proto3" json:"targets,omitempty"` // what TunnelOpen can reach here: docker, ssh
+	Targets       []string               `protobuf:"bytes,6,rep,name=targets,proto3" json:"targets,omitempty"` // what TunnelOpen can reach here: ssh
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

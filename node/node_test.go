@@ -118,10 +118,10 @@ func TestDecodeToken(t *testing.T) {
 	}
 }
 
-// fakeJoin serves /nodes/join like the API: it signs the CSR with the CA and names the node.
+// fakeJoin serves /v1/nodes/join like the API: it signs the CSR with the CA and names the node.
 func fakeJoin(t *testing.T, ca *testCA, endpoints []string, seen *joinRequest) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/nodes/join" {
+		if r.URL.Path != "/v1/nodes/join" {
 			http.NotFound(w, r)
 			return
 		}
@@ -164,7 +164,7 @@ func TestJoinSavesCredentialsAndPinsTheCA(t *testing.T) {
 	if seen.OS != runtime.GOOS || seen.Arch != runtime.GOARCH || !strings.Contains(seen.CSR, "CERTIFICATE REQUEST") {
 		t.Fatalf("join request %+v", seen)
 	}
-	if runtime.GOOS != "linux" && (seen.SSHUser != "zoo" || seen.SSHHostKey != "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA") {
+	if seen.SSHUser != "zoo" || seen.SSHHostKey != "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA" {
 		t.Fatalf("ssh fields %q %q", seen.SSHUser, seen.SSHHostKey)
 	}
 	if _, _, err := loadCredentials(home); err != nil {
@@ -300,15 +300,9 @@ func mustKey(t *testing.T, key *ecdsa.PrivateKey) []byte {
 	return data
 }
 
-// echoTarget is a Unix socket that writes back what it reads, standing in for the Docker socket.
+// echoTarget writes tunnel bytes back over a local TCP connection.
 func echoTarget(t *testing.T) string {
-	dir, err := os.MkdirTemp("", "zn")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(dir) })
-	path := filepath.Join(dir, "d.sock")
-	lis, err := net.Listen("unix", path)
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -325,7 +319,7 @@ func echoTarget(t *testing.T) string {
 			}()
 		}
 	}()
-	return path
+	return lis.Addr().String()
 }
 
 func runNode(t *testing.T, home string, targets map[string]target) (*Node, chan error, context.CancelFunc) {
@@ -344,8 +338,8 @@ func runNode(t *testing.T, home string, targets map[string]target) (*Node, chan 
 
 type fakeDriver struct{}
 
-func (fakeDriver) Name() string                                { return "kata" }
-func (fakeDriver) Probe(context.Context) (bool, string)        { return true, "Docker 27" }
+func (fakeDriver) Name() string                                { return "zoovm" }
+func (fakeDriver) Probe(context.Context) (bool, string)        { return true, "zoovm" }
 func (fakeDriver) Sandboxes(context.Context) ([]string, error) { return []string{"sb-2", "sb-1"}, nil }
 
 func wait[T any](t *testing.T, ch chan T) T {
@@ -364,14 +358,14 @@ func TestNodeReportsAndTunnels(t *testing.T) {
 	ca := newCA(t)
 	api, home, stop := startAPI(t, ca, 365)
 	defer stop()
-	_, done, cancel := runNode(t, home, map[string]target{"docker": {"unix", echoTarget(t)}})
+	_, done, cancel := runNode(t, home, map[string]target{"ssh": {"tcp", echoTarget(t)}})
 	defer cancel()
 
 	hello := wait(t, api.hellos)
 	if hello.Version != version || hello.Os != runtime.GOOS || len(hello.Drivers) != 1 || !hello.Drivers[0].Available {
 		t.Fatalf("hello %+v", hello)
 	}
-	if len(hello.Targets) != 1 || hello.Targets[0] != "docker" {
+	if len(hello.Targets) != 1 || hello.Targets[0] != "ssh" {
 		t.Fatalf("targets %v", hello.Targets)
 	}
 	status := wait(t, api.statuses)
@@ -382,15 +376,15 @@ func TestNodeReportsAndTunnels(t *testing.T) {
 	for _, c := range status.Checks {
 		names = append(names, c.Name)
 	}
-	if strings.Join(names, ",") != "disk,docker,kata" {
+	if strings.Join(names, ",") != "disk,ssh,zoovm" {
 		t.Fatalf("checks %v", names)
 	}
 
 	// a tunnel to the echo socket: what the API sends comes back
-	api.outbox <- &nodepb.ApiMessage{Body: &nodepb.ApiMessage_Open{Open: &nodepb.TunnelOpen{Id: 7, Target: "docker"}}}
-	api.outbox <- &nodepb.ApiMessage{Body: &nodepb.ApiMessage_Data{Data: &nodepb.TunnelData{Id: 7, Data: []byte("GET /_ping")}}}
+	api.outbox <- &nodepb.ApiMessage{Body: &nodepb.ApiMessage_Open{Open: &nodepb.TunnelOpen{Id: 7, Target: "ssh"}}}
+	api.outbox <- &nodepb.ApiMessage{Body: &nodepb.ApiMessage_Data{Data: &nodepb.TunnelData{Id: 7, Data: []byte("SSH-2.0-Zoo")}}}
 	var got []byte
-	for len(got) < len("GET /_ping") {
+	for len(got) < len("SSH-2.0-Zoo") {
 		msg := wait(t, api.inbox)
 		data := msg.GetData()
 		if data == nil || data.Id != 7 {
@@ -398,12 +392,12 @@ func TestNodeReportsAndTunnels(t *testing.T) {
 		}
 		got = append(got, data.Data...)
 	}
-	if string(got) != "GET /_ping" {
+	if string(got) != "SSH-2.0-Zoo" {
 		t.Fatalf("echo %q", got)
 	}
 	// the API closes it; then a target the node doesn't have is refused
 	api.outbox <- &nodepb.ApiMessage{Body: &nodepb.ApiMessage_Close{Close: &nodepb.TunnelClose{Id: 7}}}
-	api.outbox <- &nodepb.ApiMessage{Body: &nodepb.ApiMessage_Open{Open: &nodepb.TunnelOpen{Id: 8, Target: "ssh"}}}
+	api.outbox <- &nodepb.ApiMessage{Body: &nodepb.ApiMessage_Open{Open: &nodepb.TunnelOpen{Id: 8, Target: "unknown"}}}
 	closed := wait(t, api.inbox).GetClose()
 	if closed == nil || closed.Id != 8 || !strings.Contains(closed.Error, "no such target") {
 		t.Fatalf("close %v", closed)
@@ -531,51 +525,6 @@ func TestSandboxIDsSkipBaseVMs(t *testing.T) {
 	})
 	if strings.Join(got, ",") != "0b0e4f6a-1c2d-4e5f-8a9b-0c1d2e3f4a5b" {
 		t.Fatalf("got %v", got)
-	}
-}
-
-func TestDockerDriverListsSandboxesOfItsRuntime(t *testing.T) {
-	dir, _ := os.MkdirTemp("", "zd")
-	defer os.RemoveAll(dir)
-	sock := filepath.Join(dir, "d.sock")
-	lis, err := net.Listen("unix", sock)
-	if err != nil {
-		t.Fatal(err)
-	}
-	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/info":
-			w.Write([]byte(`{"ServerVersion":"27.1","Runtimes":{"runc":{},"kata":{}}}`))
-		case "/containers/json":
-			if !strings.Contains(r.URL.Query().Get("filters"), "zoo.sandbox") {
-				t.Errorf("filters %q", r.URL.Query().Get("filters"))
-			}
-			w.Write([]byte(`[{"Id":"c1","Labels":{"zoo.sandbox":"s1"}},{"Id":"c2","Labels":{"zoo.sandbox":"s2"}},{"Id":"gone","Labels":{"zoo.sandbox":"s3"}}]`))
-		case "/containers/c1/json":
-			w.Write([]byte(`{"HostConfig":{"Runtime":"kata"}}`))
-		case "/containers/c2/json":
-			w.Write([]byte(`{"HostConfig":{"Runtime":"runc"}}`))
-		default:
-			http.NotFound(w, r)
-		}
-	})}
-	go srv.Serve(lis)
-	defer srv.Close()
-	client := newDockerClient(sock)
-	ctx := context.Background()
-	for runtime, want := range map[string]string{"kata": "s1", "runc": "s2"} {
-		d := &dockerDriver{name: runtime, runtime: runtime, client: client}
-		if ok, detail := d.Probe(ctx); !ok || detail != "Docker 27.1" {
-			t.Fatalf("%s probe: %v %s", runtime, ok, detail)
-		}
-		ids, err := d.Sandboxes(ctx)
-		if err != nil || strings.Join(ids, ",") != want {
-			t.Fatalf("%s: %v %v", runtime, ids, err)
-		}
-	}
-	missing := &dockerDriver{name: "gvisor", runtime: "runsc", client: client}
-	if ok, detail := missing.Probe(ctx); ok || !strings.Contains(detail, "no runsc runtime") {
-		t.Fatalf("missing runtime: %v %s", ok, detail)
 	}
 }
 

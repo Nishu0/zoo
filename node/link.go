@@ -16,6 +16,7 @@ import (
 
 	"github.com/chann44/zoo/node/nodepb"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 )
@@ -23,8 +24,8 @@ import (
 var errUpdated = errors.New("updated")
 
 const (
-	minBackoff   = time.Second
-	maxBackoff   = 30 * time.Second
+	minBackoff   = 250 * time.Millisecond
+	maxBackoff   = time.Second
 	renewBefore  = 30 * 24 * time.Hour
 	tunnelBuffer = 64
 	readChunk    = 64 * 1024
@@ -142,6 +143,15 @@ func (n *Node) dial(endpoint string) (*grpc.ClientConn, error) {
 	})
 	return grpc.NewClient(endpoint,
 		grpc.WithTransportCredentials(creds),
+		grpc.WithConnectParams(grpc.ConnectParams{
+			Backoff: backoff.Config{
+				BaseDelay:  100 * time.Millisecond,
+				Multiplier: 1.5,
+				Jitter:     0.2,
+				MaxDelay:   time.Second,
+			},
+			MinConnectTimeout: time.Second,
+		}),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 30 * time.Second, Timeout: 20 * time.Second}),
 	)
 }
@@ -225,10 +235,8 @@ func (n *Node) hello(ctx context.Context) *nodepb.Hello {
 		ok, detail := d.Probe(ctx)
 		hello.Drivers = append(hello.Drivers, &nodepb.Driver{Name: d.Name(), Available: ok, Detail: detail})
 	}
-	for name, t := range n.targets {
-		if t.present() {
-			hello.Targets = append(hello.Targets, name)
-		}
+	for name := range n.targets {
+		hello.Targets = append(hello.Targets, name)
 	}
 	slices.Sort(hello.Targets)
 	return hello
@@ -334,14 +342,12 @@ func (n *Node) status(ctx context.Context) *nodepb.Status {
 		}
 	}
 	for name, t := range n.targets {
-		if t.present() {
-			err := t.check(ctx)
-			check := &nodepb.Check{Name: name, Ok: err == nil}
-			if err != nil {
-				check.Detail = err.Error()
-			}
-			status.Checks = append(status.Checks, check)
+		err := t.check(ctx)
+		check := &nodepb.Check{Name: name, Ok: err == nil}
+		if err != nil {
+			check.Detail = err.Error()
 		}
+		status.Checks = append(status.Checks, check)
 	}
 	status.Checks = append(status.Checks, diskCheck(stats))
 	slices.Sort(status.Sandboxes)
@@ -394,7 +400,7 @@ func (t *tunnel) stop() {
 func (s *session) open(ctx context.Context, open *nodepb.TunnelOpen) {
 	tg, ok := s.node.targets[open.Target]
 	t := &tunnel{in: make(chan []byte, tunnelBuffer), done: make(chan struct{})}
-	if !ok || !tg.present() {
+	if !ok {
 		s.send(closeMessage(open.Id, "no such target here: "+open.Target))
 		return
 	}

@@ -37,7 +37,7 @@ message ApiMessage {
 }
 
 message Driver {
-  string name = 1;  // kata, runc, zoovm, hyperv
+  string name = 1;  // zoovm, hyperv
   bool available = 2;
   string detail = 3;  // why it isn't available, or its version
 }
@@ -45,11 +45,11 @@ message Driver {
 // The first message on a stream.
 message Hello {
   string version = 1;
-  string os = 2;  // linux, darwin, windows
+  string os = 2;  // darwin, windows
   string arch = 3;
   string hostname = 4;
   repeated Driver drivers = 5;
-  repeated string targets = 6;  // what TunnelOpen can reach here: docker, ssh
+  repeated string targets = 6;  // what TunnelOpen can reach here: ssh
 }
 
 message Welcome {

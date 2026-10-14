@@ -27,7 +27,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-$Docs = 'https://github.com/chann44/zoo/blob/main/docs/windows.md'
+$Docs = 'https://github.com/chann44/zoo/blob/main/site/src/content/docs/docs/guides/windows.md'
 $script:Failed = $false
 
 function Ok([string]$m) { Write-Host '  ok    ' -ForegroundColor Green -NoNewline; Write-Host $m }

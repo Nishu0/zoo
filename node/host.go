@@ -5,13 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
-	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -21,14 +17,6 @@ import (
 // A target is something on the host the API can open a byte stream to.
 type target struct {
 	network, address string
-}
-
-func (t target) present() bool {
-	if t.network == "unix" {
-		_, err := os.Stat(t.address)
-		return err == nil
-	}
-	return true
 }
 
 func (t target) dial(ctx context.Context) (net.Conn, error) {
@@ -46,37 +34,9 @@ func (t target) check(ctx context.Context) error {
 	return conn.Close()
 }
 
-// hostTargets: the Docker socket wherever there is one, and the SSH server on macOS and Windows hosts, whose
-// backends (server/macos.py, windows.py) work over SSH.
+// hostTargets reaches the SSH server used by the macOS and Windows backends.
 func hostTargets() map[string]target {
-	targets := map[string]target{}
-	if sock := dockerSocket(); sock != "" {
-		targets["docker"] = target{"unix", sock}
-	}
-	if runtime.GOOS != "linux" {
-		targets["ssh"] = target{"tcp", "127.0.0.1:22"}
-	}
-	return targets
-}
-
-func dockerSocket() string {
-	if host := os.Getenv("DOCKER_HOST"); strings.HasPrefix(host, "unix://") {
-		return strings.TrimPrefix(host, "unix://")
-	}
-	if runtime.GOOS == "windows" {
-		return ""
-	}
-	candidates := []string{"/var/run/docker.sock"}
-	if runtime.GOOS == "darwin" {
-		home, _ := os.UserHomeDir()
-		candidates = []string{filepath.Join(home, ".docker", "run", "docker.sock"), "/var/run/docker.sock"}
-	}
-	for _, path := range candidates {
-		if _, err := os.Stat(path); err == nil {
-			return path
-		}
-	}
-	return ""
+	return map[string]target{"ssh": {"tcp", "127.0.0.1:22"}}
 }
 
 // A Driver is one of the host's sandbox runtimes. Sandboxes are created and changed by the API's backends over
@@ -90,100 +50,14 @@ type Driver interface {
 }
 
 func hostDrivers() []Driver {
-	var drivers []Driver
-	if sock := dockerSocket(); sock != "" {
-		client := newDockerClient(sock)
-		drivers = append(drivers, &dockerDriver{name: "kata", runtime: "kata", client: client},
-			&dockerDriver{name: "runc", runtime: "runc", client: client})
-	}
 	switch runtime.GOOS {
 	case "darwin":
-		drivers = append(drivers, &zoovmDriver{})
+		return []Driver{&zoovmDriver{}}
 	case "windows":
-		drivers = append(drivers, &hypervDriver{})
+		return []Driver{&hypervDriver{}}
+	default:
+		panic("zoo-node supports macOS and Windows hosts only")
 	}
-	return drivers
-}
-
-// Docker: Kata Containers (the containerd shim io.containerd.kata.v2, registered with Docker as "kata") and runc.
-
-type dockerClient struct {
-	http *http.Client
-}
-
-func newDockerClient(sock string) *dockerClient {
-	return &dockerClient{http: &http.Client{
-		Timeout: 15 * time.Second,
-		Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, "unix", sock)
-		}},
-	}}
-}
-
-func (c *dockerClient) get(ctx context.Context, path string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker"+path, nil)
-	if err != nil {
-		return err
-	}
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("docker %s: %s %s", path, resp.Status, strings.TrimSpace(string(body)))
-	}
-	return json.NewDecoder(resp.Body).Decode(out)
-}
-
-type dockerInfo struct {
-	ServerVersion   string
-	OperatingSystem string
-	Runtimes        map[string]json.RawMessage
-}
-
-type dockerDriver struct {
-	name, runtime string
-	client        *dockerClient
-}
-
-func (d *dockerDriver) Name() string { return d.name }
-
-func (d *dockerDriver) Probe(ctx context.Context) (bool, string) {
-	var info dockerInfo
-	if err := d.client.get(ctx, "/info", &info); err != nil {
-		return false, err.Error()
-	}
-	if _, ok := info.Runtimes[d.runtime]; !ok {
-		return false, fmt.Sprintf("Docker %s has no %s runtime", info.ServerVersion, d.runtime)
-	}
-	return true, "Docker " + info.ServerVersion
-}
-
-func (d *dockerDriver) Sandboxes(ctx context.Context) ([]string, error) {
-	filters, _ := json.Marshal(map[string][]string{"label": {"zoo.sandbox"}, "status": {"running"}})
-	var list []struct {
-		ID     string `json:"Id"`
-		Labels map[string]string
-	}
-	if err := d.client.get(ctx, "/containers/json?filters="+url.QueryEscape(string(filters)), &list); err != nil {
-		return nil, err
-	}
-	var ids []string
-	for _, c := range list {
-		var inspect struct {
-			HostConfig struct{ Runtime string }
-		}
-		if err := d.client.get(ctx, "/containers/"+c.ID+"/json", &inspect); err != nil {
-			continue // gone since the list
-		}
-		if inspect.HostConfig.Runtime == d.runtime && c.Labels["zoo.sandbox"] != "" {
-			ids = append(ids, c.Labels["zoo.sandbox"])
-		}
-	}
-	return ids, nil
 }
 
 // Sandbox VMs are named zoo-<sandbox id>; base VMs and templates are not sandboxes.
@@ -287,15 +161,9 @@ type stats struct {
 	load                         float64
 }
 
-// diskPath is where sandboxes' disks live: Docker's data on Linux, the user's home (zoovm) on a Mac.
+// diskPath is where the host stores sandbox VM disks.
 func diskPath() string {
-	switch runtime.GOOS {
-	case "linux":
-		if _, err := os.Stat("/var/lib/docker"); err == nil {
-			return "/var/lib/docker"
-		}
-		return "/"
-	case "windows":
+	if runtime.GOOS == "windows" {
 		return os.Getenv("SystemDrive") + `\`
 	}
 	home, _ := os.UserHomeDir()

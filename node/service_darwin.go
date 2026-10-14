@@ -26,8 +26,7 @@ func plist(bin, home string) string {
 `, label, bin, home, filepath.Join(home, "node.log"), filepath.Join(home, "node.log"))
 }
 
-// installService runs zoo-node as a LaunchAgent of the user who runs the VMs: zoovm, Docker Desktop's socket and
-// the SSH account are all theirs.
+// installService runs zoo-node as a LaunchAgent of the user who owns the VMs and the SSH account.
 func installService(home string) error {
 	if os.Geteuid() == 0 {
 		return errors.New("on a Mac, run this as the user that runs the VMs, not as root")

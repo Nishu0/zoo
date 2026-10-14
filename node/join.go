@@ -80,6 +80,9 @@ func sshHostKey() string {
 }
 
 func join(ctx context.Context, raw, home, sshUser string) (Config, error) {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+		return Config{}, errors.New("zoo-node supports macOS and Windows hosts only")
+	}
 	token, err := decodeToken(raw)
 	if err != nil {
 		return Config{}, err
@@ -90,20 +93,18 @@ func join(ctx context.Context, raw, home, sshUser string) (Config, error) {
 	}
 	hostname, _ := os.Hostname()
 	req := joinRequest{Token: raw, CSR: string(csr), Hostname: hostname, OS: runtime.GOOS, Arch: runtime.GOARCH}
-	if runtime.GOOS != "linux" {
-		if sshUser == "" && runtime.GOOS == "darwin" {
-			if u, err := user.Current(); err == nil {
-				sshUser = u.Username
-			}
+	if sshUser == "" && runtime.GOOS == "darwin" {
+		if u, err := user.Current(); err == nil {
+			sshUser = u.Username
 		}
-		if sshUser == "" {
-			return Config{}, errors.New("give --ssh-user: the account the control plane signs in to this host as")
-		}
-		req.SSHUser = sshUser
-		req.SSHHostKey = sshHostKey()
-		if req.SSHHostKey == "" {
-			return Config{}, errors.New("this host has no SSH host key; turn on its SSH server (the node installer does)")
-		}
+	}
+	if sshUser == "" {
+		return Config{}, errors.New("give --ssh-user: the account the control plane signs in to this host as")
+	}
+	req.SSHUser = sshUser
+	req.SSHHostKey = sshHostKey()
+	if req.SSHHostKey == "" {
+		return Config{}, errors.New("this host has no SSH host key; turn on its SSH server (the node installer does)")
 	}
 	resp, err := postJoin(ctx, token.API, req)
 	if err != nil {
@@ -134,7 +135,7 @@ func postJoin(ctx context.Context, api string, req joinRequest) (joinResponse, e
 	}
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(api, "/")+"/nodes/join", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(api, "/")+"/v1/nodes/join", bytes.NewReader(body))
 	if err != nil {
 		return out, err
 	}
@@ -192,36 +193,5 @@ func checkJoin(resp joinResponse, fingerprint string, key *ecdsa.PublicKey) erro
 	if resp.NodeID == "" || cert.Subject.CommonName != resp.NodeID || len(resp.Endpoints) == 0 {
 		return errors.New("incomplete join response")
 	}
-	return nil
-}
-
-func migrateCommand(args []string) error {
-	fs := flagSet("migrate")
-	api := fs.String("api", os.Getenv("ZOO_API_URL"), "the control plane's API URL")
-	key := fs.String("key", os.Getenv("ZOO_API_KEY"), "an API key")
-	rest, err := parse(fs, args)
-	if err != nil {
-		return err
-	}
-	if len(rest) != 1 || *api == "" || *key == "" {
-		return errors.New("usage: zoo-node migrate <server-id> --api URL --key API_KEY")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(*api, "/")+"/servers/"+rest[0]+"/migrate", nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+*key)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
-		return fmt.Errorf("migration failed (%s): %s", resp.Status, strings.TrimSpace(string(data)))
-	}
-	fmt.Println("server migrated: zoo-node is installed and connected; Docker over SSH stays as the fallback")
 	return nil
 }

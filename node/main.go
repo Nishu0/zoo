@@ -1,11 +1,10 @@
-// zoo-node runs on every host that runs Zoo sandboxes. It joins the control plane once with a token from the
+// zoo-node runs on macOS and Windows sandbox hosts. It joins the control plane once with a token from the
 // dashboard, then dials out to the API over gRPC with mTLS and keeps the link up: it reports the host's capacity,
-// health and running sandboxes, carries the API's connections to the host's Docker and SSH server, and updates
+// health and running sandboxes, carries the API's connections to the host's SSH server, and updates
 // itself to the API's version. Hosts need no inbound ports, so they can sit behind NAT.
 //
 //	zoo-node join <token> [--service] [--ssh-user USER] [--dir DIR]
 //	zoo-node run [--dir DIR]
-//	zoo-node migrate <server-id> --api URL --key API_KEY
 //	zoo-node version
 //
 // `zoo node <command>` works too, for the zoo CLI.
@@ -42,8 +41,6 @@ func main() {
 		err = joinCommand(args[1:])
 	case "run":
 		err = runCommand(args[1:])
-	case "migrate":
-		err = migrateCommand(args[1:])
 	case "version":
 		fmt.Println(version)
 	default:
@@ -59,7 +56,6 @@ func usage() {
 	fmt.Fprint(os.Stderr, `usage:
   zoo-node join <token> [--service] [--ssh-user USER] [--dir DIR]
   zoo-node run [--dir DIR]
-  zoo-node migrate <server-id> --api URL --key API_KEY
   zoo-node version
 `)
 	os.Exit(2)

@@ -57,13 +57,8 @@ func configDir(flagged string) string {
 	if env := os.Getenv("ZOO_NODE_DIR"); env != "" {
 		return env
 	}
-	switch runtime.GOOS {
-	case "windows":
+	if runtime.GOOS == "windows" {
 		return filepath.Join(os.Getenv("ProgramData"), "zoo-node")
-	case "linux":
-		if os.Geteuid() == 0 {
-			return "/var/lib/zoo-node"
-		}
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".zoo-node")
