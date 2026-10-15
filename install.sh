@@ -822,7 +822,16 @@ install_desktop() {
     if python3 -c 'import sys; assert sys.version_info >= (3, 9)' 2>/dev/null; then ok "python3"; else fail "python3 is missing; run xcode-select --install"; fi
     need_disk "$user_home" 20
     need_memory $(( $(sysctl -n hw.memsize) / 1073741824 )) 8 16
-    [ ! -e "$ZOO_HOME/.env" ] || fail "$ZOO_HOME/.env already exists; use docker compose in $ZOO_HOME to upgrade"
+    # another Zoo in this Docker (a source checkout's `docker compose up`, say) shares the zoo project's volumes and
+    # the zoo-egress container name, and its database has other credentials
+    local resume=0 other
+    if [ -e "$ZOO_HOME/.env" ]; then resume=1; note "$ZOO_HOME/.env exists; carrying on with that installation"
+    elif command -v docker >/dev/null; then
+        other=$( { as_user docker ps -aq --filter name='^zoo-egress$'; as_user docker volume ls -q --filter name='^zoo_pg-data$'; } 2>/dev/null)
+        if [ -n "$other" ]; then
+            fail "Docker already has another Zoo (container zoo-egress or volume zoo_pg-data). Stop it with: docker compose -p zoo down && docker rm -f zoo-egress. Its database stays in volume zoo_pg-data; remove that volume (docker volume rm zoo_pg-data) to install fresh"
+        else ok "no other Zoo in Docker"; fi
+    fi
     preflight_done
 
     WORK=$(mktemp -d)
@@ -838,7 +847,7 @@ install_desktop() {
     tar -xzf "$WORK/zoo-source.tar.gz" -C "$PAYLOAD" --strip-components=1
     # the LAN address, so other servers and this Mac's VMs can reach the API
     HOST_ADDRESS=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo 127.0.0.1)
-    write_config
+    [ "$resume" = 1 ] || write_config
     cp "$PAYLOAD/compose.yml" "$PAYLOAD/Caddyfile" "$ZOO_HOME/"
     write_docker_ingress
     chown -R "$NODE_USER" "$ZOO_HOME"
@@ -1037,7 +1046,7 @@ echo "zoo first boot: done"
 SCRIPT
 
 
-if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then return 0; fi
+if [[ "${BASH_SOURCE[0]:-$0}" != "$0" ]]; then return 0; fi
 parse_args "$@"
 [ "$(id -u)" -eq 0 ] || die "run install.sh as root"
 
