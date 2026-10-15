@@ -213,7 +213,7 @@ def real_object_store(monkeypatch):
 def runtime_requirements(monkeypatch) -> set[str]:
     from server import requirements
 
-    names = {"docker", "kvm", "kata_runtime", "sandbox_images"}
+    names = {"docker", "isolation", "sandbox_images"}
     for name in names:
         assert name in requirements.CHECKS
         monkeypatch.setitem(requirements.CHECKS, name, lambda: None)

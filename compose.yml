@@ -48,6 +48,8 @@ x-zoo: &zoo
     ZOO_DOMAIN: ${ZOO_DOMAIN:-}
     ZOO_PUBLIC_IP: ${ZOO_PUBLIC_IP:-}
     ZOO_RUNTIME: docker
+    # kata where Docker has it (Linux with KVM), plain containers otherwise (Docker Desktop); server/docker.py
+    ZOO_ISOLATION: ${ZOO_ISOLATION:-auto}
     ZOO_NETWORK: zoo
     ZOO_NAMESPACE: ${ZOO_NAMESPACE:-zoo}
     ZOO_STORAGE_CLASS: ${ZOO_STORAGE_CLASS:-zoo-local}
@@ -73,7 +75,6 @@ x-zoo: &zoo
   stop_grace_period: 60s
   volumes:
     - /var/run/docker.sock:/var/run/docker.sock
-    - /dev/kvm:/dev/kvm
   networks:
     - zoo
 

@@ -23,7 +23,11 @@ HOME = "/home/zoo"
 # where a pooled sandbox's secrets go once it is claimed (guest/sys_unix.go)
 SECRETS_DIR = "/run/zoo"
 NETWORK = os.environ.get("ZOO_NETWORK")
-RUNTIME = "io.containerd.kata.v2"
+KATA = "io.containerd.kata.v2"
+# How sandboxes are isolated. kata: a micro-VM each, needs KVM (Linux hosts). runc: plain containers, for Docker
+# Desktop on macOS and Windows, which has no KVM. auto (the default): kata when Docker has it registered, else runc.
+ISOLATION = os.environ.get("ZOO_ISOLATION", "auto")
+ISOLATIONS = ("auto", "kata", "runc")
 # the one host every sandbox runs on, as the pause sweeper names nodes
 NODE = "local"
 ERRORS = (docker.errors.DockerException,)
@@ -58,6 +62,22 @@ def container(container_id: str):
 
 def info() -> dict:
     return docker_client.info()
+
+
+_runtime: str | None = None
+
+
+def container_runtime() -> str:
+    """The OCI runtime sandboxes run under, chosen once from ZOO_ISOLATION."""
+    global _runtime
+    if _runtime is None:
+        if ISOLATION == "auto":
+            _runtime = KATA if KATA in info().get("Runtimes", {}) else "runc"
+        else:
+            _runtime = KATA if ISOLATION == "kata" else "runc"
+        if _runtime != KATA:
+            logger.warning("sandboxes run as plain containers (runc), not Kata micro-VMs: Docker has no Kata runtime")
+    return _runtime
 
 
 def ping():
@@ -222,7 +242,7 @@ def adoptable(client: docker.DockerClient, name: str, image: str, sandbox_id: st
         existing.status == "running"
         and existing.labels.get("zoo.sandbox") == sandbox_id
         and existing.attrs["Config"]["Image"] == image
-        and existing.attrs["HostConfig"].get("Runtime") == RUNTIME
+        and existing.attrs["HostConfig"].get("Runtime") == container_runtime()
     ):
         return existing
     existing.remove(force=True)
@@ -250,7 +270,7 @@ def run_container(
             image,
             name=name,
             detach=True,
-            runtime=RUNTIME,
+            runtime=container_runtime(),
             environment=env,
             mem_limit=f"{size.memory_mb}m",
             nano_cpus=int(size.cpus * 1e9),
@@ -298,7 +318,7 @@ def helper(volumes: dict[str, str], image: str = IMAGE):
     """A one-shot root container with the given volumes (name: path) mounted, for work on a sandbox's disk."""
     return docker_client.containers.create(
         image,
-        runtime=RUNTIME,
+        runtime=container_runtime(),
         entrypoint=["sleep", "21600"],
         user="root",
         network=NETWORK,

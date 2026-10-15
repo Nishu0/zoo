@@ -13,7 +13,7 @@ from server.errors import ZooError
 @pytest.mark.parametrize(
     "name,expected",
     [
-        ("docker", {"docker", "kvm", "kata_runtime", "sandbox_images"}),
+        ("docker", {"docker", "isolation", "sandbox_images"}),
         ("kube", {"kube", "kvm", "runtime_class", "storage_class", "snapshot_class"}),
     ],
 )
@@ -45,20 +45,34 @@ def test_runtime_setting_rejects_other_backends(monkeypatch, name):
         requirements.runtime_setting()
 
 
-@pytest.mark.parametrize("exists,accessible", [(False, False), (True, False)])
-def test_kvm_is_required_and_must_be_accessible(monkeypatch, exists, accessible):
-    monkeypatch.setattr(requirements.os.path, "exists", lambda path: exists)
-    monkeypatch.setattr(requirements.os, "access", lambda path, mode: accessible)
-    with pytest.raises(RuntimeError, match="/dev/kvm is missing or inaccessible"):
-        requirements.kvm()
+def test_isolation_setting_must_be_known(monkeypatch):
+    monkeypatch.setattr(docker, "ISOLATION", "vm")
+    with pytest.raises(RuntimeError, match="ZOO_ISOLATION must be auto, kata or runc"):
+        requirements.isolation()
 
 
-def test_docker_requires_the_kata_runtime(monkeypatch):
+def test_kata_isolation_requires_the_kata_runtime(monkeypatch):
+    monkeypatch.setattr(docker, "ISOLATION", "kata")
     monkeypatch.setattr(runtime, "local_info", lambda: {"Runtimes": {}})
     with pytest.raises(RuntimeError, match="Docker has no io.containerd.kata.v2 runtime"):
-        requirements.kata_runtime()
+        requirements.isolation()
     monkeypatch.setattr(runtime, "local_info", lambda: {"Runtimes": {"io.containerd.kata.v2": {}}})
-    requirements.kata_runtime()
+    requirements.isolation()
+
+
+@pytest.mark.parametrize("setting", ["auto", "runc"])
+def test_auto_and_runc_isolation_need_no_kata(monkeypatch, setting):
+    monkeypatch.setattr(docker, "ISOLATION", setting)
+    monkeypatch.setattr(runtime, "local_info", lambda: {"Runtimes": {}})
+    requirements.isolation()
+
+
+@pytest.mark.parametrize("runtimes,expected", [({}, "runc"), ({"io.containerd.kata.v2": {}}, "io.containerd.kata.v2")])
+def test_auto_isolation_picks_kata_when_docker_has_it(monkeypatch, runtimes, expected):
+    monkeypatch.setattr(docker, "ISOLATION", "auto")
+    monkeypatch.setattr(docker, "_runtime", None)
+    monkeypatch.setattr(docker, "info", lambda: {"Runtimes": runtimes})
+    assert docker.container_runtime() == expected
 
 
 @pytest.mark.parametrize("image", [runtime.IMAGE, runtime.CODE_IMAGE])
@@ -85,7 +99,7 @@ def test_kubernetes_requires_every_cluster_dependency(monkeypatch, name):
     requirements.cluster_requirement(name)
 
 
-@pytest.mark.parametrize("name", ["docker", "kvm", "kata_runtime", "sandbox_images"])
+@pytest.mark.parametrize("name", ["docker", "isolation", "sandbox_images"])
 def test_readiness_fails_when_a_runtime_requirement_fails(client, monkeypatch, runtime_requirements, name):
     monkeypatch.setenv("ZOO_API_URL", "http://zoo.test")
 

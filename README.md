@@ -18,13 +18,25 @@ you watch, and take over when needed, from the dashboard.
 
 ## Quickstart
 
-1. Install Docker, Kata and the dashboard on an Ubuntu or Debian server with KVM:
+1. Install Zoo. On Linux (Ubuntu or Debian) or macOS:
 
    ```bash
    curl -fsSL https://github.com/chann44/zoo/releases/latest/download/install.sh | sudo bash -s -- --admin-email you@example.com
    ```
 
-2. Open `http://<server ip>:3000` and sign up. The first run walks you through creating a desktop sandbox, copying an
+   On Windows, in PowerShell:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -c "& ([scriptblock]::Create((irm https://github.com/chann44/zoo/releases/latest/download/install.ps1))) -AdminEmail 'you@example.com'"
+   ```
+
+   On Linux with KVM, Linux sandboxes run as Kata micro-VMs. Without KVM, and on macOS and Windows (which need
+   [Docker Desktop](https://www.docker.com/products/docker-desktop/) running), they run as plain Docker containers.
+   On a Mac or Windows machine, the installer also adds that machine for macOS or Windows sandboxes and prints the
+   admin's password; on Windows, run it as administrator (or pass `-NoNode` to skip). Add remote Linux, Mac or
+   Windows servers under Servers > Add server.
+
+2. Open the dashboard address the installer prints (port 3000) and sign up. The first run walks you through creating a desktop sandbox, copying an
    API key and copying an MCP config with the key filled in.
 3. Paste that config into Claude Desktop, Claude Code or Cursor, or drive sandboxes from code:
 

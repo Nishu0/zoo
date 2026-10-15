@@ -32,10 +32,13 @@ NODE_KEY=""
 NODE_TOKEN=""
 CONTROL_PLANE=""
 NODE_USER=""
+ADMIN_PASSWORD=""
 CHECK_ONLY=0
 FAILED=0
 IPSW=""
 BASE=1
+HOST_ADDRESS=""
+HAS_KVM=0
 DOCS="https://github.com/$REPO"
 
 say() { printf '==> %s\n' "$*"; }
@@ -46,7 +49,8 @@ fail() { printf '  fail  %s\n' "$*" >&2; FAILED=1; }
 
 usage() {
     cat <<'USAGE'
-Install Zoo on a Linux KVM host:
+Install Zoo on Linux (Kata micro-VMs with KVM, plain Docker containers without), or on a Mac with
+Docker Desktop (Linux sandboxes as containers; add this Mac as a server for macOS sandboxes):
   install.sh [--runtime docker|kube] [--version VERSION] [--dir PATH]
              [--admin-email EMAIL] [--domain HOST] [--check]
   install.sh --runtime kube [--device EMPTY_BLOCK_DEVICE | --disk-gb GB]
@@ -349,7 +353,7 @@ linux_tools() {
 
 write_config() {
     local host web api database_host object_endpoint gateway_peers
-    host=$(ip -4 -o addr show scope global | awk 'NR==1 {split($4, address, "/"); print address[1]}')
+    host=${HOST_ADDRESS:-$(ip -4 -o addr show scope global | awk 'NR==1 {split($4, address, "/"); print address[1]}')}
     [ -n "$host" ] || die "could not determine this host's address"
     if [ "$RUNTIME" = docker ]; then
         web="http://$host:3000"; api="http://$host:8000"
@@ -493,6 +497,18 @@ EOF
     fi
     mkdir -p /usr/local/lib/docker/cli-plugins
     install -m 755 "$artifacts/docker-compose" /usr/local/lib/docker/cli-plugins/docker-compose
+    if [ "$HAS_KVM" = 1 ]; then install_kata; else systemctl daemon-reload; systemctl enable docker; systemctl restart docker; fi
+    cp "$PAYLOAD/compose.yml" "$PAYLOAD/Caddyfile" "$ZOO_HOME/"
+    write_docker_ingress
+    if [ -z "$ZOO_DOMAIN" ]; then compose_files+=(-f "$ZOO_HOME/compose.override.yml"); fi
+    if [ -n "$BUNDLE" ]; then docker load -i "$PAYLOAD/images/$ARCH/docker.tar"
+    else docker compose --env-file "$ZOO_HOME/.env" "${compose_files[@]}" -p zoo pull; fi
+    docker compose --env-file "$ZOO_HOME/.env" "${compose_files[@]}" -p zoo up -d --no-build --pull never --wait --wait-timeout 600
+}
+
+# Kata runs each Linux sandbox in a micro-VM; without KVM, Docker runs them as plain containers (server/docker.py)
+install_kata() {
+    local artifacts="$PAYLOAD/artifacts/$ARCH"
     tar --zstd -xf "$artifacts/kata.tar.zst" -C /
     ln -sf /opt/kata/bin/containerd-shim-kata-v2 /usr/local/bin/containerd-shim-kata-v2
     ln -sf /opt/kata/bin/kata-runtime /usr/local/bin/kata-runtime
@@ -513,12 +529,6 @@ PY
     systemctl restart docker
     docker info --format '{{json .Runtimes}}' | python3 -c 'import json,sys; assert "io.containerd.kata.v2" in json.load(sys.stdin), "Docker does not list the Kata runtime"'
     /opt/kata/bin/kata-runtime check
-    cp "$PAYLOAD/compose.yml" "$PAYLOAD/Caddyfile" "$ZOO_HOME/"
-    write_docker_ingress
-    if [ -z "$ZOO_DOMAIN" ]; then compose_files+=(-f "$ZOO_HOME/compose.override.yml"); fi
-    if [ -n "$BUNDLE" ]; then docker load -i "$PAYLOAD/images/$ARCH/docker.tar"
-    else docker compose --env-file "$ZOO_HOME/.env" "${compose_files[@]}" -p zoo pull; fi
-    docker compose --env-file "$ZOO_HOME/.env" "${compose_files[@]}" -p zoo up -d --no-build --pull never --wait --wait-timeout 600
 }
 
 prepare_volume_group() {
@@ -764,7 +774,11 @@ EOF
 
 install_linux() {
     [ "$(uname -s)" = Linux ] || die "the control plane needs Linux; Windows hosts use windows/install-node.ps1"
-    [ -c /dev/kvm ] && [ -r /dev/kvm ] && [ -w /dev/kvm ] || die "/dev/kvm must exist and be readable/writable; enable hardware or nested virtualization"
+    if [ -c /dev/kvm ] && [ -r /dev/kvm ] && [ -w /dev/kvm ]; then HAS_KVM=1; fi
+    if [ "$HAS_KVM" = 0 ]; then
+        [ "$RUNTIME" = docker ] || die "Kubernetes needs /dev/kvm; enable hardware or nested virtualization, or use --runtime docker"
+        note "no /dev/kvm: Linux sandboxes will run as plain Docker containers, not Kata micro-VMs. Enable hardware or nested virtualization for VM isolation."
+    fi
     case "$(uname -m)" in x86_64|amd64) ARCH=amd64 ;; aarch64|arm64) ARCH=arm64 ;; *) die "unsupported CPU architecture" ;; esac
     [ "$RUNTIME" != kube ] || [ "$ARCH" = amd64 ] || die "Kubernetes requires amd64: Kata $KATA_VERSION ships the Cloud Hypervisor clh shim only for amd64; Docker uses QEMU on either architecture"
     [ -d /run/systemd/system ] || die "this installer requires systemd"
@@ -788,8 +802,76 @@ install_linux() {
     write_config
     enable_ksm
     case "$RUNTIME" in docker) install_docker ;; kube) install_kube ;; esac
-    say "Zoo $ZOO_VERSION installed with $RUNTIME"
+    say "Zoo $ZOO_VERSION installed with $RUNTIME ($([ "$HAS_KVM" = 1 ] && echo "Kata micro-VMs" || echo "plain containers"))"
     printf 'Dashboard: %s\nConfiguration: %s/.env\n' "$(config_value CORS_ORIGINS)" "$ZOO_HOME"
+}
+
+# macOS: the control plane in Docker Desktop. Docker Desktop has no KVM, so Linux sandboxes run as plain containers
+# inside its VM; macOS sandboxes run on this Mac once it is added as a server.
+install_desktop() {
+    local user_home
+    NODE_USER=${NODE_USER:-${SUDO_USER:-}}
+    if [ -z "$NODE_USER" ] || [ "$NODE_USER" = root ]; then die "run this with sudo from your own account, or pass --user"; fi
+    [ "$RUNTIME" = docker ] && [ -z "$BUNDLE" ] || die "on a Mac Zoo runs in Docker Desktop; --runtime kube and --bundle need Linux"
+    user_home=$(dscl . -read "/Users/$NODE_USER" NFSHomeDirectory | awk '{print $2}')
+    [ "$ZOO_HOME" != /opt/zoo ] || ZOO_HOME="$user_home/zoo"
+    say "Checking this Mac"
+    if command -v docker >/dev/null; then ok "Docker CLI"; else fail "install Docker Desktop (https://www.docker.com/products/docker-desktop/), start it, then run this again"; fi
+    if command -v docker >/dev/null && as_user docker info >/dev/null 2>&1; then ok "Docker Desktop is running"; else fail "start Docker Desktop, then run this again"; fi
+    if command -v docker >/dev/null && as_user docker compose version >/dev/null 2>&1; then ok "Docker Compose"; else fail "Docker Compose is missing; update Docker Desktop"; fi
+    if python3 -c 'import sys; assert sys.version_info >= (3, 9)' 2>/dev/null; then ok "python3"; else fail "python3 is missing; run xcode-select --install"; fi
+    need_disk "$user_home" 20
+    need_memory $(( $(sysctl -n hw.memsize) / 1073741824 )) 8 16
+    [ ! -e "$ZOO_HOME/.env" ] || fail "$ZOO_HOME/.env already exists; use docker compose in $ZOO_HOME to upgrade"
+    preflight_done
+
+    WORK=$(mktemp -d)
+    trap 'rm -rf "$WORK"' EXIT
+    if [ -z "$ZOO_VERSION" ]; then
+        ZOO_VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest")
+        ZOO_VERSION="${ZOO_VERSION##*/v}"
+    fi
+    [[ "$ZOO_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || die "invalid Zoo release version"
+    PAYLOAD="$WORK/payload"
+    mkdir -p "$PAYLOAD" "$ZOO_HOME"
+    curl -fsSL --retry 3 "https://github.com/$REPO/archive/refs/tags/v$ZOO_VERSION.tar.gz" -o "$WORK/zoo-source.tar.gz"
+    tar -xzf "$WORK/zoo-source.tar.gz" -C "$PAYLOAD" --strip-components=1
+    # the LAN address, so other servers and this Mac's VMs can reach the API
+    HOST_ADDRESS=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo 127.0.0.1)
+    write_config
+    cp "$PAYLOAD/compose.yml" "$PAYLOAD/Caddyfile" "$ZOO_HOME/"
+    write_docker_ingress
+    chown -R "$NODE_USER" "$ZOO_HOME"
+    local -a compose=(docker compose --project-directory "$ZOO_HOME" --env-file "$ZOO_HOME/.env" -f "$ZOO_HOME/compose.yml")
+    if [ -z "$ZOO_DOMAIN" ]; then compose+=(-f "$ZOO_HOME/compose.override.yml"); fi
+    compose+=(-p zoo)
+    say "Starting Zoo $ZOO_VERSION in Docker Desktop"
+    as_user "${compose[@]}" pull
+    as_user "${compose[@]}" up -d --no-build --pull never --wait --wait-timeout 600
+    say "Zoo $ZOO_VERSION is running (Linux sandboxes as plain containers: Docker Desktop has no KVM)"
+    printf '\n  Dashboard:     %s\n  Configuration: %s/.env\n  Manage it:     cd %s && docker compose -p zoo ps\n\n' \
+        "$(config_value CORS_ORIGINS)" "$ZOO_HOME" "$ZOO_HOME"
+    if [ -z "$ADMIN_EMAILS" ]; then
+        note "no --admin-email, so this Mac isn't added for macOS sandboxes; sign up, then use Servers > Add server > Mac"
+        return
+    fi
+    # join this Mac for macOS sandboxes, as Servers > Add server > Mac would (server/bootstrap.py)
+    local joined
+    joined=$(as_user "${compose[@]}" exec -T api uv run --no-sync python -m server.bootstrap \
+        --email "${ADMIN_EMAILS%%,*}" --name "$(scutil --get ComputerName 2>/dev/null || hostname -s)") \
+        || die "couldn't get a join token from Zoo; add this Mac from Servers > Add server > Mac"
+    # the JSON is its last line; anything logged before it is skipped
+    eval "$(printf '%s\n' "$joined" | tail -n 1 | python3 -c '
+import json, shlex, sys
+j = json.load(sys.stdin)
+for name, key in (("NODE_TOKEN", "token"), ("NODE_KEY", "key"), ("CONTROL_PLANE", "control_plane"), ("ADMIN_PASSWORD", "password")):
+    print(name + "=" + shlex.quote(j[key] or str()))')"
+    if [ -n "$ADMIN_PASSWORD" ]; then
+        say "Admin account: ${ADMIN_EMAILS%%,*} with password $ADMIN_PASSWORD (shown once; change it after signing in)"
+    else
+        say "Admin account: ${ADMIN_EMAILS%%,*} already exists; sign in with its password"
+    fi
+    say "Adding this Mac for macOS sandboxes"
 }
 
 authorize() { # USER HOME GROUP
@@ -960,7 +1042,11 @@ parse_args "$@"
 [ "$(id -u)" -eq 0 ] || die "run install.sh as root"
 
 if [ "$(uname -s)" = Darwin ]; then
-    [ "$NODE" = 1 ] || die "the control plane runs on Linux. To run sandboxes on this Mac, open Servers > Add server > Mac in your dashboard and run the command it shows."
+    if [ "$NODE" = 0 ]; then
+        install_desktop
+        [ -n "$NODE_TOKEN" ] || exit 0
+        NODE=1
+    fi
     NODE_USER=${NODE_USER:-${SUDO_USER:-}}
     if [ -z "$NODE_USER" ] || [ "$NODE_USER" = root ]; then
         die "run this with sudo from the account that will own the VMs, or pass --user"

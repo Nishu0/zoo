@@ -165,9 +165,11 @@ def test_busy_sandboxes_refuse_other_lifecycle_work(client, alice, sandbox, queu
     assert client.get(f"/v1/sandboxes/{sid}", headers=alice).json()["server_id"] is None
 
 
-def test_boot_adopts_the_container_an_earlier_attempt_started():
+def test_boot_adopts_the_container_an_earlier_attempt_started(monkeypatch):
+    monkeypatch.setattr(docker, "_runtime", docker.KATA)
+
     class Container:
-        def __init__(self, status, sandbox, image, runtime=docker.RUNTIME):
+        def __init__(self, status, sandbox, image, runtime=docker.KATA):
             self.status, self.labels, self.attrs, self.removed = (
                 status,
                 {"zoo.sandbox": sandbox},

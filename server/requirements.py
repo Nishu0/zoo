@@ -4,7 +4,7 @@ with one line per failure, and /readyz reports each by name."""
 import os
 
 from db.connection import db_manager
-from server import objects, runtime
+from server import docker, objects, runtime
 from server.security import require_secrets_key
 
 
@@ -45,13 +45,11 @@ def gateway():
     client.sync(client.readiness())
 
 
-def kvm():
-    if not os.path.exists("/dev/kvm") or not os.access("/dev/kvm", os.R_OK | os.W_OK):
-        raise RuntimeError("/dev/kvm is missing or inaccessible; Linux sandboxes require hardware virtualization")
-
-
-def kata_runtime():
-    if "io.containerd.kata.v2" not in runtime.local_info().get("Runtimes", {}):
+def isolation():
+    """ZOO_ISOLATION=kata insists on Kata; auto falls back to plain containers where there is no KVM."""
+    if docker.ISOLATION not in docker.ISOLATIONS:
+        raise RuntimeError("ZOO_ISOLATION must be auto, kata or runc")
+    if docker.ISOLATION == "kata" and docker.KATA not in runtime.local_info().get("Runtimes", {}):
         raise RuntimeError("Docker has no io.containerd.kata.v2 runtime; install and register Kata Containers")
 
 
@@ -96,7 +94,7 @@ if runtime.is_kube():
         kvm=cluster_kvm, runtime_class=runtime_class, storage_class=storage_class, snapshot_class=snapshot_class
     )
 else:
-    CHECKS.update(kvm=kvm, kata_runtime=kata_runtime, sandbox_images=runtime.sandbox_images)
+    CHECKS.update(isolation=isolation, sandbox_images=runtime.sandbox_images)
 
 
 def failures() -> list[str]:
