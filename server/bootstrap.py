@@ -38,6 +38,8 @@ def admin(email: str) -> tuple[str, str, str | None]:
             )
             if user is None:
                 raise RuntimeError("the admin account wasn't saved")
+    # after the account is committed: personal_workspace makes the workspace in a transaction of its own
+    with db_manager.session() as db:
         workspace = personal_workspace(user, db)
     return user.id, workspace, password
 
