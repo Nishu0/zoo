@@ -114,7 +114,7 @@ jobs:
           ZOO_TEST_KUBERNETES: zoo-nightly-${{ github.run_id }}
           ZOO_TEST_RUNTIME_CLASS: ${{ vars.ZOO_NIGHTLY_RUNTIME_CLASS || 'kata' }}
           # the edge code image: the cluster pulls it, and it has what the tests need (the zoo user, tar, curl)
-          ZOO_TEST_IMAGE: docker.io/${{ vars.DOCKERHUB_NAMESPACE || 'chann44' }}/zoo-sandbox-code:edge
+          ZOO_TEST_IMAGE: ghcr.io/${{ github.repository_owner }}/zoo-sandbox-code:edge
           ZOO_TEST_DOCKER: ""
 
   vms:
@@ -168,8 +168,8 @@ jobs:
           cache-from: type=gha,scope=web-amd64
       # the stack expects the Linux sandbox images even when only VM sandboxes are tested
       - run: |
-          docker pull docker.io/chann44/zoo-sandbox-desktop:edge && docker tag docker.io/chann44/zoo-sandbox-desktop:edge docker.io/chann44/zoo-sandbox-desktop:nightly
-          docker pull docker.io/chann44/zoo-sandbox-code:edge && docker tag docker.io/chann44/zoo-sandbox-code:edge docker.io/chann44/zoo-sandbox-code:nightly
+          docker pull ghcr.io/chann44/zoo-sandbox-desktop:edge && docker tag ghcr.io/chann44/zoo-sandbox-desktop:edge docker.io/chann44/zoo-sandbox-desktop:nightly
+          docker pull ghcr.io/chann44/zoo-sandbox-code:edge && docker tag ghcr.io/chann44/zoo-sandbox-code:edge docker.io/chann44/zoo-sandbox-code:nightly
       - run: docker compose up -d
       - run: scripts/e2e.sh
       - if: failure()
