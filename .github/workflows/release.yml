@@ -1,8 +1,9 @@
 name: Release
 
 # Every push to main publishes edge and sha-<commit> images. release-please keeps a release PR open from the
-# conventional commits on main; merging it tags vX.Y.Z, and this workflow then publishes the X.Y.Z images.
-# Publishing images is the pipeline's only job: tests, bundles, assets and the chart are done locally.
+# conventional commits on main; merging it tags vX.Y.Z, and this workflow then publishes the X.Y.Z images and
+# attaches the install files (install.sh, zoovm, Windows helpers, SHA256SUMS) to the GitHub release.
+# No tests run here: those, the offline bundles and the chart are done locally.
 
 on:
   push:
@@ -43,4 +44,97 @@ jobs:
     with:
       version: ${{ needs.release-please.outputs.created == 'true' && needs.release-please.outputs.version || '' }}
     secrets: inherit
+
+
+
+  zoovm:
+    needs: release-please
+    if: needs.release-please.outputs.created == 'true'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+      # Signed with a Developer ID and notarized when these secrets exist: APPLE_DEVELOPER_ID_P12 (base64 of the
+      # .p12) and APPLE_DEVELOPER_ID_PASSWORD, plus an App Store Connect API key for notarytool in
+      # APPLE_NOTARY_KEY (the .p8's text), APPLE_NOTARY_KEY_ID and APPLE_NOTARY_ISSUER. Without them the release
+      # carries an ad-hoc signed build, which Gatekeeper blocks until `xattr -d com.apple.quarantine` is run on it.
+      - name: Import the signing certificate
+        id: sign
+        env:
+          P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+          P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_PASSWORD }}
+        run: |
+          if [ -z "$P12" ]; then
+            echo "::warning::no APPLE_DEVELOPER_ID_P12 secret: zoovm is released ad-hoc signed and not notarized"
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/zoovm.keychain-db"
+          security create-keychain -p ci "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p ci "$keychain"
+          printf '%s' "$P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity=$(security find-identity -v -p codesigning "$keychain" | grep -o '"Developer ID Application: [^"]*"' | head -n1 | tr -d '"')
+          [ -n "$identity" ] || { echo "::error::the .p12 holds no Developer ID Application identity"; exit 1; }
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+      - run: sh macos/zoovm/build.sh --no-install
+        env:
+          ZOOVM_SIGN_IDENTITY: ${{ steps.sign.outputs.identity }}
+      - name: Notarize
+        if: steps.sign.outputs.identity != ''
+        env:
+          KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+          KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          ISSUER: ${{ secrets.APPLE_NOTARY_ISSUER }}
+        run: |
+          printf '%s' "$KEY" > "$RUNNER_TEMP/notary.p8"
+          ditto -c -k macos/zoovm/.build/zoovm "$RUNNER_TEMP/zoovm.zip"
+          # a bare binary can't be stapled; Gatekeeper looks its ticket up online on first run
+          result=$(xcrun notarytool submit "$RUNNER_TEMP/zoovm.zip" --key "$RUNNER_TEMP/notary.p8" --key-id "$KEY_ID" \
+            --issuer "$ISSUER" --wait --timeout 30m --output-format json)
+          echo "$result"
+          echo "$result" | jq -e '.status == "Accepted"' >/dev/null || { echo "::error::notarization was not accepted"; exit 1; }
+          codesign --verify --strict --verbose=2 macos/zoovm/.build/zoovm
+      - run: tar -czf zoovm-macos-arm64.tar.gz -C macos/zoovm/.build zoovm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zoovm
+          path: zoovm-macos-arm64.tar.gz
+
+  assets:
+    name: Release assets
+    needs: [release-please, images, zoovm]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.release-please.outputs.tag }}
+      VERSION: ${{ needs.release-please.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: zoovm
+          path: dist
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: guest/go.mod
+          cache-dependency-path: guest/go.sum
+      # install-node.ps1 -Iso builds it into the base Windows VM
+      - name: Build zoo-guest for Windows
+        working-directory: guest
+        run: CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -H windowsgui" -o ../dist/zoo-guest-windows-amd64.exe .
+      - name: Build release files
+        run: |
+          # compose.yml pinned to this release, pulling images instead of building them
+          yq 'del(.services[].build)' compose.yml \
+            | sed "s/\${ZOO_VERSION:-latest}/\${ZOO_VERSION:-$VERSION}/g" > dist/compose.yml
+          grep -q "ZOO_VERSION:-$VERSION" dist/compose.yml
+          # the Windows helpers on their own too: install-node.ps1 -Iso downloads them and zoo-guest, and checks them against SHA256SUMS
+          cp Caddyfile install.sh windows/*.ps1 dist/
+          (cd windows && zip -q "../dist/zoo-windows-$VERSION.zip" ./*.ps1 README.md)
+          (cd dist && sha256sum ./* > SHA256SUMS)
+      - run: gh release upload "$TAG" dist/* --clobber
 
