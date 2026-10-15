@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/chann44/zoo/compare/v0.1.2...v0.1.3) (2026-10-15)
+
+
+### Bug Fixes
+
+* installer works when piped into macOS bash and detects another Zoo ([e934923](https://github.com/chann44/zoo/commit/e9349234347bbd12fdafa04ea37d9527b5280081))
+
 ## [0.1.2](https://github.com/chann44/zoo/compare/v0.1.1...v0.1.2) (2026-10-15)
 
 
