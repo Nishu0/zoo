@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.2](https://github.com/chann44/zoo/compare/v0.1.1...v0.1.2) (2026-10-15)
+
+
+### Features
+
+* one-command install joins the local Mac or Windows machine ([25545ef](https://github.com/chann44/zoo/commit/25545efd1de7aa943f28bdbcb854bc6ef474b775))
+
+
+### Bug Fixes
+
+* keep uv.lock version in sync with releases ([e82e55c](https://github.com/chann44/zoo/commit/e82e55c1a409d4af1787c0e188613ab314095355))
+
 ## [0.1.1](https://github.com/chann44/zoo/compare/v0.1.0...v0.1.1) (2026-10-15)
 
 
