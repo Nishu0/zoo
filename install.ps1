@@ -83,7 +83,7 @@ $values = [ordered]@{
     AWS_ACCESS_KEY_ID = RandomHex 12; AWS_SECRET_ACCESS_KEY = RandomHex 32
     ZOO_VERSION = $Version; ZOO_REGISTRY = $Registry; ZOO_RUNTIME = 'docker'; ZOO_OBJECT_STORE = 's3://zoo'
     ADMIN_EMAILS = $AdminEmail; ZOO_DOMAIN = ''; COMPOSE_PROFILES = ''
-    ZOO_API_URL = "http://${address}:8000"; CORS_ORIGINS = "http://${address}:3000"; ZOO_PUBLIC_IP = $address
+    ZOO_API_URL = "http://${address}:8000"; CORS_ORIGINS = "http://${address}:3000,http://localhost:3000,http://127.0.0.1:3000"; ZOO_PUBLIC_IP = $address
     ZOO_GATEWAY_PEERS = 'gateway'; ZOO_S3_ENDPOINT = 'http://seaweedfs:8333'
 }
 $seen = @{}

@@ -54,6 +54,15 @@ async def housekeeping():
         await asyncio.sleep(3600)
 
 
+def processes() -> int:
+    """How many API processes uvicorn runs. One by default: the API is async, and each extra process brings its own
+    database pools; raise ZOO_API_WORKERS on a busy, many-core server. Always one for the worker role: every process
+    would run its own copy of the background loops."""
+    if workers.ROLE == "worker":
+        return 1
+    return int(os.environ.get("ZOO_API_WORKERS") or 1)
+
+
 class Server:
     def __init__(self, port=8000):
         @asynccontextmanager
@@ -155,8 +164,7 @@ class Server:
             host=os.environ.get("HOST", "127.0.0.1"),
             port=int(os.environ.get("PORT", self.port)),
             reload=reload,
-            # one process when reloading from source; uvicorn can't do both
-            workers=None if reload else int(os.environ.get("ZOO_API_WORKERS") or os.cpu_count() or 1),
+            workers=None if reload else processes(),
             # long-lived connections (desktop viewers, agent streams) get this long to close before shutdown
             timeout_graceful_shutdown=15,
         )

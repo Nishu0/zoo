@@ -352,18 +352,22 @@ linux_tools() {
 }
 
 write_config() {
-    local host web api database_host object_endpoint gateway_peers
+    local host web api cors database_host object_endpoint gateway_peers
     host=${HOST_ADDRESS:-$(ip -4 -o addr show scope global | awk 'NR==1 {split($4, address, "/"); print address[1]}')}
     [ -n "$host" ] || die "could not determine this host's address"
     if [ "$RUNTIME" = docker ]; then
         web="http://$host:3000"; api="http://$host:8000"
         if [ -n "$ZOO_DOMAIN" ]; then web="https://$ZOO_DOMAIN"; api="$web/api"; fi
+        # the dashboard by address and, on this machine, by localhost
+        cors="$web"
+        if [ -z "$ZOO_DOMAIN" ]; then cors="$web,http://localhost:3000,http://127.0.0.1:3000"; fi
         database_host=postgres; object_endpoint=http://seaweedfs:8333; gateway_peers=gateway
     else
         WEB_HOST="${ZOO_DOMAIN:-zoo.test}"
         API_HOST="api.$WEB_HOST"
         web="http://$WEB_HOST"; api="http://$API_HOST"
         if [ -n "$ZOO_DOMAIN" ]; then web="https://$WEB_HOST"; api="https://$API_HOST"; fi
+        cors="$web"
         database_host=zoo-postgres; object_endpoint=http://zoo-object-store:8333
         gateway_peers="zoo-gateway-peers.$NAMESPACE.svc.cluster.local"
     fi
@@ -372,7 +376,7 @@ write_config() {
     JWT_SECRET="$(openssl rand -hex 48)" ZOO_SECRETS_KEY="$(openssl rand -hex 48)" POSTGRES_PASSWORD="$(openssl rand -hex 24)" \
     AWS_ACCESS_KEY_ID="$(openssl rand -hex 12)" AWS_SECRET_ACCESS_KEY="$(openssl rand -hex 32)" \
     ZOO_VERSION="$ZOO_VERSION" ZOO_REGISTRY="$ZOO_REGISTRY" ZOO_RUNTIME="$RUNTIME" \
-    ADMIN_EMAILS="$ADMIN_EMAILS" ZOO_DOMAIN="$ZOO_DOMAIN" ZOO_API_URL="$api" CORS_ORIGINS="$web" \
+    ADMIN_EMAILS="$ADMIN_EMAILS" ZOO_DOMAIN="$ZOO_DOMAIN" ZOO_API_URL="$api" CORS_ORIGINS="$cors" \
     ZOO_PUBLIC_IP="$host" ZOO_NAMESPACE="$NAMESPACE-sandboxes" ZOO_STORAGE_CLASS=zoo-local ZOO_SNAPSHOT_CLASS=zoo-snapshots \
     ZOO_GATEWAY_PEERS="$gateway_peers" ZOO_S3_ENDPOINT="$object_endpoint" DATABASE_HOST="$database_host" \
     python3 - "$PAYLOAD/.env.example" "$ZOO_HOME/.env" <<'PY'
@@ -803,7 +807,7 @@ install_linux() {
     enable_ksm
     case "$RUNTIME" in docker) install_docker ;; kube) install_kube ;; esac
     say "Zoo $ZOO_VERSION installed with $RUNTIME ($([ "$HAS_KVM" = 1 ] && echo "Kata micro-VMs" || echo "plain containers"))"
-    printf 'Dashboard: %s\nConfiguration: %s/.env\n' "$(config_value CORS_ORIGINS)" "$ZOO_HOME"
+    printf 'Dashboard: %s\nConfiguration: %s/.env\n' "$(config_value CORS_ORIGINS | cut -d, -f1)" "$ZOO_HOME"
 }
 
 # macOS: the control plane in Docker Desktop. Docker Desktop has no KVM, so Linux sandboxes run as plain containers
@@ -859,7 +863,7 @@ install_desktop() {
     as_user "${compose[@]}" up -d --no-build --pull never --wait --wait-timeout 600
     say "Zoo $ZOO_VERSION is running (Linux sandboxes as plain containers: Docker Desktop has no KVM)"
     printf '\n  Dashboard:     %s\n  Configuration: %s/.env\n  Manage it:     cd %s && docker compose -p zoo ps\n\n' \
-        "$(config_value CORS_ORIGINS)" "$ZOO_HOME" "$ZOO_HOME"
+        "$(config_value CORS_ORIGINS | cut -d, -f1)" "$ZOO_HOME" "$ZOO_HOME"
     if [ -z "$ADMIN_EMAILS" ]; then
         note "no --admin-email, so this Mac isn't added for macOS sandboxes; sign up, then use Servers > Add server > Mac"
         return

@@ -125,6 +125,9 @@ services:
 
   postgres:
     image: postgres:17
+    # probe idle clients, so connections from a container that was replaced are dropped in about two minutes
+    # rather than piling up until Postgres refuses new clients
+    command: ["postgres", "-c", "tcp_keepalives_idle=60", "-c", "tcp_keepalives_interval=10", "-c", "tcp_keepalives_count=6"]
     environment:
       POSTGRES_USER: zoo
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-zoo}
