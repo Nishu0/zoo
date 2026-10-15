@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.4](https://github.com/chann44/zoo/compare/v0.1.3...v0.1.4) (2026-10-15)
+
+
+### Bug Fixes
+
+* bootstrap commits the admin account before creating its ([b459308](https://github.com/chann44/zoo/commit/b4593088dedb3a8cf20576b384ccb29cae0ea8ed))
+* workeer process number fixed ([5f8bd27](https://github.com/chann44/zoo/commit/5f8bd27c62b7a51322bda95007facb92dc8701b7))
+
 ## [0.1.3](https://github.com/chann44/zoo/compare/v0.1.2...v0.1.3) (2026-10-15)
 
 
