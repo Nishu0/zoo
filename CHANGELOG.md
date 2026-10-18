@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/chann44/zoo/compare/v0.1.4...v0.1.5) (2026-10-18)
+
+
+### Features
+
+* simplify host setup and stabilize sandboxes ([7dcb168](https://github.com/chann44/zoo/commit/7dcb168fbeef4e323188dea297b5451de032e15a))
+
 ## [0.1.4](https://github.com/chann44/zoo/compare/v0.1.3...v0.1.4) (2026-10-15)
 
 
