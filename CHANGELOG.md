@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.6](https://github.com/chann44/zoo/compare/v0.1.5...v0.1.6) (2026-10-18)
+
+
+### Bug Fixes
+
+* installer fixed and also stale configuration removed ([c1770a0](https://github.com/chann44/zoo/commit/c1770a0901e1a51ffe2fb9d0e3ec135336a7814c))
+
 ## [0.1.5](https://github.com/chann44/zoo/compare/v0.1.4...v0.1.5) (2026-10-18)
 
 
