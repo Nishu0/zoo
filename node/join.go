@@ -65,7 +65,7 @@ var hostKeyFile = func() string {
 	return "/etc/ssh/ssh_host_ed25519_key.pub"
 }
 
-// sshHostKey is the host's ed25519 SSH key, for macOS and Windows hosts, which the API reaches over SSH through
+// sshHostKey is the host's ed25519 SSH key, for enrolled hosts, which the API reaches over SSH through
 // the node and checks like any SSH host.
 func sshHostKey() string {
 	data, err := os.ReadFile(hostKeyFile())
@@ -80,8 +80,8 @@ func sshHostKey() string {
 }
 
 func join(ctx context.Context, raw, home, sshUser string) (Config, error) {
-	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
-		return Config{}, errors.New("zoo-node supports macOS and Windows hosts only")
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+		return Config{}, errors.New("zoo-node supports Linux, macOS and Windows hosts")
 	}
 	token, err := decodeToken(raw)
 	if err != nil {
@@ -93,7 +93,7 @@ func join(ctx context.Context, raw, home, sshUser string) (Config, error) {
 	}
 	hostname, _ := os.Hostname()
 	req := joinRequest{Token: raw, CSR: string(csr), Hostname: hostname, OS: runtime.GOOS, Arch: runtime.GOARCH}
-	if sshUser == "" && runtime.GOOS == "darwin" {
+	if sshUser == "" && runtime.GOOS != "windows" {
 		if u, err := user.Current(); err == nil {
 			sshUser = u.Username
 		}

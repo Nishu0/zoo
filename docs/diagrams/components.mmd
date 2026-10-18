@@ -1,0 +1,46 @@
+flowchart TB
+    person["You in a browser"]
+    agent["External AI agent / MCP client"]
+    sdk["Python / TypeScript / React SDKs and CLI"]
+
+    subgraph controlPlane ["Zoo control plane"]
+        web["Web dashboard :3000 - React / TanStack Start"]
+        api["Python FastAPI :8000 - REST /v1 and MCP /mcp"]
+        worker["Python worker - lifecycle, warm pool, backups, webhooks"]
+        gateway["Go gateway - guest and host connections, VNC sessions"]
+        db[("Postgres - state, jobs, events, encrypted secrets, identities")]
+        objects[("S3 object storage - SeaweedFS in Compose")]
+    end
+
+    subgraph execution ["Sandbox execution infrastructure"]
+        localRuntime["Local Docker engine or optional Kubernetes / Kata"]
+        node["zoo-node - enrolled Linux / Mac / Windows host"]
+        hostRuntime["Remote Docker / macOS Virtualization.framework / Windows Hyper-V"]
+        sandbox["Sandbox - desktop, browser, code, macOS, or Windows"]
+        guest["zoo-guest - daemon inside each sandbox"]
+        egress["Host egress enforcement - outside sandbox"]
+    end
+
+    person --> web
+    web -->|"REST, SSE, viewer and terminal WebSockets"| api
+    agent -->|"MCP /mcp or REST /v1"| api
+    sdk -->|"REST /v1"| api
+    api -->|"Authorize, read/write, enqueue jobs"| db
+    worker -->|"Claim jobs and update state"| db
+    api -->|"Private TLS gRPC :7444"| gateway
+    worker -->|"Private TLS gRPC :7444"| gateway
+    gateway -->|"Resolve placement and identities"| db
+    api -->|"Profiles and backup access"| objects
+    worker -->|"Backup and restore data"| objects
+    worker -->|"Provision, stop, snapshot"| localRuntime
+    worker -->|"Host operations through gateway tunnel"| gateway
+    node -->|"Outbound mTLS stream to gateway :7443"| gateway
+    node -->|"Tunnel to pinned host SSH"| hostRuntime
+    localRuntime -->|"Runs"| sandbox
+    hostRuntime -->|"Runs"| sandbox
+    sandbox -->|"Contains"| guest
+    guest -->|"Outbound authenticated WebSocket /guest/connect"| gateway
+    localRuntime -.->|"Install network policy"| egress
+    hostRuntime -.->|"Install network policy"| egress
+    sandbox -->|"Outbound traffic subject to policy"| egress
+    egress -->|"Allowed traffic"| internet["Internet / external services"]

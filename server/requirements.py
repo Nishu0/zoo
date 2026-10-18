@@ -104,15 +104,4 @@ def failures() -> list[str]:
             check()
         except Exception as e:
             failed.append(f"{name}: {str(e) or e.__class__.__name__}")
-    try:
-        with db_manager.session() as db:
-            servers = list(db.list_all_servers())
-    except Exception as error:
-        failed.append(f"vm_hosts: {str(error) or error.__class__.__name__}")
-        return failed
-    for server in servers:
-        try:
-            runtime.host_requirements(server)
-        except Exception as error:
-            failed.append(f"server:{server.name}: {str(error) or error.__class__.__name__}")
     return failed

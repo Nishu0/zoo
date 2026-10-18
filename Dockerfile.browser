@@ -1,0 +1,29 @@
+FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS guest
+ARG TARGETOS TARGETARCH
+WORKDIR /src
+COPY guest/go.mod guest/go.sum ./
+RUN go mod download
+COPY guest/ ./
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /zoo-guest .
+
+FROM debian:bookworm
+ENV DEBIAN_FRONTEND=noninteractive
+# A window manager keeps Firefox maximized and supports window-control tools;
+# no desktop shell, panel, file manager, terminal, or desktop session is installed.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    firefox-esr openbox xvfb x11vnc supervisor dbus-x11 at-spi2-core \
+    earlyoom nftables curl ca-certificates iproute2 apparmor wmctrl procps \
+    fonts-dejavu-core x11-utils \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -m -s /bin/bash zoo \
+    && mkdir -p /etc/zoo /etc/xdg/openbox \
+    && touch /etc/zoo/browser-only
+COPY firefox-policies.json /usr/lib/firefox-esr/distribution/policies.json
+RUN su zoo -c "HOME=/home/zoo firefox-esr --headless -CreateProfile default" >/dev/null 2>&1
+COPY --from=guest /zoo-guest /usr/local/bin/zoo-guest
+COPY supervisord.browser.conf /etc/supervisor/conf.d/browser.conf
+COPY browser-openbox.xml /etc/xdg/openbox/rc.xml
+COPY browser-start.sh /usr/local/bin/browser-start
+COPY sandbox-entrypoint.sh /usr/local/bin/sandbox-entrypoint
+RUN chmod 755 /usr/local/bin/browser-start /usr/local/bin/sandbox-entrypoint
+CMD ["/usr/local/bin/sandbox-entrypoint"]

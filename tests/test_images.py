@@ -37,3 +37,15 @@ def test_restart_on_new_image_boots_a_stopped_sandbox(client, alice, make_sandbo
     assert res.status_code == 200, res.text
     assert client.get(f"/sandboxes/{code['id']}", headers=alice).json()["status"] == "running"
     assert image_of(fake, code["id"]) == "docker.io/chann44/zoo-sandbox-code:9.9.9"
+
+
+def test_browser_upgrade_uses_its_dedicated_image(client, alice, make_sandbox, fake, monkeypatch):
+    browser = make_sandbox("browser")
+    sid = browser["id"]
+    before = image_of(fake, sid)
+    monkeypatch.setattr("server.runtime.BROWSER_IMAGE", "docker.io/chann44/zoo-sandbox-browser:9.9.9")
+    assert client.get(f"/sandboxes/{sid}", headers=alice).json()["image_outdated"]
+    assert image_of(fake, sid) == before
+    assert client.post(f"/sandboxes/{sid}/upgrade", headers=alice).status_code == 200
+    assert image_of(fake, sid) == "docker.io/chann44/zoo-sandbox-browser:9.9.9"
+    assert sid in fake.volumes

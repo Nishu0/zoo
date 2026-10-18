@@ -1,8 +1,9 @@
 # Development
 
 Both development flows run separate API and job-worker processes plus the Bun dashboard from this checkout, with
-reload enabled. Linux sandboxes always use Kata virtual machines. There is no runc or
-Docker Desktop fallback, and the helpers do not install Docker, k3s, Kata or storage drivers.
+reload enabled. Docker isolation follows `ZOO_ISOLATION`: `auto` uses Kata when available,
+`kata` requires Kata, and `runc` uses ordinary Linux containers. Kubernetes requires Kata.
+The helpers do not install Docker, k3s, Kata or storage drivers.
 Both flows use the native Go gateway and the shared database-persisted CA. The source API
 initializes its async pool, writer and cache before gateway clients and host requirements.
 
@@ -32,7 +33,7 @@ names `zoo` and `zoo-egress`, so do not share the host with a production Zoo ins
 make dev
 ```
 
-The target builds the macOS/Windows `node-dist` binaries with the checkout's `VERSION`, then
+The target builds the Linux/macOS/Windows `node-dist` binaries with the checkout's `VERSION`, then
 builds the sandbox, native Go gateway and egress images. Its Compose project is `zoo-dev`;
 only Postgres, SeaweedFS, its bucket initializer, the native gateway, egress and a local HTTP
 proxy run in containers. Migrations run before the gateway, API and dashboard start.
@@ -185,7 +186,7 @@ the development targets do not run tests. CI/release workflows are under `.githu
 ```text
 server/            Python API, worker, requirements and runtime backends
 gateway/           native Go guest/node connection gateway
-node/              native macOS/Windows host daemon
+node/              Linux/macOS/Windows host daemon
 guest/             in-sandbox agent
 egress/            standalone cross-platform egress policy daemon
 db/                Postgres migrations, queries and generated client

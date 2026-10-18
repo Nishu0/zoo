@@ -85,7 +85,9 @@ class FakeRuntime:
         for name in patched:
             mp.setattr(docker, name, getattr(self, name))
         mp.setattr(
-            sandbox_api, "open_url", lambda runtime_id, url: self.calls.append(("open_url", runtime_id, {"url": url}))
+            sandbox_api,
+            "start_browser",
+            lambda runtime_id, url: self.calls.append(("open_url", runtime_id, {"url": url})),
         )
         fake = self
         mp.setattr(Tool, "impl", lambda tool, runtime_id: fake.tool(tool))

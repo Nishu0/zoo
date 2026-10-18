@@ -1,7 +1,7 @@
 """Which sandboxes each kind of host can run.
 
-Registered servers are macOS and Windows hosts reached through zoo-node. Each runs sandboxes of its own OS.
-Linux sandboxes run on the installation's configured Docker or Kubernetes runtime.
+Hosts join through zoo-node. Native VMs use their host OS; Linux workloads
+use a Linux Docker engine on any host, or the installation's configured runtime.
 """
 
 import os
@@ -21,32 +21,33 @@ class Platform:
 LINUX_PLATFORM = Platform(
     "linux",
     "Linux",
-    "This installation",
+    "Linux server",
     ("desktop", "browser", "code"),
     ("linux",),
-    "Configured Docker or Kubernetes runtime; KVM and Kata Containers required",
+    "Linux Docker engine, or the configured Docker or Kubernetes runtime",
 )
 
 PLATFORMS = {
+    "linux": LINUX_PLATFORM,
     "macos": Platform(
         "macos",
         "macOS",
         "Mac",
         ("macos",),
-        ("macos",),
-        "Apple Silicon, macOS 14 or later, zoo-node and zoovm",
+        ("macos", "linux"),
+        "Native macOS: Apple Silicon, macOS 14+, zoovm. Linux desktop/browser/code: a Linux Docker engine.",
     ),
     "windows": Platform(
         "windows",
         "Windows",
         "Windows machine",
         ("windows",),
-        ("windows",),
-        "Windows 10/11 Pro, Enterprise or Education, or Server, with Hyper-V and zoo-node",
+        ("windows", "linux"),
+        "Native Windows: Windows Pro/Enterprise/Education or Server with Hyper-V. Linux desktop/browser/code: a Linux Docker engine.",
     ),
 }
 
-INSTALL_URL = os.environ.get("ZOO_INSTALL_URL", "https://github.com/chann44/zoo/releases/latest/download")
+INSTALL_URL = os.environ.get("ZOO_INSTALL_URL")
 
 
 def os_of(kind: str) -> str:
@@ -65,12 +66,13 @@ def capabilities_of(platform: str) -> str:
 def install_command(platform: str, public_key: str, api_url: str) -> str:
     """Sets up a node host and authorizes the control plane's SSH identity."""
     if platform not in PLATFORMS:
-        raise ValueError("node hosts must be macos or windows")
+        raise ValueError("node hosts must be linux, macos or windows")
+    source = INSTALL_URL or f"{api_url.rstrip('/')}/v1/nodes/install"
     if platform == "windows":
         return (
-            f'powershell -ExecutionPolicy Bypass -c "& ([scriptblock]::Create((irm {INSTALL_URL}/install-node.ps1)))'
+            f'powershell -ExecutionPolicy Bypass -c "& ([scriptblock]::Create((irm {source}/install-node.ps1)))'
             f" -Key '{public_key}' -ControlPlane '{api_url}'\""
         )
     return (
-        f"curl -fsSL {INSTALL_URL}/install.sh | sudo bash -s -- --node --key '{public_key}' --control-plane '{api_url}'"
+        f"curl -fsSL {source}/install.sh | sudo bash -s -- --node --key '{public_key}' --control-plane '{api_url}'"
     )

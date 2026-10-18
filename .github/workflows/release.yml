@@ -134,6 +134,7 @@ jobs:
           grep -q "ZOO_VERSION:-$VERSION" dist/compose.yml
           # the Windows helpers on their own too: install-node.ps1 -Iso downloads them and zoo-guest, and checks them against SHA256SUMS
           cp Caddyfile install.sh install.ps1 windows/*.ps1 dist/
+          cp .env.example dist/env.example
           (cd windows && zip -q "../dist/zoo-windows-$VERSION.zip" ./*.ps1 README.md)
           (cd dist && sha256sum ./* > SHA256SUMS)
       - run: gh release upload "$TAG" dist/* --clobber

@@ -1,0 +1,51 @@
+flowchart TB
+    human["You: watch and take control"]
+    agent["External AI agent: decides what to do"]
+    dashboard["Web dashboard: desktop, terminal and settings"]
+    clients["MCP client, SDK or REST client"]
+
+    subgraph controlPlane ["Zoo control plane"]
+        api["Python API: authenticate, check workspace and tool permissions"]
+        worker["Worker: create, stop, restore and prepare warm sandboxes"]
+        gateway["Go gateway: authenticated connections and live screen sessions"]
+        database[("Postgres: state, jobs, policies and encrypted secrets")]
+        storage[("Object storage: backups and portable profiles")]
+    end
+
+    subgraph hosts ["Execution hosts"]
+        runtime["Docker or Kubernetes; native Mac and Windows VM hosts"]
+        node["Remote zoo-node: outbound authenticated host tunnel"]
+    end
+
+    subgraph computer ["Agent computer: sandbox boundary"]
+        guest["zoo-guest: executes commands and file operations"]
+        screen["Desktop and browser: screen, mouse and keyboard"]
+        home["Persistent files on the selected host"]
+    end
+
+    egress["Host network enforcement: allow or deny outbound traffic"]
+    internet["Internet and external services"]
+
+    human --> dashboard
+    agent --> clients
+    dashboard -->|"REST, events and viewer connections"| api
+    clients -->|"MCP or REST requests"| api
+    api -->|"Read state and queue lifecycle jobs"| database
+    worker -->|"Claim jobs and update state"| database
+    worker -->|"Provision local compute or request remote host operations"| runtime
+    worker -->|"Backup and restore"| storage
+    api -->|"Authorized tool and viewer requests"| gateway
+    worker -->|"Guest setup and remote host access"| gateway
+    gateway -->|"Read placement and identities"| database
+    node -->|"Outbound mTLS connection"| gateway
+    node -->|"Tunnel host operations through pinned SSH"| runtime
+    runtime -->|"Boot and manage"| guest
+    runtime -->|"Attach home storage"| home
+    guest -->|"Authenticated outbound connection"| gateway
+    gateway -->|"Command, file and terminal operations"| guest
+    gateway -->|"VNC through guest or host tunnel"| screen
+    guest -->|"Read and write"| home
+    guest -->|"Outbound workload traffic"| egress
+    screen -->|"Browser traffic"| egress
+    runtime -.->|"Configure network policy"| egress
+    egress -->|"Allowed destinations"| internet

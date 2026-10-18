@@ -10,6 +10,7 @@ a fresh container on its volume. On Kubernetes, pooled pods wait with their proc
 import asyncio
 import json
 import math
+import os
 import secrets
 import threading
 import time
@@ -158,6 +159,8 @@ class Pool:
     def start(self, kind: str, server):
         sandbox_id = str(uuid.uuid4())
         config = {"home_claim": f"zoo-home-{sandbox_id}"}
+        if server is not None:
+            config["remote_server_id"] = server.id
         with db_manager.session() as db:
             if kind != "code":
                 # VNC authentication only uses the first 8 characters; no workspace owns the sandbox yet
@@ -184,6 +187,9 @@ class Pool:
         began = time.monotonic()
         try:
             env = guest_env(row.id, remote=server is not None)
+            if row.kind == "browser":
+                env["ZOO_BROWSER_HOME"] = os.environ.get("ZOO_BROWSER_HOME", "https://duckduckgo.com")
+                env["ZOO_BROWSER_WAIT"] = "1"
             if desktop:
                 env["ZOO_VNC_PASSWORD"] = decrypt(json.loads(row.config)[VNC_PASSWORD])
             runtime_id, host = runtime.run_container(f"zoo-sandbox-{row.id}", row.image, row.id, env, server, desktop)
@@ -198,7 +204,7 @@ class Pool:
                 ready = hub.wait_for_guest(row.id, READY_TIMEOUT)
             if not ready:
                 raise RuntimeError("did not come up in time")
-            if runtime.is_kube():
+            if runtime.is_kube() and server is None:
                 # a pod can't be paused, so its processes are: it keeps its memory and stops using CPU
                 runtime.pause(runtime_id)
             with db_manager.session() as db:
@@ -226,6 +232,11 @@ class Pool:
         try:
             if row.runtime_id:
                 runtime.remove_container(row.runtime_id)
+            elif server is not None:
+                from server import remote_docker
+
+                with remote_docker.host(server.id).context():
+                    remote_docker.docker.remove_named_container(f"zoo-sandbox-{row.id}")
             else:
                 runtime.remove_named_container(f"zoo-sandbox-{row.id}")
         except Exception as e:

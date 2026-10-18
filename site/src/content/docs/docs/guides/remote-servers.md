@@ -1,44 +1,67 @@
 ---
-title: Mac and Windows hosts
-description: Enroll native VM hosts with zoo-node; Linux capacity stays in the selected Linux backend.
+title: Remote servers
+description: Add Linux, Mac, and Windows hosts to your Zoo installation.
 ---
 
 ## Supported hosts
 
-Only Apple Silicon Macs running macOS 14+ and Hyper-V-capable Windows hosts enroll as
-additional VM hosts. They run their native sandbox kind, not Linux Docker capacity.
-Linux capacity is either the one local Docker host or the selected Kubernetes nodes.
+One Zoo control plane can manage hosts running different operating systems. Available
+sandbox kinds depend on the runtimes installed on each host:
+
+| Host | Sandbox kinds | Requirements |
+| --- | --- | --- |
+| Linux | Linux desktop, Firefox browser, code | Linux Docker engine and zoo-node |
+| macOS | macOS; Linux desktop, Firefox browser, code | Apple Silicon, macOS 14+, zoovm and a prepared base VM for macOS; a Linux Docker engine such as Docker Desktop for Linux kinds |
+| Windows | Windows; Linux desktop, Firefox browser, code | Hyper-V and a prepared base VM for Windows; Docker Desktop in Linux container mode for Linux kinds |
+
+Intel Macs can provide Linux container capacity. Native macOS sandboxes require Apple
+Silicon. Linux hosts cannot run native macOS or Windows sandboxes. The dashboard advertises
+Linux capacity after the node reports a working Linux Docker engine; installing zoo-node
+alone does not supply that engine. Browser sandboxes use the Firefox-only Linux image.
 
 ## Enroll from the dashboard
 
-Open **Servers → Add server**, choose Mac or Windows and copy the generated command.
-It contains a one-time join token, the public control-plane URL and the API-provided host
-key. Run it on the intended host under the VM-owning account, with required privileges.
+Open **Servers → Add server**, choose the host's OS, name it, and copy the generated command.
+It contains a short-lived, single-use join token, the public control-plane URL, and the
+API-provided SSH key. Run it on the intended host with the required privileges.
+Enrollment downloads the installer and node binary from the running API image, so their
+supported platforms match that deployment.
 
-Mac installation uses `install.sh --node --token ... --control-plane ... --key ...`.
-Windows uses the generated elevated PowerShell installer command with its token and key.
-Do not construct an old operator command or paste a private key into the dashboard.
+Linux and Mac installation use `install.sh --node --token ... --control-plane ... --key ...`.
+Linux runs zoo-node as a systemd service. Windows uses the generated elevated PowerShell
+command. If zoo-node is already installed, use the displayed join command.
+
+The account selected during enrollment must have access to the Docker Linux engine for
+Linux workloads, and to the native VM runtime for native workloads. On Mac and Windows,
+keep Docker Desktop running with the selected account's engine available over SSH.
 
 ## Connectivity and identity
 
-zoo-node dials the native gateway's mTLS endpoint on port 7443. The public node hostname
-may differ from the API hostname; configure `ZOO_NODE_HOST` for that address. Permit outbound
-access and ensure the API URL is reachable by the host and by its VM guests.
+zoo-node connects outbound to the gateway's mTLS endpoint on port 7443. The public node
+hostname may differ from the API hostname; configure `ZOO_NODE_HOST` for that address.
+The public API URL must be reachable by the enrolled host and its sandbox guests.
+`localhost` on the control-plane machine is not a usable public address for remote hosts.
 
-Node CA material and host identity are database-backed. Gateway peers use their own
-private DNS membership, TLS RPC and peer-relay listeners. The public node address is not
-the peer DNS name, and ordinary HTTP ingress does not forward node gRPC.
+Docker operations use `docker system dial-stdio` over the enrolled host's pinned SSH
+identity and existing node tunnel. No Docker TCP port or inbound host SSH port needs to be
+published. The local SSH service and Docker CLI must remain available on the host.
 
-The node reports host capacity and carries scoped VM-helper operations. It does not expose
-a host Docker daemon. Update binaries from the matching release and retain the persisted
-CA/enrollment identity.
+Node CA material and host identity are stored in the database. Gateway peers use private
+DNS membership and TLS RPC/relay listeners. Ordinary HTTP ingress does not forward node
+gRPC. Update node binaries from the matching Zoo release and retain enrollment identity.
 
-## Capacity, saved state and moves
+## Placement and isolation
 
-Mac capacity is capped at two running macOS VMs per host, including a running base VM.
-Windows uses the configured per-host VM cap. A saved-state slot has its own hardware identity,
-disk and state; slot reuse is not a license to duplicate one running state into arbitrary
-new VM identities or across hosts.
+Choose a compatible remote host when creating a sandbox, or use automatic placement.
+Linux workloads use that host's Linux Docker engine and retain their home volume there.
+Remote Docker homes do not automatically follow a sandbox to another machine.
 
-Disk/profile transfer and saved-memory portability are different operations. Follow the
-native-platform guides; saved-state acceptance and real cross-host recovery are deferred.
+Docker isolation follows `ZOO_ISOLATION`: `auto` uses Kata when the selected engine has it,
+otherwise ordinary Linux containers; `kata` requires Kata and fails if it is absent;
+`runc` selects ordinary containers. Docker Desktop provides a Linux VM for its engine,
+but ordinary containers share that VM's kernel. Use Kata-capable Linux hosts and strict
+Kata mode when a separate guest kernel per sandbox is required.
+
+Native Mac capacity remains capped at two running macOS VMs per host, including a running
+base VM. Windows uses its configured native VM cap. Linux containers do not consume those
+native VM slots. See the native-platform guides for base VM setup and saved-state limits.

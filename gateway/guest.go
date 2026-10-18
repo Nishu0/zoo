@@ -470,12 +470,39 @@ func (service *gatewayServer) GuestStatus(ctx context.Context, request *gatewayp
 
 type guestStream struct {
 	mu           sync.Mutex
-	frames       chan guestFrame
+	frames       []guestFrame
+	queuedBytes  int
+	available    chan struct{}
 	done         chan struct{}
 	failure      error
 	clientStream string
 	wireStream   string
 	operation    string
+}
+
+const guestStreamBufferBytes = guestQueueFrames * (64 << 10)
+
+func newGuestStream(clientStream, operation string) *guestStream {
+	return &guestStream{available: make(chan struct{}, 1), done: make(chan struct{}), clientStream: clientStream, operation: operation}
+}
+
+func (stream *guestStream) next() (guestFrame, bool) {
+	stream.mu.Lock()
+	defer stream.mu.Unlock()
+	if len(stream.frames) == 0 {
+		return guestFrame{}, false
+	}
+	frame := stream.frames[0]
+	stream.frames[0] = guestFrame{}
+	stream.frames = stream.frames[1:]
+	stream.queuedBytes -= len(frame.payload)
+	if len(stream.frames) > 0 {
+		select {
+		case stream.available <- struct{}{}:
+		default:
+		}
+	}
+	return frame, true
 }
 
 func (stream *guestStream) fail(err error) {
@@ -498,11 +525,31 @@ func (stream *guestStream) offer(frame guestFrame) {
 		close(stream.done)
 		return
 	}
-	select {
-	case stream.frames <- frame:
-	default:
+	if stream.queuedBytes+len(frame.payload) > guestStreamBufferBytes {
 		stream.failure = status.Error(codes.ResourceExhausted, "guest stream consumer is too slow")
 		close(stream.done)
+		return
+	}
+	// TCP can fragment a single VNC redraw into many small tunnel_data messages.
+	// Combine adjacent data while holding the queue lock, before ownership passes
+	// to the sender. Control messages retain their order and frame boundaries.
+	merged := false
+	if last := len(stream.frames) - 1; last >= 0 && headerString(frame.header, "op") == "tunnel_data" && headerString(stream.frames[last].header, "op") == "tunnel_data" && len(stream.frames[last].payload)+len(frame.payload) <= guestStreamPayloadLimit {
+		stream.frames[last].payload = append(stream.frames[last].payload, frame.payload...)
+		merged = true
+	}
+	if !merged {
+		if len(stream.frames) >= guestQueueFrames {
+			stream.failure = status.Error(codes.ResourceExhausted, "guest stream consumer is too slow")
+			close(stream.done)
+			return
+		}
+		stream.frames = append(stream.frames, frame)
+	}
+	stream.queuedBytes += len(frame.payload)
+	select {
+	case stream.available <- struct{}{}:
+	default:
 	}
 }
 
@@ -541,7 +588,7 @@ func (service *gatewayServer) GuestStream(rpc grpc.BidiStreamingServer[gatewaypb
 	if err != nil {
 		return err
 	}
-	stream := &guestStream{frames: make(chan guestFrame, guestQueueFrames), done: make(chan struct{}), clientStream: headerString(args, "stream"), operation: operation}
+	stream := newGuestStream(headerString(args, "stream"), operation)
 	pending := &guestPending{stream: stream, clientID: clientID}
 	requestID, err := guest.register(pending)
 	if err != nil {
@@ -661,7 +708,11 @@ func (stream *guestStream) send(ctx context.Context, rpc grpc.BidiStreamingServe
 			err := stream.failure
 			stream.mu.Unlock()
 			return err
-		case frame := <-stream.frames:
+		case <-stream.available:
+			frame, exists := stream.next()
+			if !exists {
+				continue
+			}
 			raw, _ := json.Marshal(frame.header)
 			if err := rpc.Send(&gatewaypb.Frame{SandboxId: sandboxID, HeaderJson: raw, Payload: frame.payload}); err != nil {
 				return err

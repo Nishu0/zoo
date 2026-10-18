@@ -9,11 +9,11 @@ abilities; an API key is shown only once.
 ## Choose a kind
 
 - `desktop`: Linux XFCE desktop with screen/input, shell and file tools.
-- `browser`: Linux browser-focused desktop with its allowed tool categories.
+- `browser`: Firefox-only Linux view with tabs and an address bar, using the dedicated browser image.
 - `code`: Linux shell/files without a graphical desktop.
 - `macos` / `windows`: the native kind on a prepared, enrolled VM host.
 
-Linux kinds always run inside Kata VMs. Homes persist on the selected runtime's home
+Linux kinds run on the selected Linux Docker engine or Kubernetes runtime. Docker isolation follows `ZOO_ISOLATION`; Kata provides a separate guest kernel, while ordinary containers share their engine kernel. Homes persist on the selected runtime's home
 volume/claim; native data has platform-specific disk/state dependencies. Do not assume a
 Linux home path, UID or resource default applies to every OS.
 

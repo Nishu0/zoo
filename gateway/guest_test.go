@@ -525,6 +525,37 @@ func TestGuestStreamCancellationAndDisconnectDrain(test *testing.T) {
 	}
 }
 
+func TestGuestStreamAcceptsFragmentedTunnelBurst(test *testing.T) {
+	stream := newGuestStream("vnc", "tunnel_open")
+	stream.offer(guestFrame{header: map[string]json.RawMessage{"id": jsonValue(1), "ok": jsonValue(true)}})
+	var expected []byte
+	for index := range guestQueueFrames * 4 {
+		payload := bytes.Repeat([]byte{byte(index)}, 1024)
+		expected = append(expected, payload...)
+		stream.offer(guestFrame{header: map[string]json.RawMessage{"op": jsonValue("tunnel_data")}, payload: payload})
+	}
+	stream.offer(guestFrame{header: map[string]json.RawMessage{"op": jsonValue("tunnel_close")}})
+	if stream.failure != nil {
+		test.Fatalf("small VNC redraw burst disconnected the stream: %v", stream.failure)
+	}
+	first, _ := stream.next()
+	data, _ := stream.next()
+	last, _ := stream.next()
+	if headerID(first.header) != 1 || !bytes.Equal(data.payload, expected) || headerString(last.header, "op") != "tunnel_close" || stream.queuedBytes != 0 {
+		test.Fatal("coalescing changed tunnel bytes, control order, or queue accounting")
+	}
+}
+
+func TestGuestStreamTunnelBufferRemainsBounded(test *testing.T) {
+	stream := newGuestStream("vnc", "tunnel_open")
+	for range 3 {
+		stream.offer(guestFrame{header: map[string]json.RawMessage{"op": jsonValue("tunnel_data")}, payload: make([]byte, guestStreamPayloadLimit)})
+	}
+	if status.Code(stream.failure) != codes.ResourceExhausted || stream.queuedBytes > guestStreamBufferBytes {
+		test.Fatal("slow tunnel consumer exceeded the byte budget")
+	}
+}
+
 func TestGuestStreamBackpressureDoesNotBlockCalls(test *testing.T) {
 	fixture := newGuestFixture(test)
 	guest := dialGuest(test, fixture, "sandbox")

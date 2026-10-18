@@ -12,9 +12,9 @@ from db.connection import db_manager
 from db.generated.models import Node, Profile, ProfileVersion, Server
 from db.generated.query import CreateProfileParams, CreateProfileVersionParams, Querier
 from logger.logger import logger
-from server import events, macos, nodes, objects, runtime, tickets, windows
+from server import events, macos, nodes, objects, remote_docker, runtime, tickets, windows
 from server.auth_api import AuthApi, Member
-from server.platforms import LINUX_PLATFORM, PLATFORMS, capabilities_of, parse
+from server.platforms import PLATFORMS, capabilities_of, parse
 from server.pool import KINDS as POOL_KINDS
 from server.pool import MAX_SIZE as POOL_MAX
 from server.pool import pool_id
@@ -117,13 +117,13 @@ class BaseInstallRequest(BaseModel):
 
 class PoolRequest(BaseModel):
     kind: Literal["desktop", "browser", "code"]
-    server_id: None = None
+    server_id: str | None = None
     size: int = Field(ge=0, le=POOL_MAX)
 
 
 class PoolEntry(BaseModel):
     kind: str
-    server_id: None
+    server_id: str | None
     server_name: str
     size: int
     idle: int
@@ -200,10 +200,13 @@ def server_response(server: Server, node: Node | None = None) -> ServerResponse:
     fields = {
         k: getattr(server, k) for k in ServerResponse.model_fields if k not in ("capabilities", "node", "created_at")
     }
+    capabilities = parse(server.capabilities)
+    if not remote_docker.available(server.id):
+        capabilities.discard("linux")
     return ServerResponse(
         **fields,
         created_at=to_stamp(server.created_at),
-        capabilities=sorted(parse(server.capabilities)),
+        capabilities=sorted(capabilities),
         node=node_info(node) if node else None,
     )
 
@@ -240,10 +243,20 @@ def remove_version_file(version_id: str):
 def probe(server: Server) -> dict:
     if not nodes.hub.connected(server.id):
         return {"online": False, "error": "The server's zoo-node is not connected."}
-    return VMS[server.platform].probe(server.id, server.docker_url)
+    if server.platform == "linux":
+        return remote_docker.probe(server)
+    status = VMS[server.platform].probe(server.id, server.docker_url)
+    if not status.get("online") and remote_docker.available(server.id):
+        return remote_docker.probe(server)
+    return status
 
 
 def capabilities(server) -> str:
+    if server.platform == "macos":
+        with db_manager.session() as db:
+            node = db.get_node_by_server(server_id=server.id)
+        if node is not None and node.arch != "arm64":
+            return "linux"
     return capabilities_of(server.platform)
 
 
@@ -337,11 +350,17 @@ class ServersApi:
             raise HTTPException(status_code=404, detail="server not found")
         return server
 
-    def pool_hosts(self, user: Member) -> dict[None, str]:
-        """Only admins manage the configured Linux runtime's local pools."""
-        return {None: "This installation"} if user.email.lower() in ADMINS else {}
+    def pool_hosts(self, user: Member) -> dict[str | None, str]:
+        """The installation's pool is admin-only; tenant pools stay on their enrolled hosts."""
+        hosts: dict[str | None, str] = {None: "This installation"} if user.email.lower() in ADMINS else {}
+        with db_manager.session() as db:
+            servers = list(db.list_servers_by_workspace(workspace_id=user.workspace_id))
+        hosts.update(
+            {s.id: s.name for s in servers if "linux" in parse(s.capabilities) and remote_docker.available(s.id)}
+        )
+        return hosts
 
-    def pool_entries(self, hosts: dict[None, str]) -> list[PoolEntry]:
+    def pool_entries(self, hosts: dict[str | None, str]) -> list[PoolEntry]:
         keys: list[tuple[str, str | None]] = [(kind, server_id) for server_id in hosts for kind in POOL_KINDS]
         return [PoolEntry(**e, server_name=hosts[e["server_id"]]) for e in self.sandboxes.pool.status(keys)]
 
@@ -412,8 +431,12 @@ class ServersApi:
             """The built-in Linux runtime and the sandbox OSes available through registered node hosts."""
             servers = list(db.list_servers_by_workspace(workspace_id=user.workspace_id))
             result = []
-            for p in (LINUX_PLATFORM, *PLATFORMS.values()):
-                count = sum(1 for s in servers if p.id in parse(s.capabilities))
+            for p in PLATFORMS.values():
+                count = sum(
+                    1
+                    for s in servers
+                    if p.id in parse(s.capabilities) and (p.id != "linux" or remote_docker.available(s.id))
+                )
                 result.append(
                     PlatformResponse(
                         **{k: getattr(p, k) for k in ("id", "name", "host", "requirements")},
@@ -452,7 +475,9 @@ class ServersApi:
         ) -> BaseStatus:
             server, vms = self.vm_server(server_id, user)
             status = await self.on_host(vms.base_status, server.id)
-            if status["state"] not in ("missing", "failed"):
+            if status["state"] not in ("missing", "failed") and not (
+                vms is macos and status["state"] in ("stopped", "running") and not status.get("ready")
+            ):
                 raise HTTPException(status_code=409, detail=f"base VM is {status['state']}")
             if vms is windows:
                 if payload is None or not payload.iso:
@@ -537,6 +562,7 @@ class ServersApi:
             nodes.hub.drop(server.id)
             macos.forget(server.id)
             windows.forget(server.id)
+            remote_docker.forget(server.id)
 
         @self.app.get("/pool", response_model=list[PoolEntry])
         def list_pool(user: Member = Depends(current_user)):

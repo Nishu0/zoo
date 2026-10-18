@@ -1,4 +1,4 @@
-// zoo-node runs on macOS and Windows sandbox hosts. It joins the control plane once with a token from the
+// zoo-node runs on Linux, macOS and Windows sandbox hosts. It joins the control plane once with a token from the
 // dashboard, then dials out to the API over gRPC with mTLS and keeps the link up: it reports the host's capacity,
 // health and running sandboxes, carries the API's connections to the host's SSH server, and updates
 // itself to the API's version. Hosts need no inbound ports, so they can sit behind NAT.
@@ -85,7 +85,7 @@ func joinCommand(args []string) error {
 	fs := flagSet("join")
 	dir := fs.String("dir", "", "where the node keeps its key, certificates and config")
 	service := fs.Bool("service", false, "install and start zoo-node as a service")
-	sshUser := fs.String("ssh-user", "", "macOS and Windows: the account the API signs in as (default: you, on a Mac)")
+	sshUser := fs.String("ssh-user", "", "the SSH account the API signs in as (default: current account on Linux and macOS)")
 	rest, err := parse(fs, args)
 	if err != nil {
 		return err

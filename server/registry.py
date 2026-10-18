@@ -298,6 +298,18 @@ def responsive(container_id: str) -> bool:
         return False
 
 
+def start_browser(container_id: str, url: str) -> dict:
+    """Legacy desktop images need a launch; the browser-only image supervises Firefox itself."""
+    command = (
+        "if [ -f /etc/zoo/browser-only ]; then touch /tmp/zoo-browser-start; "
+        f"else nohup firefox-esr --new-tab {shlex.quote(url)} >/dev/null 2>&1 & fi"
+    )
+    result = run(container_id, ["sh", "-c", command], {"DISPLAY": ":1"})
+    if result.exit_code != 0:
+        raise RuntimeError(result.output.decode(errors="replace"))
+    return {"opened": url}
+
+
 def open_url(container_id: str, url: str, display: str = ":1") -> dict:
     command = f"nohup firefox-esr --new-tab {shlex.quote(url)} >/dev/null 2>&1 &"
     result = run(container_id, ["sh", "-c", command], {"DISPLAY": display})

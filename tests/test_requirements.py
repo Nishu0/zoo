@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pytest
 
 from db.connection import db_manager
-from server import docker, nodes, requirements, runtime
+from server import docker, nodes, remote_docker, requirements, runtime
 from server.errors import ZooError
 
 
@@ -136,6 +136,7 @@ def vm_host(monkeypatch, request):
 
     monkeypatch.setattr(db_manager, "session", session)
     monkeypatch.setattr(nodes.hub, "connected", lambda server_id: state.connected)
+    monkeypatch.setattr(remote_docker, "available", lambda _: False)
     monkeypatch.setattr(runtime.VMS[platform], "probe", state.probe)
     monkeypatch.setattr(runtime.VMS[platform], "base_status", state.base)
     return state
@@ -197,10 +198,10 @@ def test_vm_hosts_require_a_ready_base(vm_host, status):
 
 def test_readiness_reports_native_host_requirement_failures(client, monkeypatch, runtime_requirements, vm_host):
     monkeypatch.setenv("ZOO_API_URL", "http://zoo.test")
-    response = client.get("/readyz")
+    response = client.get("/readyz?servers=true")
     assert response.status_code == 200 and response.json()["checks"]["server:vm-host"] == "ok"
     vm_host.base.return_value = {"ready": False}
-    response = client.get("/readyz")
+    response = client.get("/readyz?servers=true")
     assert response.status_code == 503 and response.json()["status"] == "unavailable"
     assert "base VM is not ready" in response.json()["checks"]["server:vm-host"]
 
@@ -208,31 +209,31 @@ def test_readiness_reports_native_host_requirement_failures(client, monkeypatch,
 def test_readiness_can_exclude_unavailable_hosts(client, monkeypatch, runtime_requirements, vm_host):
     monkeypatch.setenv("ZOO_API_URL", "http://zoo.test")
     vm_host.connected = False
-    response = client.get("/readyz?servers=false")
+    response = client.get("/readyz")
     assert response.status_code == 200 and "server:vm-host" not in response.json()["checks"]
     vm_host.probe.assert_not_called()
     vm_host.base.assert_not_called()
 
 
-def test_startup_collects_named_failures_for_every_vm_host(monkeypatch, vm_host):
+def test_startup_does_not_depend_on_any_tenants_vm_hosts(monkeypatch, vm_host):
     other = SimpleNamespace(id="other", name="other-host", platform="windows", docker_url="node://zoo@other")
     vm_host.servers.append(other)
     monkeypatch.setattr(requirements, "CHECKS", {"runtime": lambda: None})
     failure = ZooError("unavailable", "host bootstrap incomplete")
     checker = Mock(side_effect=failure)
     monkeypatch.setattr(runtime, "host_requirements", checker)
-    assert requirements.failures() == [f"server:vm-host: {failure}", f"server:other-host: {failure}"]
-    assert [args.args[0].id for args in checker.call_args_list] == ["host", "other"]
+    assert requirements.failures() == []
+    checker.assert_not_called()
 
 
-def test_startup_reports_failure_to_list_registered_hosts(monkeypatch):
+def test_startup_does_not_query_tenant_host_inventory(monkeypatch):
     monkeypatch.setattr(requirements, "CHECKS", {"runtime": lambda: None})
     monkeypatch.setattr(db_manager, "session", Mock(side_effect=ConnectionError("host inventory unavailable")))
-    assert requirements.failures() == ["vm_hosts: host inventory unavailable"]
+    assert requirements.failures() == []
 
 
 @pytest.mark.parametrize("dependency_error", [None, RuntimeError("dependency unavailable")])
-def test_native_gateway_preflight_checks_hosts_and_own_dependencies(monkeypatch, dependency_error):
+def test_native_gateway_preflight_checks_only_own_dependencies(monkeypatch, dependency_error):
     database = Mock()
     selected_runtime = Mock(side_effect=dependency_error)
     api_url = Mock()
@@ -253,5 +254,26 @@ def test_native_gateway_preflight_checks_hosts_and_own_dependencies(monkeypatch,
     database.assert_called_once_with()
     selected_runtime.assert_called_once_with()
     api_url.assert_called_once_with()
-    inventory.assert_called_once_with()
-    probe.assert_called_once_with(registered)
+    inventory.assert_not_called()
+    probe.assert_not_called()
+
+
+@pytest.mark.parametrize("vm_host", [("macos", "amd64"), ("macos", "arm64"), ("windows", "amd64")], indirect=True)
+def test_docker_capable_native_hosts_can_serve_linux_without_native_vms(vm_host, monkeypatch):
+    vm_host.probe.return_value = {"online": False, "microvm": False}
+    monkeypatch.setattr(remote_docker, "available", lambda _: True)
+    linux = Mock(return_value={"online": True})
+    monkeypatch.setattr(remote_docker, "probe", linux)
+    runtime.host_requirements(vm_host.server)
+    linux.assert_called_once_with(vm_host.server)
+    vm_host.base.assert_not_called()
+
+
+def test_linux_host_requirements_use_the_linux_docker_probe(vm_host, monkeypatch):
+    vm_host.server.platform = "linux"
+    probe = Mock(return_value={"online": True})
+    monkeypatch.setattr(remote_docker, "probe", probe)
+    runtime.host_requirements(vm_host.server)
+    probe.assert_called_once_with(vm_host.server)
+    vm_host.probe.assert_not_called()
+    vm_host.base.assert_not_called()

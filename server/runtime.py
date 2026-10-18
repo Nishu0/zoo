@@ -5,8 +5,9 @@ import json
 import os
 import threading
 from collections.abc import AsyncIterator
+from typing import Any
 
-from server import docker, kube, macos, windows
+from server import docker, kube, macos, remote_docker, windows
 from server.errors import ZooError
 
 NAME = os.environ.get("ZOO_RUNTIME", "docker")
@@ -14,6 +15,7 @@ LINUX = {"docker": docker, "kube": kube}.get(NAME)
 RUNTIME_ERRORS = (docker.docker.errors.DockerException, kube.KubeError, ZooError)
 NOT_FOUND_ERRORS = (docker.docker.errors.NotFound, kube.NotFound)
 IMAGE = docker.IMAGE
+BROWSER_IMAGE = docker.BROWSER_IMAGE
 CODE_IMAGE = docker.CODE_IMAGE
 HOME = "/home/zoo"
 SECRETS_DIR = "/run/zoo"
@@ -29,7 +31,9 @@ def linux():
     return LINUX
 
 
-def backend(runtime_id: str):
+def backend(runtime_id: str) -> Any:
+    if remote_docker.is_remote(runtime_id):
+        return remote_docker.Runtime(runtime_id)
     if macos.is_vm(runtime_id):
         return macos
     if windows.is_vm(runtime_id):
@@ -47,27 +51,27 @@ def refill_volumes():
 
 
 def default_image(kind: str) -> str:
-    return CODE_IMAGE if kind == "code" else IMAGE
+    return {"code": CODE_IMAGE, "browser": BROWSER_IMAGE}.get(kind, IMAGE)
 
 
 def run_container(name, image, sandbox_id, env, server=None, desktop=True, size=None) -> tuple[str, str | None]:
     from server.sizes import DEFAULT
 
     if server is not None:
-        raise ZooError("not_supported", "Linux sandboxes use the configured local runtime.")
+        return remote_docker.run_container(server, name, image, sandbox_id, env, desktop, size or DEFAULT)
     return linux().run_container(name, image, sandbox_id, env, desktop=desktop, size=size or DEFAULT)
 
 
 def container(runtime_id: str):
-    return linux().container(runtime_id)
+    return backend(runtime_id).container(runtime_id)
 
 
 def exec_command(runtime_id: str, argv: list[str], **options):
-    return linux().exec_command(runtime_id, argv, **options)
+    return backend(runtime_id).exec_command(runtime_id, argv, **options)
 
 
 def pause(runtime_id: str):
-    linux().pause(runtime_id)
+    backend(runtime_id).pause(runtime_id)
 
 
 def stop(runtime_id: str):
@@ -75,14 +79,14 @@ def stop(runtime_id: str):
 
 
 def resume(runtime_id: str):
-    linux().resume(runtime_id)
+    backend(runtime_id).resume(runtime_id)
 
 
 def write_secrets(runtime_id: str, values: dict[str, str]):
     if is_vm(runtime_id):
         VMS["macos" if macos.is_vm(runtime_id) else "windows"].write_env(runtime_id, values)
     else:
-        linux().write_secrets(runtime_id, values)
+        backend(runtime_id).write_secrets(runtime_id, values)
 
 
 def tar_file(name: str, data: bytes, mode: int = 0o600) -> bytes:
@@ -98,7 +102,7 @@ def local_info() -> dict:
 
 
 def sandbox_images():
-    for image in (IMAGE, CODE_IMAGE):
+    for image in (IMAGE, BROWSER_IMAGE, CODE_IMAGE):
         docker.docker_client.images.get(image)
 
 
@@ -136,7 +140,7 @@ async def events() -> AsyncIterator[dict]:
 
 
 def local_stats(runtime_id: str) -> dict | None:
-    return linux().stats(runtime_id)
+    return backend(runtime_id).stats(runtime_id)
 
 
 def free_memory() -> int | None:
@@ -154,11 +158,27 @@ def free_memory() -> int | None:
 
 def pressured_nodes(share: float) -> set[str]:
     """The Linux nodes with less than `share` of their memory free."""
-    return linux().pressured_nodes(share)
+    from db.connection import db_manager
+    from server import nodes
+
+    pressured = linux().pressured_nodes(share)
+    with db_manager.session() as db:
+        reports = list(db.list_nodes())
+    for node in reports:
+        if (
+            nodes.fresh(node)
+            and node.memory_total
+            and node.memory_available is not None
+            and node.memory_available < share * node.memory_total
+        ):
+            pressured.add(node.server_id)
+    return pressured
 
 
 def node_of(sandbox) -> str:
     """The Linux node a sandbox runs on: its placed node on Kubernetes, the one host on Docker."""
+    if sandbox.server_id:
+        return sandbox.server_id
     return json.loads(sandbox.config or "{}").get("node_name") or docker.NODE if is_kube() else docker.NODE
 
 
@@ -194,19 +214,23 @@ def remove_container(runtime_id: str):
     if is_vm(runtime_id):
         backend(runtime_id).stop(runtime_id)
     else:
-        linux().remove_container(runtime_id)
+        backend(runtime_id).remove_container(runtime_id)
 
 
 def remove_volume(sandbox, server):
     if sandbox.kind in VMS:
         if server is not None:
             VMS[sandbox.kind].delete(sandbox.id, server)
+    elif server is not None:
+        remote_docker.volume_operation(server.id, "remove_volume", sandbox.id)
     else:
         linux().remove_volume(sandbox.id)
 
 
 def remove_volume_id(sandbox_id: str, config: dict):
-    if is_kube():
+    if config.get("remote_server_id"):
+        remote_docker.volume_operation(config["remote_server_id"], "remove_volume", sandbox_id)
+    elif is_kube():
         kube.remove_home(config)
     else:
         linux().remove_volume(sandbox_id)
@@ -217,23 +241,27 @@ def remove_named_container(name: str):
 
 
 def read_archive(runtime_id: str, path: str) -> bytes:
-    return linux().read_archive(runtime_id, path)
+    return backend(runtime_id).read_archive(runtime_id, path)
 
 
 def write_archive(runtime_id: str, path: str, data: bytes) -> bool:
-    return linux().write_archive(runtime_id, path, data)
+    return backend(runtime_id).write_archive(runtime_id, path, data)
 
 
 def snapshot(sandbox, snapshot_id: str, server) -> int:
     """Snapshots the sandbox's home disk on its host; returns the snapshot's size in bytes."""
     if sandbox.kind in VMS:
         return VMS[sandbox.kind].snapshot(sandbox.id, snapshot_id, server)
+    if server is not None:
+        return remote_docker.volume_operation(server.id, "snapshot", sandbox.id, snapshot_id)
     return linux().snapshot(sandbox.id, snapshot_id)
 
 
 def restore_snapshot(sandbox, snapshot_id: str, server):
     if sandbox.kind in VMS:
         VMS[sandbox.kind].restore_snapshot(sandbox.id, snapshot_id, server)
+    elif server is not None:
+        remote_docker.volume_operation(server.id, "restore_snapshot", sandbox.id, snapshot_id)
     else:
         linux().restore_snapshot(sandbox.id, snapshot_id)
 
@@ -281,7 +309,7 @@ def apply_apps(runtime_id: str, effects: dict[str, str]):
 def connect(server):
     if server.platform in VMS:
         return VMS[server.platform].connect(server.id, server.docker_url)
-    raise ZooError("not_supported", "Linux capacity is managed by the configured runtime.")
+    return remote_docker.host(server.id).client
 
 
 def ping(server):
@@ -296,16 +324,25 @@ def host_requirements(server):
     from db.connection import db_manager
     from server import nodes
 
-    if server.platform not in VMS:
-        raise ZooError("not_supported", "registered hosts must be macOS or Windows")
     with db_manager.session() as db:
         node = db.get_node_by_server(server_id=server.id)
     if node is None or not nodes.hub.connected(server.id):
         raise ZooError("unavailable", "the host's zoo-node is not connected", "Join or restart zoo-node on the host.")
+    if server.platform == "linux" or (
+        server.platform == "macos" and node.arch != "arm64" and remote_docker.available(server.id)
+    ):
+        report = remote_docker.probe(server)
+        if not report.get("online"):
+            raise ZooError("unavailable", report.get("error") or "the host's Linux Docker engine is unavailable")
+        return
+    if server.platform not in VMS:
+        raise ZooError("not_supported", "registered hosts must be Linux, macOS or Windows")
     if server.platform == "macos" and node.arch != "arm64":
         raise ZooError("not_supported", "macOS hosts require Apple Silicon")
     report = VMS[server.platform].probe(server.id, server.docker_url)
     if not report.get("online") or not report.get("microvm"):
+        if remote_docker.available(server.id) and remote_docker.probe(server).get("online"):
+            return
         raise ZooError("unavailable", report.get("error") or "the host's VM runtime is unavailable")
     if not VMS[server.platform].base_status(server.id).get("ready"):
         raise ZooError(

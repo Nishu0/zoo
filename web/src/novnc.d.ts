@@ -8,6 +8,7 @@ declare module "@novnc/novnc" {
     scaleViewport: boolean
     resizeSession: boolean
     background: string
+    showDotCursor: boolean
     disconnect(): void
     focus(): void
   }

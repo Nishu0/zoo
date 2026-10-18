@@ -4,6 +4,7 @@ import json
 from db.connection import db_manager
 from db.generated.query import CreateServerParams
 from server.auth_api import personal_workspace
+from server.platforms import capabilities_of
 from tests.conftest import present, runtime_of, sql
 from tests.fake_runtime import PNG
 
@@ -19,7 +20,7 @@ def add_server(user_email: str, platform: str = "windows", name: str = "box") ->
                 bind_address="10.0.0.2",
                 created_by=user.id,
                 platform=platform,
-                capabilities=platform,
+                capabilities=capabilities_of(platform),
                 workspace_id=personal_workspace(user, db),
             )
         )
@@ -50,6 +51,10 @@ def test_code_and_browser_sandboxes(make_sandbox, fake):
 
     browser = make_sandbox("browser")
     assert browser["status"] == "running"
+    browser_container = fake.containers[runtime_of(browser["id"])]
+    assert browser_container.image == "zoo-browser:latest"
+    assert browser_container.env["ZOO_BROWSER_HOME"] == "https://duckduckgo.com"
+    assert browser_container.env["ZOO_BROWSER_WAIT"] == "1"
     assert ("open_url", runtime_of(browser["id"]), {"url": "https://duckduckgo.com"}) in fake.calls
 
 
@@ -168,9 +173,9 @@ def test_backup_and_restore(client, alice, sandbox, fake):
     assert backup.headers["content-type"] == "application/x-tar"
 
 
-def test_explicit_linux_server_is_rejected(client, alice):
+def test_explicit_linux_server_must_exist(client, alice):
     response = client.post("/v1/sandboxes", json={"server_id": "missing"}, headers=alice)
-    assert response.status_code == 501 and response.json()["error"]["code"] == "not_supported"
+    assert response.status_code == 404
 
 
 def test_secrets_reach_the_sandbox_and_are_redacted(client, alice, sandbox, fake):

@@ -51,7 +51,7 @@ def remote_guest_url() -> str:
             raise ValueError("invalid public API port")
     except ValueError as error:
         raise ZooError(
-            "unavailable", "ZOO_API_URL is required for VM guests", "Set a public HTTP(S) API URL."
+            "unavailable", "ZOO_API_URL is required for remote guests", "Set a public HTTP(S) API URL."
         ) from error
     scheme = "wss" if target.scheme == "https" else "ws"
     return urlunsplit((scheme, target.netloc, target.path.rstrip("/") + "/guest/connect", "", ""))

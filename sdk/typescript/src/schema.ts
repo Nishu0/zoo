@@ -2232,7 +2232,7 @@ export interface components {
              * Os
              * @enum {string}
              */
-            os: "darwin" | "windows";
+            os: "linux" | "darwin" | "windows";
             /** Ssh Host Key */
             ssh_host_key: string;
             /** Ssh User */
@@ -2566,7 +2566,7 @@ export interface components {
             /** Kind */
             kind: string;
             /** Server Id */
-            server_id: null;
+            server_id: string | null;
             /** Server Name */
             server_name: string;
             /** Size */
@@ -2580,7 +2580,7 @@ export interface components {
              */
             kind: "desktop" | "browser" | "code";
             /** Server Id */
-            server_id?: null;
+            server_id?: string | null;
             /** Size */
             size: number;
         };
@@ -3992,7 +3992,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                os_name: "darwin" | "windows";
+                os_name: "linux" | "darwin" | "windows";
                 arch: "amd64" | "arm64";
             };
             cookie?: never;
@@ -4055,7 +4055,7 @@ export interface operations {
     create_token_v1_nodes_tokens_post: {
         parameters: {
             query?: {
-                platform?: "macos" | "windows";
+                platform?: "linux" | "macos" | "windows";
             };
             header?: {
                 "x-zoo-workspace"?: string | null;

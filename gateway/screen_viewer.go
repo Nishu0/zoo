@@ -12,13 +12,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/klauspost/compress/zlib"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"zoo/gateway/gatewaypb"
 )
 
-const screenViewerMessageLimit = 1 << 20
+const (
+	screenViewerMessageLimit  = 1 << 20
+	screenViewerFrameInterval = time.Second / 30
+)
 
 type screenViewerInput struct {
 	rpc       grpc.BidiStreamingServer[gatewaypb.ViewerFrame, gatewaypb.Bytes]
@@ -82,20 +86,23 @@ type screenViewerRequest struct {
 }
 
 type screenViewer struct {
-	ctx      context.Context
-	rpc      grpc.BidiStreamingServer[gatewaypb.ViewerFrame, gatewaypb.Bytes]
-	input    *screenViewerInput
-	session  *VNCSession
-	viewOnly bool
-	writeMu  sync.Mutex
-	mu       sync.Mutex
-	format   screenViewerFormat
-	resize   int32
-	requests chan screenViewerRequest
-	active   *screenViewerRequest
-	previous *image.RGBA
-	width    int
-	height   int
+	ctx        context.Context
+	rpc        grpc.BidiStreamingServer[gatewaypb.ViewerFrame, gatewaypb.Bytes]
+	input      *screenViewerInput
+	session    *VNCSession
+	viewOnly   bool
+	writeMu    sync.Mutex
+	mu         sync.Mutex
+	format     screenViewerFormat
+	resize     int32
+	requests   chan screenViewerRequest
+	active     *screenViewerRequest
+	previous   *image.RGBA
+	width      int
+	height     int
+	encoding   int32
+	compressed bytes.Buffer
+	compressor *zlib.Writer
 }
 
 func (viewer *screenViewer) send(data []byte) error {
@@ -278,14 +285,19 @@ func (viewer *screenViewer) receive() error {
 			viewer.mu.Unlock()
 		case 2:
 			var resize int32
+			var pixelEncoding int32
 			for offset := 4; offset < len(message); offset += 4 {
 				encoding := int32(binary.BigEndian.Uint32(message[offset : offset+4]))
+				if encoding == vncZlib {
+					pixelEncoding = vncZlib
+				}
 				if encoding == -223 || encoding == -308 && resize == 0 {
 					resize = encoding
 				}
 			}
 			viewer.mu.Lock()
 			viewer.resize = resize
+			viewer.encoding = pixelEncoding
 			viewer.mu.Unlock()
 		case 3:
 			request := screenViewerRequest{region: screenViewerRegion(message), incremental: message[1] != 0}
@@ -400,7 +412,7 @@ func (viewer *screenViewer) update(request screenViewerRequest) error {
 			return viewer.ctx.Err()
 		case <-changed:
 		}
-		timer := time.NewTimer(100 * time.Millisecond)
+		timer := time.NewTimer(screenViewerFrameInterval)
 		select {
 		case <-viewer.ctx.Done():
 			timer.Stop()
@@ -411,7 +423,12 @@ func (viewer *screenViewer) update(request screenViewerRequest) error {
 }
 
 func (viewer *screenViewer) render() error {
-	ticker := time.NewTicker(100 * time.Millisecond)
+	defer func() {
+		if viewer.compressor != nil {
+			viewer.compressor.Close()
+		}
+	}()
+	ticker := time.NewTicker(screenViewerFrameInterval)
 	defer ticker.Stop()
 	for {
 		var request screenViewerRequest
@@ -436,7 +453,7 @@ func (viewer *screenViewer) render() error {
 
 func (viewer *screenViewer) frame(frame *image.RGBA, region image.Rectangle, resized bool) error {
 	viewer.mu.Lock()
-	format, resize := viewer.format, viewer.resize
+	format, resize, encoding := viewer.format, viewer.resize, viewer.encoding
 	viewer.mu.Unlock()
 	if resized && resize == 0 {
 		return status.Error(codes.FailedPrecondition, "viewer did not negotiate desktop resizing")
@@ -471,8 +488,23 @@ func (viewer *screenViewer) frame(frame *image.RGBA, region image.Rectangle, res
 	if region.Empty() {
 		return nil
 	}
-	if err := viewer.send(screenViewerRectangle(region, 0)); err != nil {
+	if err := viewer.send(screenViewerRectangle(region, encoding)); err != nil {
 		return err
+	}
+	writePixels := viewer.send
+	if encoding == vncZlib {
+		viewer.compressed.Reset()
+		if viewer.compressor == nil {
+			var err error
+			viewer.compressor, err = zlib.NewWriterLevel(&viewer.compressed, zlib.BestSpeed)
+			if err != nil {
+				return err
+			}
+		}
+		writePixels = func(data []byte) error {
+			_, err := viewer.compressor.Write(data)
+			return err
+		}
 	}
 	row := make([]byte, region.Dx()*format.bytes)
 	chunk := make([]byte, 0, 64<<10)
@@ -498,14 +530,28 @@ func (viewer *screenViewer) frame(frame *image.RGBA, region image.Rectangle, res
 			}
 		}
 		if len(chunk)+len(row) > cap(chunk) {
-			if err := viewer.send(chunk); err != nil {
+			if err := writePixels(chunk); err != nil {
 				return err
 			}
 			chunk = chunk[:0]
 		}
 		chunk = append(chunk, row...)
 	}
-	return viewer.send(chunk)
+	if err := writePixels(chunk); err != nil {
+		return err
+	}
+	if encoding == vncZlib {
+		if err := viewer.compressor.Flush(); err != nil {
+			return err
+		}
+		var length [4]byte
+		binary.BigEndian.PutUint32(length[:], uint32(viewer.compressed.Len()))
+		if err := viewer.send(length[:]); err != nil {
+			return err
+		}
+		return viewer.send(viewer.compressed.Bytes())
+	}
+	return nil
 }
 
 func screenViewerRectangle(rectangle image.Rectangle, encoding int32) []byte {

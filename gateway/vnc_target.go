@@ -170,7 +170,7 @@ func (resolver *vncTargetResolver) open(ctx context.Context, record vncTargetRec
 	}
 	var address, password string
 	if record.Kind == "macos" {
-		output, err := vncSSHOutput(ctx, client, `export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"; zoovm vnc `+name, nil)
+		output, err := vncSSHOutput(ctx, client, `export PATH="/usr/local/bin:/opt/homebrew/bin:$HOME/.local/bin:$PATH"; zoovm vnc `+name, nil)
 		if err == nil {
 			address, password, err = vncMacAddress(output)
 		}
@@ -242,9 +242,7 @@ func (resolver *vncTargetResolver) nodeSSH(ctx context.Context, record vncTarget
 	handshake, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	stop := context.AfterFunc(handshake, func() { transport.Close() })
-	connection, channels, requests, err := ssh.NewClientConn(transport, net.JoinHostPort(record.ServerID, "22"), &ssh.ClientConfig{
-		User: endpoint.User.Username(), Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)}, HostKeyCallback: ssh.FixedHostKey(hostKey), Timeout: 15 * time.Second,
-	})
+	connection, channels, requests, err := ssh.NewClientConn(transport, net.JoinHostPort(record.ServerID, "22"), vncSSHConfig(endpoint.User.Username(), signer, hostKey))
 	stopped := stop()
 	if err != nil || !stopped {
 		transport.Close()
@@ -254,6 +252,19 @@ func (resolver *vncTargetResolver) nodeSSH(ctx context.Context, record vncTarget
 		return nil, status.Error(codes.Unavailable, "the node SSH identity or pinned host key could not be authenticated")
 	}
 	return ssh.NewClient(connection, channels, requests), nil
+}
+
+// Negotiate the pinned key type. FixedHostKey verifies a key after negotiation;
+// alone it can reject a host that also offers a different, preferred key type.
+func vncSSHConfig(user string, signer ssh.Signer, hostKey ssh.PublicKey) *ssh.ClientConfig {
+	algorithms := []string{hostKey.Type()}
+	if hostKey.Type() == ssh.KeyAlgoRSA {
+		algorithms = []string{ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256}
+	}
+	return &ssh.ClientConfig{
+		User: user, Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)},
+		HostKeyAlgorithms: algorithms, HostKeyCallback: ssh.FixedHostKey(hostKey), Timeout: 15 * time.Second,
+	}
 }
 
 type vncSSHChannel struct {

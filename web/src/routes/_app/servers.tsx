@@ -2,13 +2,13 @@ import { Link, createFileRoute } from "@tanstack/react-router"
 import {
   Check,
   Copy,
+  ChevronDown,
   Download,
   ExternalLink,
   Play,
   Plus,
   Server,
   Square,
-  Terminal,
   Trash2,
 } from "lucide-react"
 import { useState } from "react"
@@ -23,6 +23,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -36,7 +41,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   useBaseAction,
-  useBaseSetup,
   useBaseStatus,
   useCreateNodeToken,
   useKubernetes,
@@ -49,6 +53,7 @@ import {
   useSetPool,
 } from "@/lib/api_client"
 import type {
+  BaseStatus,
   Kubernetes,
   NodeInfo,
   PoolEntry,
@@ -71,7 +76,7 @@ function ServersPage() {
     <Page
       icon={Server}
       title="Remote Servers"
-      description="Mac and Windows hosts that run your sandboxes."
+      description="Linux, Mac, and Windows hosts that run your sandboxes."
     >
       {monitoring.isPending ? (
         <Skeleton className="h-36 rounded-xl" />
@@ -140,6 +145,7 @@ function ServersPage() {
               id={s.id}
               name={s.name}
               platform={s.platform}
+              capabilities={s.capabilities}
               node={s.node}
             />
           ))}
@@ -148,7 +154,7 @@ function ServersPage() {
         <EmptyState
           icon={Server}
           title="No remote servers yet"
-          description="Add a Mac for macOS sandboxes or a Windows machine for Windows sandboxes. Linux sandboxes run on this installation's Docker or Kubernetes runtime."
+          description="Add Linux, Mac, or Windows hosts. Linux desktop, browser, and code sandboxes run on hosts with a Linux container runtime."
         />
       )}
       <PoolPanel />
@@ -256,16 +262,26 @@ function RemoteServerCard({
   id,
   name,
   platform,
+  capabilities,
   node,
 }: {
   id: string
   name: string
   platform: ServerPlatform
+  capabilities: Array<string>
   node: NodeInfo | null
 }) {
   const status = useServerStatus(id)
   const remove = useRemoveServer()
   const s = status.data
+  const dockerReady = node?.drivers.some(
+    (driver) => driver.name === "docker" && driver.available
+  )
+  const nativeReady = node?.drivers.some(
+    (driver) =>
+      driver.name === (platform === "macos" ? "zoovm" : "hyperv") &&
+      driver.available
+  )
 
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
@@ -280,7 +296,9 @@ function RemoteServerCard({
               {PLATFORM_LABELS[platform]}
             </div>
             <div className="text-xs text-muted-foreground">
-              Runs {PLATFORM_LABELS[platform]} sandboxes
+              {capabilities.length
+                ? `Runs ${capabilities.map((p) => (p === "linux" ? "Linux desktop, browser, and code" : `${p === "macos" ? "macOS" : "Windows"} sandboxes`)).join(" · ")}`
+                : "Waiting for a sandbox runtime"}
             </div>
           </div>
         </div>
@@ -307,13 +325,12 @@ function RemoteServerCard({
           <div>
             <dt className="text-xs text-muted-foreground">Isolation</dt>
             <dd>
-              {platform === "windows"
-                ? s.microvm
-                  ? "Hyper-V VM"
-                  : "Hyper-V missing"
-                : s.microvm
-                  ? "microVM"
-                  : "runtime missing"}
+              {[
+                ...(platform !== "linux" && nativeReady
+                  ? [platform === "windows" ? "Hyper-V VM" : "macOS VM"]
+                  : []),
+                ...(dockerReady ? ["Linux containers"] : []),
+              ].join(" · ") || "Runtime missing"}
             </dd>
           </div>
           <div>
@@ -327,7 +344,9 @@ function RemoteServerCard({
         )
       )}
       {node && <NodePanel node={node} />}
-      {s?.online && <BaseVmPanel id={id} platform={platform} />}
+      {s?.online && platform !== "linux" && capabilities.includes(platform) && (
+        <BaseVmPanel id={id} platform={platform} />
+      )}
       {remove.error && (
         <p className="text-xs text-destructive">{remove.error.message}</p>
       )}
@@ -493,11 +512,10 @@ function BaseVmPanel({
 }) {
   const base = useBaseStatus(id)
   const action = useBaseAction(id)
-  const setup = useBaseSetup()
   const [iso, setIso] = useState("")
   const [edition, setEdition] = useState("")
   const b = base.data
-  const error = base.error ?? action.error ?? setup.error
+  const error = base.error ?? action.error
   const windows = platform === "windows"
 
   function run(next: "install" | "start" | "stop") {
@@ -506,6 +524,18 @@ function BaseVmPanel({
       action: next,
       ...(next === "install" && windows && { iso, edition }),
     })
+  }
+
+  if (!windows) {
+    return (
+      <MacPreparationPanel
+        id={id}
+        status={b}
+        error={error?.message}
+        pending={action.isPending}
+        onAction={run}
+      />
+    )
   }
 
   return (
@@ -521,9 +551,8 @@ function BaseVmPanel({
       </div>
       {b?.state === "stopped" && !b.ready && (
         <p className="text-xs text-muted-foreground">
-          {windows
-            ? "Start the base VM and wait for its setup to finish before creating Windows sandboxes."
-            : "Start the base VM and finish its setup before creating macOS sandboxes."}
+          Start the base VM and wait for its setup to finish before creating
+          Windows sandboxes.
         </p>
       )}
       {b?.state === "installing" && (
@@ -543,29 +572,17 @@ function BaseVmPanel({
       {b?.state === "failed" && b.message && (
         <p className="line-clamp-3 text-xs text-destructive">{b.message}</p>
       )}
-      {b?.state === "running" && windows && !b.ready && b.message && (
+      {b?.state === "running" && !b.ready && b.message && (
         <p className="text-xs text-muted-foreground">{b.message}</p>
       )}
-      {b?.state === "running" && windows && b.ready && (
+      {b?.state === "running" && b.ready && (
         <p className="text-xs text-muted-foreground">
           Setup is done. Open the screen to install apps or change settings,
           then Stop. Stopping saves the base as the template new sandboxes start
           from.
         </p>
       )}
-      {b?.state === "running" && !windows && (
-        <ol className="flex list-decimal flex-col gap-1 pl-4 text-xs text-muted-foreground">
-          <li>
-            Open the screen and finish macOS setup with a user named admin.
-          </li>
-          <li>
-            Click Run setup and type the admin password in the Terminal it
-            opens.
-          </li>
-          <li>Grant Accessibility to /bin/zsh, install any apps, then Stop.</li>
-        </ol>
-      )}
-      {windows && (b?.state === "missing" || b?.state === "failed") && (
+      {(b?.state === "missing" || b?.state === "failed") && (
         <div className="flex flex-col gap-2">
           <Input
             placeholder="ISO path on the server, or https:// URL"
@@ -583,15 +600,11 @@ function BaseVmPanel({
         {(b?.state === "missing" || b?.state === "failed") && (
           <Button
             size="sm"
-            disabled={action.isPending || (windows && !iso.trim())}
+            disabled={action.isPending || !iso.trim()}
             onClick={() => run("install")}
           >
             <Download />
-            {b.state === "failed"
-              ? "Retry install"
-              : windows
-                ? "Install Windows"
-                : "Install macOS"}
+            {b.state === "failed" ? "Retry install" : "Install Windows"}
           </Button>
         )}
         {b?.state === "stopped" && (
@@ -620,17 +633,6 @@ function BaseVmPanel({
               <ExternalLink />
               Open screen
             </Button>
-            {!windows && (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={setup.isPending}
-                onClick={() => setup.mutate(id)}
-              >
-                <Terminal />
-                {setup.isPending ? "Typing…" : "Run setup"}
-              </Button>
-            )}
             <Button
               size="sm"
               variant="outline"
@@ -648,12 +650,156 @@ function BaseVmPanel({
   )
 }
 
+function MacPreparationPanel({
+  id,
+  status,
+  error,
+  pending,
+  onAction,
+}: {
+  id: string
+  status: BaseStatus | undefined
+  error: string | undefined
+  pending: boolean
+  onAction: (action: "install" | "start" | "stop") => void
+}) {
+  const preparing = pending || status?.state === "installing"
+  const ready = status?.ready && status.state !== "failed"
+  const failed = status?.state === "failed"
+  const progress =
+    status?.progress == null
+      ? undefined
+      : Math.max(0, Math.min(100, status.progress))
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-border p-3 text-sm">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-medium">macOS sandboxes</span>
+        <span role="status" className="text-xs text-muted-foreground">
+          {preparing
+            ? "Preparing…"
+            : ready
+              ? "Ready"
+              : failed
+                ? "Preparation failed"
+                : "Preparation needed"}
+        </span>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {preparing
+          ? "Zoo is preparing macOS and its guest tools automatically. New sandboxes wait until preparation finishes."
+          : ready
+            ? "macOS is prepared. New sandboxes start from this template automatically."
+            : "Zoo prepares the macOS template and guest tools for you. You can create sandboxes while preparation runs."}
+      </p>
+      {preparing && (
+        <div className="flex flex-col gap-1" aria-live="polite">
+          <div
+            role="progressbar"
+            aria-label="macOS preparation"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progress}
+            className="h-1.5 overflow-hidden rounded-full bg-muted"
+          >
+            <div
+              className="h-full bg-primary transition-all"
+              style={{ width: `${progress ?? 0}%` }}
+            />
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {status?.message || "Starting automatic preparation…"}
+            {progress != null && ` · ${progress.toFixed(1)}%`}
+          </span>
+        </div>
+      )}
+      {failed && status.message && (
+        <p role="alert" className="text-xs text-destructive">
+          {status.message}
+        </p>
+      )}
+      {!ready && !preparing && status && (
+        <div>
+          <Button size="sm" onClick={() => onAction("install")}>
+            <Download data-icon="inline-start" />
+            {failed ? "Retry preparation" : "Prepare macOS"}
+          </Button>
+        </div>
+      )}
+      {status && (status.state === "running" || status.ready) && (
+        <Collapsible className="flex flex-col gap-2">
+          <CollapsibleTrigger
+            render={<Button variant="ghost" size="sm" />}
+            disabled={preparing}
+          >
+            Advanced template controls
+            <ChevronDown data-icon="inline-end" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="flex flex-col gap-2">
+            <p className="text-xs text-muted-foreground">
+              Open the template to customize apps. Stop it when finished so new
+              sandboxes inherit your changes.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {status.state === "stopped" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={preparing}
+                  onClick={() => onAction("start")}
+                >
+                  <Play data-icon="inline-start" />
+                  Open template
+                </Button>
+              )}
+              {status.state === "running" && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    render={
+                      <Link
+                        to="/base/$serverId"
+                        params={{ serverId: id }}
+                        target="_blank"
+                      />
+                    }
+                  >
+                    <ExternalLink data-icon="inline-start" />
+                    Open screen
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={preparing}
+                    onClick={() => onAction("stop")}
+                  >
+                    <Square data-icon="inline-start" />
+                    Stop template
+                  </Button>
+                </>
+              )}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
+
 const PLATFORM_LABELS: Record<ServerPlatform, string> = {
+  linux: "Linux",
   macos: "macOS",
   windows: "Windows",
 }
 
 const HOSTS: Array<{ value: ServerPlatform; label: string }> = [
+  { value: "linux", label: "Linux" },
   { value: "macos", label: "macOS" },
   { value: "windows", label: "Windows" },
 ]
@@ -703,7 +849,7 @@ function Step({
 }
 
 function AddServerCard() {
-  const [host, setHost] = useState<ServerPlatform>("macos")
+  const [host, setHost] = useState<ServerPlatform>("linux")
   const [name, setName] = useState("")
   const token = useCreateNodeToken()
 
@@ -717,8 +863,8 @@ function AddServerCard() {
       <CardHeader>
         <CardTitle>Add a server</CardTitle>
         <CardDescription>
-          Join a Mac or Windows machine with zoo-node. The node connects to this
-          control plane, so the host needs no inbound port.
+          Join a Linux, Mac, or Windows machine with zoo-node. The node connects
+          to this control plane, so the host needs no inbound port.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
@@ -736,7 +882,8 @@ function AddServerCard() {
               value={host}
               disabled={token.isPending}
               onValueChange={(next) => {
-                if (next === "macos" || next === "windows") pick(next)
+                if (next === "linux" || next === "macos" || next === "windows")
+                  pick(next)
               }}
             >
               <SelectTrigger id="server-os" className="sm:w-64">
@@ -752,13 +899,26 @@ function AddServerCard() {
                 </SelectGroup>
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">
+              {host === "linux"
+                ? "Runs Linux desktop, Firefox browser, and code sandboxes. Requires a running Linux Docker engine."
+                : host === "macos"
+                  ? "Runs macOS sandboxes on Apple Silicon with zoovm. Add a Linux Docker engine, such as Docker Desktop, for Linux desktop, Firefox browser, and code sandboxes."
+                  : "Runs Windows sandboxes with Hyper-V. Switch Docker Desktop to Linux containers for Linux desktop, Firefox browser, and code sandboxes."}
+            </p>
           </Step>
           <Step n={2} title="Name it">
             <Label htmlFor="server-name">Server name</Label>
             <div className="flex flex-col gap-2 sm:flex-row">
               <Input
                 id="server-name"
-                placeholder={host === "macos" ? "mac-mini-1" : "windows-host-1"}
+                placeholder={
+                  host === "macos"
+                    ? "mac-mini-1"
+                    : host === "windows"
+                      ? "windows-host-1"
+                      : "linux-host-1"
+                }
                 value={name}
                 required
                 maxLength={100}
@@ -771,7 +931,7 @@ function AddServerCard() {
               />
               <Button type="submit" disabled={!name.trim() || token.isPending}>
                 <Plus data-icon="inline-start" />
-                {token.isPending ? "Creating…" : "Get the command"}
+                {token.isPending ? "Creating…" : "Get setup command"}
               </Button>
             </div>
             {token.error && (
@@ -787,15 +947,27 @@ function AddServerCard() {
             title={
               host === "windows"
                 ? "Run this in an elevated PowerShell"
-                : "Run this on the Mac"
+                : host === "macos"
+                  ? "Run this on the Mac"
+                  : "Run this on the Linux server"
             }
           >
             <CopyLine text={token.data.install_command} />
-            <p className="text-xs text-muted-foreground">
-              Already have zoo-node and {host === "macos" ? "zoovm" : "Hyper-V"}
-              ? Join with:
-            </p>
-            <CopyLine text={token.data.join_command} />
+            {host === "macos" ? (
+              <p className="text-xs text-muted-foreground">
+                This one command installs the host integration, enrolls the Mac,
+                and prepares macOS automatically in the background. Rerun it to
+                update helpers or resume an enrolled Mac; its registration is
+                kept.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Already have zoo-node installed? Join with:
+                </p>
+                <CopyLine text={token.data.join_command} />
+              </>
+            )}
             <p className="text-xs text-muted-foreground">
               The token works once and expires{" "}
               {relativeTime(token.data.expires_at)}. The server shows up above

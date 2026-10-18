@@ -5,6 +5,8 @@ x-zoo: &zoo
   depends_on:
     sandbox-image:
       condition: service_completed_successfully
+    browser-image:
+      condition: service_completed_successfully
     code-image:
       condition: service_completed_successfully
     egress:
@@ -55,7 +57,9 @@ x-zoo: &zoo
     ZOO_STORAGE_CLASS: ${ZOO_STORAGE_CLASS:-zoo-local}
     ZOO_SNAPSHOT_CLASS: ${ZOO_SNAPSHOT_CLASS:-zoo-snapshots}
     ZOO_SANDBOX_IMAGE: ${ZOO_SANDBOX_IMAGE:-${ZOO_REGISTRY:-docker.io/chann44}/zoo-sandbox-desktop:${ZOO_VERSION:-latest}}
+    ZOO_BROWSER_IMAGE: ${ZOO_BROWSER_IMAGE:-${ZOO_REGISTRY:-docker.io/chann44}/zoo-sandbox-browser:${ZOO_VERSION:-latest}}
     ZOO_CODE_IMAGE: ${ZOO_CODE_IMAGE:-${ZOO_REGISTRY:-docker.io/chann44}/zoo-sandbox-code:${ZOO_VERSION:-latest}}
+    ZOO_EGRESS_IMAGE: ${ZOO_EGRESS_IMAGE:-${ZOO_REGISTRY:-docker.io/chann44}/zoo-egress:${ZOO_VERSION:-latest}}
     ZOO_PAUSE_MINUTES: ${ZOO_PAUSE_MINUTES:-30}
     ZOO_MACOS_BASE: ${ZOO_MACOS_BASE:-zoo-macos-base}
     ZOO_MACOS_USER: ${ZOO_MACOS_USER:-admin}
@@ -96,6 +100,13 @@ services:
   sandbox-image:
     build: .
     image: ${ZOO_SANDBOX_IMAGE:-${ZOO_REGISTRY:-docker.io/chann44}/zoo-sandbox-desktop:${ZOO_VERSION:-latest}}
+    entrypoint: ["true"]
+
+  browser-image:
+    build:
+      context: .
+      dockerfile: Dockerfile.browser
+    image: ${ZOO_BROWSER_IMAGE:-${ZOO_REGISTRY:-docker.io/chann44}/zoo-sandbox-browser:${ZOO_VERSION:-latest}}
     entrypoint: ["true"]
 
   code-image:

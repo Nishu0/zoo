@@ -332,6 +332,12 @@ func (session *VNCSession) readLoop() {
 }
 
 func (session *VNCSession) readFramebufferUpdate() (bool, error) {
+	// A framebuffer update may clear and repaint the same area across several
+	// rectangles. Readers must only capture the completed update.
+	session.mu.Lock()
+	wasReady := session.ready
+	session.ready = false
+	session.mu.Unlock()
 	header, err := session.readBytes(3)
 	if err != nil {
 		return false, err
@@ -366,6 +372,15 @@ func (session *VNCSession) readFramebufferUpdate() (bool, error) {
 					return false, fmt.Errorf("VNC desktop resize rejected with result %d", vertical)
 				}
 			}
+			// x11vnc can report its existing layout with every full refresh.
+			// Only a geometry change needs a new full refresh; otherwise these
+			// notifications loop forever and prevent the first frame becoming ready.
+			session.mu.Lock()
+			sameSize := session.frame.Rect.Dx() == width && session.frame.Rect.Dy() == height
+			session.mu.Unlock()
+			if sameSize {
+				continue
+			}
 			if err := session.resize(width, height, true); err != nil {
 				return false, err
 			}
@@ -385,8 +400,10 @@ func (session *VNCSession) readFramebufferUpdate() (bool, error) {
 		applied = true
 	}
 	session.mu.Lock()
-	if applied && !resized {
-		session.ready = true
+	if !resized {
+		session.ready = wasReady || applied
+	}
+	if session.ready {
 		session.notifyLocked()
 	}
 	session.mu.Unlock()
@@ -452,7 +469,6 @@ func (session *VNCSession) updateTilesLocked(rectangle image.Rectangle) {
 	if changed {
 		session.lastChange = time.Now()
 	}
-	session.notifyLocked()
 }
 
 func (session *VNCSession) hashTileLocked(index int) uint64 {

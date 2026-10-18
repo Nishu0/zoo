@@ -9,21 +9,27 @@ The installer prepares Docker Engine, the pinned Kata Go QEMU shim, KSM, release
 Postgres, SeaweedFS, a native Go gateway, egress, the Python API/worker and the dashboard.
 With `--domain`, Caddy provides the public HTTPS endpoint.
 
+Installed deployments use published Docker images and require no source checkout or
+Dockerfiles. Run `docker compose pull` and `docker compose up -d` in the installation
+directory to update the configured release. Adding `--build` there has nothing to build;
+source builds are available from a development checkout.
+
 ```bash
 curl -fsSL https://github.com/chann44/zoo/releases/latest/download/install.sh | sudo bash -s -- --admin-email you@example.com
 ```
 
 Use a dedicated Debian/Ubuntu systemd host. Both amd64 and arm64 Docker installations use
-Kata VMs. The daemon must list runtime `io.containerd.kata.v2`; the API uses only its local
-Docker daemon. There is no remote Linux host enrollment.
+Kata VMs when configured with the Kata runtime. Additional Linux, Mac, and Windows
+hosts can enroll through **Servers → Add server**. Each host with a working Linux Docker
+engine can run Linux desktop, Firefox browser, and code sandboxes. See [Remote servers](/docs/guides/remote-servers/).
 
 ## Requirements checked by the API
 
 - `DATABASE_URL` reachable; `ZOO_OBJECT_STORE` reachable; `JWT_SECRET`; `ZOO_SECRETS_KEY` or `ZOO_KMS`; `ZOO_API_URL`;
   `ZOO_RUNTIME` is `docker` or `kube`.
-- `/dev/kvm` exists on every machine that runs Linux sandboxes (both runtimes; Kata needs hardware virtualization).
-- `ZOO_RUNTIME=docker`: the local Docker daemon is reachable; it lists the Kata runtime (`io.containerd.kata.v2`);
-  the sandbox images are present.
+- Kata requires working hardware virtualization and `/dev/kvm`; ordinary Docker container mode does not.
+- `ZOO_RUNTIME=docker`: the local Linux Docker daemon is reachable and sandbox images are present.
+  `ZOO_ISOLATION=kata` additionally requires runtime `io.containerd.kata.v2`; `auto` falls back to ordinary containers.
 - `ZOO_RUNTIME=kube`: Kubernetes API reachable; RuntimeClass `kata` exists; StorageClass `ZOO_STORAGE_CLASS` (default
   `zoo-local`, TopoLVM) exists; VolumeSnapshotClass `ZOO_SNAPSHOT_CLASS` exists.
 - macOS hosts: Apple Silicon, macOS 14+, zoo-node, zoovm, base VM with guest + Accessibility grant.

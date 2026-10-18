@@ -342,7 +342,7 @@ func (fixture *nodeFixture) tunnel(test *testing.T, serverID, target string) grp
 }
 
 func TestNodeConnectReportsAndTunnelFlow(test *testing.T) {
-	for _, platform := range []struct{ osName, arch string }{{"darwin", "arm64"}, {"windows", "amd64"}} {
+	for _, platform := range []struct{ osName, arch string }{{"linux", "amd64"}, {"linux", "arm64"}, {"darwin", "amd64"}, {"darwin", "arm64"}, {"windows", "amd64"}} {
 		test.Run(platform.osName, func(test *testing.T) {
 			fixture := newNodeFixture(test, nodeHubOptions{})
 			certificate := fixture.certificate(test, "node-1", platform.osName, platform.arch)
@@ -530,7 +530,7 @@ func TestNodeMTLSAndInternalAuthentication(test *testing.T) {
 }
 
 func TestNodeStreamsMatchingBuildWithSHA256(test *testing.T) {
-	for _, platform := range []struct{ osName, arch, suffix string }{{"darwin", "arm64", ""}, {"windows", "amd64", ".exe"}} {
+	for _, platform := range []struct{ osName, arch, suffix string }{{"linux", "amd64", ""}, {"linux", "arm64", ""}, {"darwin", "amd64", ""}, {"darwin", "arm64", ""}, {"windows", "amd64", ".exe"}} {
 		test.Run(platform.osName, func(test *testing.T) {
 			directory := test.TempDir()
 			build := bytes.Repeat([]byte{0, 255, 1, 2, 3}, nodeUpdateChunk/5*2+11)
@@ -595,7 +595,7 @@ func TestNodeUpdateArtifactRequirements(test *testing.T) {
 }
 
 func TestNodeRejectsUnsupportedPlatformBuildPairs(test *testing.T) {
-	for _, platform := range []struct{ osName, arch string }{{"darwin", "amd64"}, {"windows", "arm64"}} {
+	for _, platform := range []struct{ osName, arch string }{{"linux", "riscv64"}, {"windows", "arm64"}} {
 		test.Run(platform.osName, func(test *testing.T) {
 			fixture := newNodeFixture(test, nodeHubOptions{})
 			certificate := fixture.certificate(test, "node-1", platform.osName, platform.arch)

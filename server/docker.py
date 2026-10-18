@@ -7,6 +7,8 @@ import threading
 import urllib.parse
 import urllib.request
 from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any
 
 import docker
@@ -18,6 +20,7 @@ from server import egress, objects, sizes
 from server.errors import ZooError
 
 IMAGE = os.environ.get("ZOO_SANDBOX_IMAGE", "zoo-sandbox:latest")
+BROWSER_IMAGE = os.environ.get("ZOO_BROWSER_IMAGE", "zoo-browser:latest")
 CODE_IMAGE = os.environ.get("ZOO_CODE_IMAGE", "zoo-code:latest")
 HOME = "/home/zoo"
 # where a pooled sandbox's secrets go once it is claimed (guest/sys_unix.go)
@@ -33,6 +36,23 @@ NODE = "local"
 ERRORS = (docker.errors.DockerException,)
 NOT_FOUND_ERRORS = (docker.errors.NotFound,)
 
+_host: ContextVar[tuple[Any, str, str] | None] = ContextVar("docker_host", default=None)
+
+
+@contextmanager
+def on_host(client, network: str, runtime: str):
+    """Scope Docker operations to one authenticated remote host, including nested helpers."""
+    token = _host.set((client, network, runtime))
+    try:
+        yield
+    finally:
+        _host.reset(token)
+
+
+def network_name() -> str | None:
+    host = _host.get()
+    return host[1] if host is not None else NETWORK
+
 
 class LocalDocker:
     """The API host's own Docker, connected on first use."""
@@ -41,6 +61,9 @@ class LocalDocker:
         self.client: docker.DockerClient | None = None
 
     def __getattr__(self, name: str):
+        host = _host.get()
+        if host is not None:
+            return getattr(host[0], name)
         if self.client is None:
             endpoint = urllib.parse.urlsplit(os.environ.get("DOCKER_HOST", "unix:///var/run/docker.sock"))
             if endpoint.scheme not in ("unix", "npipe") and endpoint.hostname not in ("localhost", "127.0.0.1", "::1"):
@@ -70,6 +93,9 @@ _runtime: str | None = None
 def container_runtime() -> str:
     """The OCI runtime sandboxes run under, chosen once from ZOO_ISOLATION."""
     global _runtime
+    host = _host.get()
+    if host is not None:
+        return host[2]
     if _runtime is None:
         if ISOLATION == "auto":
             _runtime = KATA if KATA in info().get("Runtimes", {}) else "runc"
@@ -250,7 +276,7 @@ def adoptable(client: docker.DockerClient, name: str, image: str, sandbox_id: st
 
 
 def default_image(kind: str) -> str:
-    return CODE_IMAGE if kind == "code" else IMAGE
+    return {"code": CODE_IMAGE, "browser": BROWSER_IMAGE}.get(kind, IMAGE)
 
 
 def run_container(
@@ -284,14 +310,14 @@ def run_container(
             security_opt=["no-new-privileges"],
             volumes={volume_name(sandbox_id): {"bind": HOME, "mode": "rw"}},
             labels={"zoo.sandbox": sandbox_id},
-            network=NETWORK,
+            network=network_name(),
         )
     container_id = created.id
     if container_id is None:
         raise RuntimeError("docker returned a container without an id")
     if not desktop:
         return container_id, None
-    return container_id, name if NETWORK else "127.0.0.1"
+    return container_id, name if network_name() else "127.0.0.1"
 
 
 def remove_container(container_id: str):
@@ -321,7 +347,7 @@ def helper(volumes: dict[str, str], image: str = IMAGE):
         runtime=container_runtime(),
         entrypoint=["sleep", "21600"],
         user="root",
-        network=NETWORK,
+        network=network_name(),
         volumes={name: {"bind": path, "mode": "rw"} for name, path in volumes.items()},
         labels={"zoo.helper": "1"},
     )

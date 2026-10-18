@@ -50,9 +50,11 @@ TLS on 8002; guest websockets use 8001; native node enrollment uses mTLS on 7443
 | `ZOO_BACKUP_INTERVAL_HOURS` | `24` | Internal setting. |
 | `ZOO_BACKUP_KEEP` | `7` | Internal setting. |
 | `ZOO_BROWSER_HOME` | `https://duckduckgo.com` | Start page for `browser` sandboxes. |
+| `ZOO_BROWSER_IMAGE` | `zoo-browser:latest` | Firefox-only image for Linux `browser` sandboxes. |
 | `ZOO_CODE_IMAGE` | `zoo-code:latest` | Image for `code` sandboxes. |
 | `ZOO_DOCS_URL` | `https://github.com/chann44/zoo/blob/main/site/src/content/docs/docs/reference/errors.md` | Base of the errors page that error responses link to as `docs_url` (`<url>#<code>`). |
 | `ZOO_DOMAIN` | `—` | Always-allowed domain for Caddy. |
+| `ZOO_EGRESS_IMAGE` | `docker.io/chann44/zoo-egress:latest` | Egress controller image deployed on enrolled Linux Docker engines. |
 | `ZOO_EMBED_ORIGINS` | `—` | Origins (space-separated) that may put a viewer link's page in an iframe; none when unset. |
 | `ZOO_EVENT_RETENTION_DAYS` | `7` | How long events (`GET /events`, webhooks) and their deliveries are kept. |
 | `ZOO_GATEWAY_GRPC_PORT` | `7444` | Authenticated TLS RPC port shared by API clients and gateway replicas; default 7444. |
@@ -66,7 +68,8 @@ TLS on 8002; guest websockets use 8001; native node enrollment uses mTLS on 7443
 | `ZOO_GUEST_WINDOWS_BINARY` | `computed` | Internal setting. |
 | `ZOO_IDLE_MEMORY_MB_CODE` | `250` | Idle memory request for code pods in MiB; defaults to 250. |
 | `ZOO_IDLE_MEMORY_MB_DESKTOP` | `700` | Idle memory request for desktop/browser pods in MiB; defaults to 700. |
-| `ZOO_INSTALL_URL` | `https://github.com/chann44/zoo/releases/latest/download` | Where installers download release assets from. |
+| `ZOO_INSTALL_URL` | `—` | Optional installer source override; by default enrollment uses installers served by this API image. |
+| `ZOO_ISOLATION` | `auto` | Docker isolation on local and remote engines: `auto` prefers Kata, `kata` requires Kata, `runc` uses ordinary containers. |
 | `ZOO_KMS` | `—` | Wrap workspace data keys with an external KMS: `aws:<key ARN>`, `gcp:…` or `vault:<mount>/<key>`. |
 | `ZOO_KUBERNETES_CONTEXT` | `—` | Kubeconfig context to use in-cluster-less setups. |
 | `ZOO_KUBERNETES_EGRESS_NAMESPACE` | `—` | Namespace of the egress daemon (default: the sandbox namespace). |
@@ -96,11 +99,11 @@ TLS on 8002; guest websockets use 8001; native node enrollment uses mTLS on 7443
 | `ZOO_PAUSE_MINUTES` | `30` | How long a stopped Linux sandbox stays paused (resumable) before it is deleted to its volume; defaults to 30. |
 | `ZOO_PUBLIC_IP` | `—` | This server's public address(es), used to check that a domain's DNS points here. |
 | `ZOO_ROLE` | `—` | Python process role: all, api or worker. The gateway is a separate native Go process. |
-| `ZOO_RUNTIME` | `docker` | Linux backend: `docker` (default) or `kube`. Both use Kata virtual machines. |
+| `ZOO_RUNTIME` | `docker` | Default Linux backend: `docker` or `kube`. Kubernetes requires Kata; Docker follows `ZOO_ISOLATION`. |
 | `ZOO_S3_ENDPOINT` | `—` | S3-compatible endpoint for `ZOO_OBJECT_STORE` (MinIO, R2). |
 | `ZOO_S3_REGION` | `—` | Region for `ZOO_OBJECT_STORE`. |
 | `ZOO_SANDBOX_DISK_GB` | `20` | Internal setting. |
-| `ZOO_SANDBOX_IMAGE` | `zoo-sandbox:latest` | Image for `desktop` and `browser` sandboxes. |
+| `ZOO_SANDBOX_IMAGE` | `zoo-sandbox:latest` | Image for Linux `desktop` sandboxes. |
 | `ZOO_SECRETS_KEY` | `—` | Wraps workspace keys that encrypt secrets, app profiles and VNC passwords. Back it up. |
 | `ZOO_SECRETS_KEY_PREVIOUS` | `—` | Old keys, comma-separated, kept only until `make rotate-secrets` has run. |
 | `ZOO_SNAPSHOT_CLASS` | `zoo-snapshots` | CSI snapshot class used before home archives are uploaded; defaults to `zoo-snapshots`. |

@@ -10,8 +10,10 @@ COPY node/ ../node/
 COPY pyproject.toml /src/pyproject.toml
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /zoo-gateway .
 RUN cd ../node && version=$(sed -n 's/^version = "\(.*\)"/\1/p' ../pyproject.toml) && mkdir -p /node-dist \
- && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=$version" -o /node-dist/zoo-node-darwin-arm64 . \
- && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=$version" -o /node-dist/zoo-node-windows-amd64.exe . \
+ && for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do \
+      os=${t%/*}; arch=${t#*/}; ext=$([ "$os" = windows ] && echo .exe || true); \
+      CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags="-s -w -X main.version=$version" -o /node-dist/zoo-node-$os-$arch$ext . || exit 1; \
+    done \
  && echo "$version" > /node-dist/VERSION
 
 FROM debian:bookworm-slim

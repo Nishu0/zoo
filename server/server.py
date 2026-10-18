@@ -18,6 +18,7 @@ from server import (
     idempotency,
     metering,
     objects,
+    remote_docker,
     requirements,
     webhooks,
     workers,
@@ -99,6 +100,7 @@ class Server:
                         task.cancel()
                     await asyncio.gather(*background, return_exceptions=True)
                     await self.sandbox_api.jobs.shutdown()
+                    await asyncio.to_thread(remote_docker.shutdown)
                     if jobs is not None:
                         jobs.cancel()
                         await asyncio.gather(jobs, return_exceptions=True)

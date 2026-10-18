@@ -18,6 +18,8 @@ POSTGRES_IMAGE="postgres:17"
 SEAWEED_IMAGE="chrislusf/seaweedfs:4.47"
 ZOO_HOME="${ZOO_HOME:-/opt/zoo}"
 ZOO_VERSION="${ZOO_VERSION:-}"
+NATIVE_VERSION_REQUESTED=0
+if [ -n "$ZOO_VERSION" ]; then NATIVE_VERSION_REQUESTED=1; fi
 ZOO_REGISTRY="${ZOO_REGISTRY:-docker.io/chann44}"
 ADMIN_EMAILS="${ADMIN_EMAILS:-}"
 ZOO_DOMAIN="${ZOO_DOMAIN:-}"
@@ -28,6 +30,7 @@ DEVICE=""
 BUNDLE=""
 WORK=""
 NODE=0
+REPAIR_MACOS_HELPER=0
 NODE_KEY=""
 NODE_TOKEN=""
 CONTROL_PLANE=""
@@ -62,9 +65,11 @@ must already have python3, openssl, zstd, tar, systemd and iptables; kube also
 needs LVM2, losetup, truncate and modprobe. Offline HTTPS uses a local certificate
 authority. The loop-file storage option is for development, not durable storage.
 
-Add an Apple Silicon Mac running macOS 14+:
+Add a Linux server (Docker), or a Mac (Docker and native macOS on Apple Silicon):
   install.sh --node --token TOKEN --control-plane URL --key SSH_PUBLIC_KEY
              [--user USER] [--version VERSION] [--ipsw PATH] [--no-base]
+Refresh or resume an enrolled Mac with the same setup command (no new token):
+  install.sh --node [--control-plane URL] [--user USER] [--version VERSION]
 USAGE
 }
 
@@ -74,7 +79,7 @@ parse_args() {
             --version|--dir|--admin-email|--domain|--runtime|--device|--disk-gb|--bundle|--key|--token|--control-plane|--user|--ipsw)
                 [ "$#" -ge 2 ] && [ -n "$2" ] || die "$1 needs a value"
                 case "$1" in
-                    --version) ZOO_VERSION="${2#v}" ;;
+                    --version) ZOO_VERSION="${2#v}"; NATIVE_VERSION_REQUESTED=1 ;;
                     --dir) ZOO_HOME="$2" ;;
                     --admin-email) ADMIN_EMAILS="$2" ;;
                     --domain) ZOO_DOMAIN="$2" ;;
@@ -90,6 +95,7 @@ parse_args() {
                 esac
                 shift 2 ;;
             --node) NODE=1; shift ;;
+            --repair-macos-helper) REPAIR_MACOS_HELPER=1; NODE=1; shift ;;
             --no-base) BASE=0; shift ;;
             --check) CHECK_ONLY=1; shift ;;
             -h|--help) usage; exit 0 ;;
@@ -107,10 +113,16 @@ parse_args() {
     if [ "$NODE" = 0 ] && [ "$RUNTIME" = kube ] && [ -n "$ZOO_DOMAIN" ] && [ -z "$BUNDLE" ]; then
         [ -n "$ADMIN_EMAILS" ] || die "--domain on Kubernetes requires --admin-email for ACME"
     fi
+    if [ "$REPAIR_MACOS_HELPER" = 1 ]; then
+        [ "$(uname -s)" = Darwin ] || die "--repair-macos-helper requires macOS"
+        [ -n "$CONTROL_PLANE" ] || die "--repair-macos-helper needs --control-plane"
+    fi
     if [ "$NODE" = 1 ]; then
-        [ "$(uname -s)" = Darwin ] || die "--node supports Apple Silicon Macs only"
-        [ -n "$NODE_TOKEN" ] && [ -n "$CONTROL_PLANE" ] && [ -n "$NODE_KEY" ] || die "--node needs --token, --control-plane and the API-provided --key"
-        [ -z "$BUNDLE" ] || die "--bundle installs the Linux control plane; use the API's Mac join command"
+        case "$(uname -s)" in Linux|Darwin) ;; *) die "Windows hosts use windows/install-node.ps1" ;; esac
+        if [ "$(uname -s)" = Linux ]; then
+            [ -n "$NODE_TOKEN" ] && [ -n "$CONTROL_PLANE" ] && [ -n "$NODE_KEY" ] || die "--node needs --token, --control-plane and the API-provided --key"
+        fi
+        [ -z "$BUNDLE" ] || die "--bundle installs the Linux control plane; use the API's server join command"
     fi
 }
 
@@ -118,6 +130,19 @@ need_disk() {
     local free
     free=$(df -Pk "$1" | awk 'NR==2 {print int($4 / 1048576)}')
     if [ "$free" -ge "$2" ]; then ok "$free GB free on $1"; else fail "$free GB free on $1, needs $2 GB"; fi
+}
+
+macos_node_disk() {
+    local base="$1/.zoovm/vms/${ZOO_MACOS_BASE:-zoo-macos-base}"
+    if [ "$BASE" = 0 ]; then
+        need_disk "$1" 1
+        note "base VM preparation deferred; a new base needs 80 GB free"
+    elif [ -f "$base/installed" ] && [ -f "$base/disk.img" ]; then
+        need_disk "$1" 20
+        note "reusing the installed macOS base VM; keeping 20 GB free for setup and growth"
+    else
+        need_disk "$1" 80
+    fi
 }
 
 need_memory() {
@@ -139,6 +164,32 @@ preflight_done() {
 fetch() {
     mkdir -p "$(dirname "$2")"
     curl -fL --retry 3 --connect-timeout 15 "$1" -o "$2"
+}
+
+write_image_compose() {
+    # The installer ships an image-only deployment. Build contexts belong to the source checkout.
+    python3 - "$1" "$2" <<'PY'
+import pathlib, sys
+source, destination = map(pathlib.Path, sys.argv[1:])
+lines = source.read_text().splitlines(keepends=True)
+output = []
+inside_build = False
+for line in lines:
+    if line.startswith("    build:"):
+        inside_build = not line.removeprefix("    build:").strip()
+        continue
+    if inside_build:
+        if not line.strip() or len(line) - len(line.lstrip()) > 4:
+            continue
+        inside_build = False
+    output.append(line)
+text = "".join(output)
+text = text.replace(
+    "# Images come from ZOO_REGISTRY at ZOO_VERSION. `docker compose up --build` builds them from this checkout instead.",
+    "# Runs published images from ZOO_REGISTRY at ZOO_VERSION; no source checkout is required.",
+)
+destination.write_text(text)
+PY
 }
 
 check_sha() {
@@ -503,6 +554,7 @@ EOF
     install -m 755 "$artifacts/docker-compose" /usr/local/lib/docker/cli-plugins/docker-compose
     if [ "$HAS_KVM" = 1 ]; then install_kata; else systemctl daemon-reload; systemctl enable docker; systemctl restart docker; fi
     cp "$PAYLOAD/compose.yml" "$PAYLOAD/Caddyfile" "$ZOO_HOME/"
+    write_image_compose "$ZOO_HOME/compose.yml" "$ZOO_HOME/compose.yml"
     write_docker_ingress
     if [ -z "$ZOO_DOMAIN" ]; then compose_files+=(-f "$ZOO_HOME/compose.override.yml"); fi
     if [ -n "$BUNDLE" ]; then docker load -i "$PAYLOAD/images/$ARCH/docker.tar"
@@ -817,7 +869,7 @@ install_desktop() {
     NODE_USER=${NODE_USER:-${SUDO_USER:-}}
     if [ -z "$NODE_USER" ] || [ "$NODE_USER" = root ]; then die "run this with sudo from your own account, or pass --user"; fi
     [ "$RUNTIME" = docker ] && [ -z "$BUNDLE" ] || die "on a Mac Zoo runs in Docker Desktop; --runtime kube and --bundle need Linux"
-    user_home=$(dscl . -read "/Users/$NODE_USER" NFSHomeDirectory | awk '{print $2}')
+    user_home=$(dscl . -read "/Users/$NODE_USER" NFSHomeDirectory | sed 's/^NFSHomeDirectory:[[:space:]]*//')
     [ "$ZOO_HOME" != /opt/zoo ] || ZOO_HOME="$user_home/zoo"
     say "Checking this Mac"
     if command -v docker >/dev/null; then ok "Docker CLI"; else fail "install Docker Desktop (https://www.docker.com/products/docker-desktop/), start it, then run this again"; fi
@@ -853,6 +905,7 @@ install_desktop() {
     HOST_ADDRESS=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo 127.0.0.1)
     [ "$resume" = 1 ] || write_config
     cp "$PAYLOAD/compose.yml" "$PAYLOAD/Caddyfile" "$ZOO_HOME/"
+    write_image_compose "$ZOO_HOME/compose.yml" "$ZOO_HOME/compose.yml"
     write_docker_ingress
     chown -R "$NODE_USER" "$ZOO_HOME"
     local -a compose=(docker compose --project-directory "$ZOO_HOME" --env-file "$ZOO_HOME/.env" -f "$ZOO_HOME/compose.yml")
@@ -897,162 +950,245 @@ authorize() { # USER HOME GROUP
     chmod 600 "$2/.ssh/authorized_keys"
 }
 
-# zoo-node joins with the token and runs as a LaunchAgent of the user that owns the VMs.
+# zoo-node joins with the token and installs its platform service.
 join_node() { # USER
-    local bin
+    local bin os arch
+    os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    case "$(uname -m)" in arm64|aarch64) arch=arm64 ;; x86_64|amd64) arch=amd64 ;; *) die "unsupported node architecture: $(uname -m)" ;; esac
     bin=$(mktemp)
-    curl -fsSL --retry 3 "$CONTROL_PLANE/v1/nodes/download/darwin/arm64" -o "$bin" || die "couldn't download zoo-node from $CONTROL_PLANE"
+    curl -fsSL --retry 3 "$CONTROL_PLANE/v1/nodes/download/$os/$arch" -o "$bin" || die "couldn't download zoo-node from $CONTROL_PLANE"
     chmod 755 "$bin"
     chown "$1" "$bin"
-    as_user "$bin" join "$NODE_TOKEN" --service --ssh-user "$1" || die "zoo-node couldn't join; the token may be used or expired"
-    ln -sf "$(eval echo "~$1")/.zoo-node/bin/zoo-node" /usr/local/bin/zoo-node
+    mkdir -p /usr/local/bin
+    if [ "$os" = linux ]; then
+        "$bin" join "$NODE_TOKEN" --service --ssh-user "$1" --dir /var/lib/zoo-node || die "zoo-node couldn't join; the token may be used or expired"
+        ln -sf /var/lib/zoo-node/bin/zoo-node /usr/local/bin/zoo-node
+    else
+        as_user "$bin" join "$NODE_TOKEN" --service --ssh-user "$1" || die "zoo-node couldn't join; the token may be used or expired"
+        ln -sf "$(dscl . -read "/Users/$1" NFSHomeDirectory | sed 's/^NFSHomeDirectory:[[:space:]]*//')/.zoo-node/bin/zoo-node" /usr/local/bin/zoo-node
+    fi
     rm -f "$bin"
     say "This machine joined the control plane"
     cat <<EOF
 
-  It can run: macOS sandboxes
+  Enabled runtimes appear on its Servers page (Linux desktop, browser and code need a Linux Docker engine).
 
   zoo-node dials out to the control plane, so no inbound port is needed. The server shows up under Servers.
-  Its log: tail ~$1/.zoo-node/node.log
+  Logs: journalctl -u zoo-node -f (Linux), or tail ~$1/.zoo-node/node.log (Mac)
 EOF
+}
+
+# A remote Linux node needs Docker and SSH, but none of the control-plane services.
+install_linux_node() {
+    command -v systemctl >/dev/null && [ -d /run/systemd/system ] || die "Linux nodes require systemd"
+    command -v docker >/dev/null || die "install Docker Engine and start its Linux engine before adding this server"
+    [ "$(docker info --format '{{.OSType}}' 2>/dev/null)" = linux ] || die "Docker must be running a Linux engine accessible to root"
+    NODE_USER=${NODE_USER:-root}
+    [[ "$NODE_USER" =~ ^[A-Za-z_][A-Za-z0-9_.-]*[$]?$ ]] || die "invalid SSH user"
+    local node_home node_group
+    node_home=$(getent passwd "$NODE_USER" | cut -d: -f6)
+    [ -n "$node_home" ] && [ -d "$node_home" ] || die "--user must name an existing account with a home directory"
+    node_group=$(id -gn "$NODE_USER")
+    reach_control_plane
+    preflight_done
+    if ! command -v sshd >/dev/null && [ ! -x /usr/sbin/sshd ]; then
+        if command -v apt-get >/dev/null; then apt-get update && apt-get install -y openssh-server
+        elif command -v dnf >/dev/null; then dnf install -y openssh-server
+        elif command -v yum >/dev/null; then yum install -y openssh-server
+        else die "install openssh-server, then run this command again"; fi
+    fi
+    ssh-keygen -A
+    if [ "$NODE_USER" = root ]; then
+        mkdir -p /etc/ssh/sshd_config.d
+        printf 'PermitRootLogin prohibit-password\n' > /etc/ssh/sshd_config.d/00-zoo-node.conf
+    else
+        getent group docker >/dev/null || die "the SSH account needs access to Docker; configure the docker group first"
+        usermod -aG docker "$NODE_USER"
+    fi
+    authorize "$NODE_USER" "$node_home" "$node_group"
+    /usr/sbin/sshd -t || die "invalid SSH configuration"
+    if systemctl cat ssh.service >/dev/null 2>&1; then systemctl enable --now ssh.service; systemctl restart ssh.service
+    else systemctl enable --now sshd.service; systemctl restart sshd.service; fi
+    join_node "$NODE_USER"
 }
 
 # macOS: a node for macOS sandboxes
 
 as_user() { sudo -u "$NODE_USER" -H "$@"; }
 
-# build_base installs macOS into the base VM and prepares it without Setup Assistant: it seeds the VM's Data volume
-# with .AppleSetupDone and a one-shot LaunchDaemon (FIRSTBOOT below) that creates the guest user, does what
-# guest-setup.sh does and shuts down. A second boot checks that SSH came up, then the VM is marked ready with its
-# version, which sandboxes cloned from it record.
-build_base() { # HOME
-    local name=${ZOO_MACOS_BASE:-zoo-macos-base} user=${ZOO_MACOS_USER:-admin} vm password ip deadline os build
-    vm="$1/.zoovm/vms/$name"
-    if [ -f "$vm/zoo-ready" ]; then ok "base VM $name is ready ($(cat "$vm/zoo-ready"))"; return; fi
-    if ! as_user /usr/local/bin/zoovm get "$name" >/dev/null 2>&1; then
-        say "Installing macOS into the base VM $name (downloads Apple's IPSW; about an hour)"
-        as_user /usr/local/bin/zoovm install "$name" ${IPSW:+--ipsw "$IPSW"}
-    fi
-    as_user /usr/local/bin/zoovm stop "$name" >/dev/null 2>&1 || true
-    say "Preparing the base VM"
-    password=$(openssl rand -hex 12)
-    # kept for unlocking System Settings in the VM (the Accessibility grant); Zoo itself signs in with its key
-    (umask 077 && printf '%s\n' "$password" > "$vm/password") && chown "$NODE_USER" "$vm/password"
-    seed_base "$vm/disk.img" "$user" "$password"
-    say "First boot: creating $user and setting up the guest; the VM shuts itself down when done"
-    as_user /usr/local/bin/zoovm run "$name" > "$vm/run.log" 2>&1 &
-    local pid=$!
-    deadline=$((SECONDS + 1800))
-    while kill -0 "$pid" 2>/dev/null; do
-        if [ $SECONDS -ge $deadline ]; then
-            as_user /usr/local/bin/zoovm stop "$name" >/dev/null 2>&1 || true
-            die "the base VM's first boot didn't finish in 30 minutes; open it from the server's page to see why"
-        fi
-        sleep 5
-    done
-    say "Second boot: checking SSH"
-    as_user sh -c "nohup /usr/local/bin/zoovm run '$name' > '$vm/run.log' 2>&1 < /dev/null &"
-    deadline=$((SECONDS + 600))
-    until ip=$(as_user /usr/local/bin/zoovm ip "$name" 2>/dev/null) && nc -z -G 2 "$ip" 22 2>/dev/null; do
-        if [ $SECONDS -ge $deadline ]; then
-            die "the base VM never opened SSH. Start it from the server's page and read /var/log/zoo-firstboot.log in it"
-        fi
-        sleep 5
-    done
-    as_user /usr/local/bin/zoovm stop "$name" --timeout 60 >/dev/null
-    os=$(as_user /usr/local/bin/zoovm version "$name" | sed -n 's/.*"os":"\([^"]*\)".*/\1/p')
-    build=$(as_user /usr/local/bin/zoovm version "$name" | sed -n 's/.*"build":"\([^"]*\)".*/\1/p')
-    printf '%s-%s-%s\n' "${os:-macos}" "${build:-unknown}" "$(date -u +%Y%m%d%H%M)" | as_user tee "$vm/zoo-ready" >/dev/null
-    ok "base VM $name is ready ($(cat "$vm/zoo-ready")); its user $user's password is in $vm/password"
+# A valid enrollment is reused: helper updates never spend another join token.
+macos_existing_node() { # HOME
+    local directory="$1/.zoo-node"
+    [ -s "$directory/config.json" ] && [ -s "$directory/node.key" ] && [ -s "$directory/node.crt" ] && [ -s "$directory/ca.crt" ] || return 1
+    python3 - "$directory/config.json" <<'PY'
+import json, sys
+try:
+    config = json.load(open(sys.argv[1]))
+    assert isinstance(config, dict)
+    assert all(isinstance(config.get(key), str) and config[key] for key in ("api", "node_id", "server_id"))
+    assert isinstance(config.get("endpoints"), list) and config["endpoints"]
+    assert all(isinstance(endpoint, str) and endpoint for endpoint in config["endpoints"])
+except (OSError, ValueError, AssertionError):
+    sys.exit(1)
+PY
 }
 
-seed_base() { # DISK USER PASSWORD
-    local dev container data mnt db
-    dev=$(hdiutil attach -imagekey diskimage-class=CRawDiskImage -nomount "$1" | awk 'NR==1 {print $1}')
-    [ -n "$dev" ] || die "couldn't attach $1"
-    container=$(diskutil list "$dev" | awk '$2 == "Apple_APFS" {for (i = 3; i < NF; i++) if ($i == "Container") print $(i + 1)}' | head -n1)
-    data=$( [ -n "$container" ] && diskutil apfs list "$container" | awk '/\(Data\)/ {print $(NF - 1)}' | head -n1)
-    if [ -z "$data" ]; then
-        hdiutil detach "$dev" >/dev/null 2>&1 || true
-        die "found no Data volume in $1; finish the base VM's setup from the server's page instead"
+macos_node_identity() { # HOME
+    local stored cached
+    if macos_existing_node "$1"; then
+        stored=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["api"].rstrip("/"))' "$1/.zoo-node/config.json")
+        [ -n "$CONTROL_PLANE" ] || CONTROL_PLANE=$stored
+        [ "$CONTROL_PLANE" = "$stored" ] || die "this account is already enrolled with $stored; use that control plane's setup command"
+        if [ -z "$NODE_KEY" ] && [ -s "$1/.zoo-node/control-plane.pub" ]; then
+            cached=$(cat "$1/.zoo-node/control-plane.pub")
+            if [[ "$cached" =~ ^ssh-ed25519\ [A-Za-z0-9+/=]+$ ]]; then NODE_KEY=$cached; fi
+        fi
+        if [ -z "$NODE_KEY" ]; then
+            NODE_KEY=$(curl -fsSL --retry 3 "$CONTROL_PLANE/v1/nodes/bootstrap/ssh-key") \
+                || die "couldn't obtain this control plane's SSH public key; copy its Add server setup command"
+        fi
+    else
+        [ -n "$NODE_TOKEN" ] && [ -n "$CONTROL_PLANE" ] && [ -n "$NODE_KEY" ] \
+            || die "a new Mac needs the complete one-time setup command from Servers > Add server"
     fi
-    mnt=$(mktemp -d)
-    diskutil mount -mountPoint "$mnt" "$data" >/dev/null
-    diskutil enableOwnership "$mnt" >/dev/null
-    db="$mnt/private/var/db"
-    mkdir -p "$db/zoo" "$mnt/Library/LaunchDaemons"
-    printf '%s\n' "$NODE_KEY" > "$db/zoo/key"
-    printf '%s' "$2" > "$db/zoo/user"
-    printf '%s' "$3" > "$db/zoo/password"
-    printf '%s\n' "$FIRSTBOOT" > "$db/zoo/firstboot.sh"
-    chown -R root:wheel "$db/zoo"
-    chmod 700 "$db/zoo"
-    chmod 600 "$db/zoo"/*
-    cat > "$mnt/Library/LaunchDaemons/com.zoo.firstboot.plist" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>Label</key><string>com.zoo.firstboot</string>
-<key>ProgramArguments</key><array><string>/bin/sh</string><string>/var/db/zoo/firstboot.sh</string></array>
-<key>RunAtLoad</key><true/>
-</dict></plist>
-PLIST
-    chown root:wheel "$mnt/Library/LaunchDaemons/com.zoo.firstboot.plist"
-    chmod 644 "$mnt/Library/LaunchDaemons/com.zoo.firstboot.plist"
-    touch "$db/.AppleSetupDone"
-    diskutil unmount "$mnt" >/dev/null || diskutil unmount force "$mnt" >/dev/null
-    hdiutil detach "$dev" >/dev/null
-    rmdir "$mnt" 2>/dev/null || true
+    [[ "$CONTROL_PLANE" =~ ^https?://[^[:space:]]+$ ]] || die "--control-plane must be an HTTP or HTTPS URL"
+    [[ "$NODE_KEY" =~ ^ssh-ed25519\ [A-Za-z0-9+/=]+$ ]] || die "the control-plane SSH public key is invalid"
 }
 
-# Runs once in the base VM, as root, at its first boot. Its log is /var/log/zoo-firstboot.log in the VM.
-read -r -d '' FIRSTBOOT <<'SCRIPT' || true
-#!/bin/sh
-umask 077
-exec >>/var/log/zoo-firstboot.log 2>&1
-set -eu
-echo "zoo first boot: $(date)"
-trap 'rm -f /Library/LaunchDaemons/com.zoo.firstboot.plist /var/db/zoo/password; shutdown -h now' EXIT
-ME=$(cat /var/db/zoo/user)
-PASSWORD=$(cat /var/db/zoo/password)
-KEY=$(cat /var/db/zoo/key)
-i=0
-until dscl . -list /Users >/dev/null 2>&1 || [ $i -ge 60 ]; do i=$((i + 1)); sleep 2; done
-id "$ME" >/dev/null 2>&1 || sysadminctl -addUser "$ME" -fullName "$ME" -password "$PASSWORD" -admin
-createhomedir -c -u "$ME" >/dev/null
-HOME_DIR=$(dscl . -read "/Users/$ME" NFSHomeDirectory | awk '{print $2}')
-# the per-user Setup Assistant screens at first login
-for key in DidSeeCloudSetup DidSeeSiriSetup DidSeePrivacy DidSeeScreenTime DidSeeAppearanceSetup \
-    DidSeeAccessibility DidSeeActivationLock DidSeeTouchIDSetup DidSeeApplePaySetup DidSeeTermsOfAddress \
-    DidSeeLockdownMode DidSeeIntelligence DidSeeWallpaper SkipFirstLoginOptimization; do
-    sudo -u "$ME" defaults write com.apple.SetupAssistant "$key" -bool true
-done
-sudo -u "$ME" defaults write com.apple.SetupAssistant LastSeenCloudProductVersion "$(sw_vers -productVersion)"
-sudo -u "$ME" defaults write com.apple.SetupAssistant LastSeenBuddyBuildVersion "$(sw_vers -buildVersion)"
-# what guest-setup.sh does
-echo "$ME ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/zoo
-chmod 440 /etc/sudoers.d/zoo
-launchctl enable system/com.openssh.sshd
-launchctl bootstrap system /System/Library/LaunchDaemons/ssh.plist 2>/dev/null || true
-for dir in "$HOME_DIR/.ssh" /var/root/.ssh; do
-    mkdir -p "$dir" && chmod 700 "$dir"
-    printf '%s\n' "$KEY" > "$dir/authorized_keys" && chmod 600 "$dir/authorized_keys"
-done
-chown -R "$ME:staff" "$HOME_DIR/.ssh"
-echo "PermitRootLogin prohibit-password" > /etc/ssh/sshd_config.d/000-zoo.conf
-sysadminctl -autologin set -userName "$ME" -password "$PASSWORD"
-pmset -a sleep 0 displaysleep 0 disksleep 0
-sudo -u "$ME" defaults -currentHost write com.apple.screensaver idleTime 0
-defaults write /Library/Preferences/com.apple.screensaver loginWindowIdleTime 0
-sudo -u "$ME" sysadminctl -screenLock off -password "$PASSWORD" || true
-touch /var/db/zoo/done
-echo "zoo first boot: done"
-SCRIPT
+join_or_resume_macos_node() { # HOME
+    local directory="$1/.zoo-node" agent="$1/Library/LaunchAgents/dev.zoo.node.plist" uid domain bin
+    if ! macos_existing_node "$1"; then
+        join_node "$NODE_USER"
+    else
+        say "Resuming this Mac's existing Zoo registration"
+        bin="$directory/bin/zoo-node"
+        if [ ! -x "$bin" ]; then
+            local temporary arch
+            case "$(uname -m)" in arm64) arch=arm64 ;; *) arch=amd64 ;; esac
+            temporary=$(mktemp)
+            curl -fsSL --retry 3 "$CONTROL_PLANE/v1/nodes/download/darwin/$arch" -o "$temporary" \
+                || die "couldn't restore the enrolled node binary"
+            install -d -o "$NODE_USER" -g staff -m 700 "$directory/bin"
+            install -o "$NODE_USER" -g staff -m 755 "$temporary" "$bin"
+            rm -f "$temporary"
+        fi
+        mkdir -p "$(dirname "$agent")" /usr/local/bin
+        # Keep the service definition current without replacing its credentials.
+        python3 - "$bin" "$directory" "$agent" <<'PY'
+import plistlib, sys
+binary, directory, target = sys.argv[1:]
+value = {"Label": "dev.zoo.node", "ProgramArguments": [binary, "run", "--dir", directory],
+         "EnvironmentVariables": {"PATH": "/Applications/Docker.app/Contents/Resources/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"},
+         "RunAtLoad": True, "KeepAlive": True,
+         "StandardOutPath": directory + "/node.log", "StandardErrorPath": directory + "/node.log"}
+with open(target, "wb") as output:
+    plistlib.dump(value, output)
+PY
+        chown "$NODE_USER:staff" "$(dirname "$agent")" "$agent"
+        chmod 644 "$agent"
+        ln -sf "$bin" /usr/local/bin/zoo-node
+        uid=$(id -u "$NODE_USER")
+        for domain in "gui/$uid" "user/$uid"; do
+            if as_user launchctl print "$domain/dev.zoo.node" >/dev/null 2>&1 \
+                || as_user launchctl bootstrap "$domain" "$agent" >/dev/null 2>&1; then
+                ok "zoo-node service is enabled; existing enrollment retained"
+                break
+            fi
+        done
+        as_user launchctl print "gui/$uid/dev.zoo.node" >/dev/null 2>&1 \
+            || as_user launchctl print "user/$uid/dev.zoo.node" >/dev/null 2>&1 \
+            || die "couldn't resume the enrolled zoo-node service"
+    fi
+    printf '%s\n' "$NODE_KEY" > "$directory/control-plane.pub"
+    chown "$NODE_USER:staff" "$directory/control-plane.pub"
+    chmod 600 "$directory/control-plane.pub"
+}
+
+install_macos_runtime() {
+    local release temporary entry
+    if [ -x /usr/local/bin/zoovm ] && [ "$NATIVE_VERSION_REQUESTED" = 0 ]; then
+        ok "keeping the installed native VM runtime (use --version for a release upgrade)"
+        return
+    fi
+    if [ -x /usr/local/bin/zoovm ] && pgrep -f '[z]oovm (run|restore|install)' >/dev/null 2>&1; then
+        note "native VMs are active; retaining their runtime until a later setup run"
+        return
+    fi
+    if [ -z "$ZOO_VERSION" ]; then
+        ZOO_VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest" | sed 's#.*/tag/v##')
+    fi
+    [[ "$ZOO_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || die "invalid Zoo release version"
+    say "Installing native VM runtime $ZOO_VERSION"
+    release="https://github.com/$REPO/releases/download/v$ZOO_VERSION"
+    temporary=$(mktemp -d)
+    curl -fsSL --retry 3 -o "$temporary/zoovm-macos-arm64.tar.gz" "$release/zoovm-macos-arm64.tar.gz"
+    curl -fsSL --retry 3 -o "$temporary/SHA256SUMS" "$release/SHA256SUMS"
+    (cd "$temporary" && grep ' \./zoovm-macos-arm64\.tar\.gz$' SHA256SUMS | shasum -a 256 -c - >/dev/null) \
+        || die "zoovm-macos-arm64.tar.gz doesn't match the release's SHA256SUMS"
+    while IFS= read -r entry; do
+        [ "$entry" = zoovm ] || die "unexpected entry in native VM runtime archive"
+    done < <(tar -tzf "$temporary/zoovm-macos-arm64.tar.gz")
+    tar -xzf "$temporary/zoovm-macos-arm64.tar.gz" -C "$temporary"
+    [ -f "$temporary/zoovm" ] && [ ! -L "$temporary/zoovm" ] || die "native VM runtime archive has no regular binary"
+    # Stage then rename, so an interrupted download/install cannot truncate the runtime.
+    mkdir -p /usr/local/bin
+    install -o root -g wheel -m 755 "$temporary/zoovm" /usr/local/bin/zoovm.new
+    mv -f /usr/local/bin/zoovm.new /usr/local/bin/zoovm
+    rm -rf "$temporary"
+    if codesign -dv /usr/local/bin/zoovm 2>&1 | grep -q '^Authority=Developer ID Application'; then
+        ok "zoovm is signed with a Developer ID and notarized"
+    else
+        note "zoovm is ad-hoc signed (this release was built without the signing secrets)"
+    fi
+}
+
+start_macos_preparation() { # HOME
+    local name=${ZOO_MACOS_BASE:-zoo-macos-base} user=${ZOO_MACOS_USER:-admin}
+    if [ "$BASE" = 0 ]; then
+        note "base preparation deferred; creating a macOS sandbox will prepare it automatically"
+        return
+    fi
+    if [ -f "$1/.zoovm/vms/$name/zoo-ready" ]; then ok "macOS template is already prepared"; return; fi
+    say "Starting automatic macOS preparation in the background"
+    # Arguments travel as positional values; spaces in restore-image paths are preserved.
+    # shellcheck disable=SC2016
+    printf '%s\n' "$NODE_KEY" | as_user /bin/bash -c '
+        home=$1; name=$2; user=$3; ipsw=$4
+        mkdir -p "$home/.zoovm"
+        if [ -n "$ipsw" ]; then
+            nohup /usr/local/libexec/zoo-macos/prepare-base.sh --name "$name" --guest-user "$user" --ipsw "$ipsw" > "$home/.zoovm/install.log" 2>&1 <&0 &
+        else
+            nohup /usr/local/libexec/zoo-macos/prepare-base.sh --name "$name" --guest-user "$user" > "$home/.zoovm/install.log" 2>&1 <&0 &
+        fi
+    ' zoo-prepare "$1" "$name" "$user" "$IPSW"
+    ok "host enrolled; track preparation under Remote Servers or create a macOS sandbox now"
+}
+
+# Install the API-matched fixed-function helper; no enrollment or VM changes.
+install_macos_helper() {
+    local helper_dir entries
+    helper_dir=$(mktemp -d)
+    curl -fsSL --retry 3 "$CONTROL_PLANE/v1/nodes/bootstrap/macos" -o "$helper_dir/bootstrap.tar.gz" \
+        || die "couldn't download macOS preparation helpers from $CONTROL_PLANE"
+    entries=$(tar -tzf "$helper_dir/bootstrap.tar.gz")
+    while IFS= read -r entry; do
+        case "$entry" in base-prepare.sh|firstboot.sh|configure-guest.sh|guest-reidentify.sh|prepare-base.sh) ;; *) die "unexpected file in macOS helper archive" ;; esac
+    done <<< "$entries"
+    tar -xzf "$helper_dir/bootstrap.tar.gz" -C "$helper_dir"
+    bash "$helper_dir/base-prepare.sh" install "$NODE_USER"
+    rm -rf "$helper_dir"
+    ok "automatic macOS base preparation helper installed"
+}
 
 
 if [[ "${BASH_SOURCE[0]:-$0}" != "$0" ]]; then return 0; fi
 parse_args "$@"
 [ "$(id -u)" -eq 0 ] || die "run install.sh as root"
+
+if [ "$(uname -s)" = Linux ] && [ "$NODE" = 1 ]; then
+    install_linux_node
+    exit 0
+fi
 
 if [ "$(uname -s)" = Darwin ]; then
     if [ "$NODE" = 0 ]; then
@@ -1064,13 +1200,25 @@ if [ "$(uname -s)" = Darwin ]; then
     if [ -z "$NODE_USER" ] || [ "$NODE_USER" = root ]; then
         die "run this with sudo from the account that will own the VMs, or pass --user"
     fi
-    node_home=$(dscl . -read "/Users/$NODE_USER" NFSHomeDirectory | awk '{print $2}')
+    [[ "$NODE_USER" =~ ^[A-Za-z_][A-Za-z0-9_-]{0,30}$ ]] || die "invalid host account name"
+    node_home=$(dscl . -read "/Users/$NODE_USER" NFSHomeDirectory | sed 's/^NFSHomeDirectory:[[:space:]]*//')
+    [ -d "$node_home" ] || die "the enrolled account has no home directory"
+    macos_node_identity "$node_home"
+    if [ "$BASE" = 1 ] && [ -n "$IPSW" ] && [ ! -f "$node_home/.zoovm/vms/${ZOO_MACOS_BASE:-zoo-macos-base}/installed" ]; then
+        as_user test -f "$IPSW" && as_user test -r "$IPSW" || die "--ipsw must name a restore image readable by the host account"
+    fi
     say "Checking this Mac"
-    if [ "$(uname -m)" = arm64 ]; then ok "Apple Silicon"; else fail "Intel Mac: macOS VMs need Apple Silicon (Virtualization.framework restores macOS only on arm64)"; fi
+    if [ "$(uname -m)" = arm64 ]; then ok "Apple Silicon"
+    else
+        ok "Intel Mac: Linux desktop, browser and code through Docker Desktop"
+        as_user docker info --format '{{.OSType}}' 2>/dev/null | grep -qx linux || fail "start Docker Desktop in Linux-container mode before adding this Intel Mac"
+    fi
     major=$(sw_vers -productVersion | cut -d. -f1)
     if [ "$major" -ge 14 ]; then ok "macOS $(sw_vers -productVersion)"; else fail "macOS $(sw_vers -productVersion), needs 14 or later"; fi
-    need_disk "$node_home" 80
-    need_memory $(( $(sysctl -n hw.memsize) / 1073741824 )) 16 32
+    if [ "$(uname -m)" = arm64 ]; then
+        macos_node_disk "$node_home"
+        need_memory $(( $(sysctl -n hw.memsize) / 1073741824 )) 16 32
+    fi
     reach_control_plane
     preflight_done
 
@@ -1081,39 +1229,25 @@ if [ "$(uname -s)" = Darwin ]; then
     fi
     # SSH sessions get a bare PATH; zoovm lives in /usr/local/bin
     mkdir -p /etc/ssh/sshd_config.d
-    printf 'Match User %s\n    SetEnv PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin\n' "$NODE_USER" \
+    printf 'Match User %s\n    SetEnv PATH=/Applications/Docker.app/Contents/Resources/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin\n' "$NODE_USER" \
         > /etc/ssh/sshd_config.d/100-zoo.conf
     launchctl kickstart -k system/com.openssh.sshd >/dev/null 2>&1 || true
     authorize "$NODE_USER" "$node_home" staff
 
-    if [ -z "$ZOO_VERSION" ]; then
-        ZOO_VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest" | sed 's#.*/tag/v##')
+    if [ "$(uname -m)" != arm64 ]; then
+        join_or_resume_macos_node "$node_home"
+        exit 0
     fi
-    say "Installing zoovm $ZOO_VERSION"
-    release="https://github.com/$REPO/releases/download/v$ZOO_VERSION"
-    tmp=$(mktemp -d)
-    curl -fsSL -o "$tmp/zoovm-macos-arm64.tar.gz" "$release/zoovm-macos-arm64.tar.gz"
-    curl -fsSL -o "$tmp/SHA256SUMS" "$release/SHA256SUMS"
-    (cd "$tmp" && grep ' \./zoovm-macos-arm64\.tar\.gz$' SHA256SUMS | shasum -a 256 -c - >/dev/null) \
-        || die "zoovm-macos-arm64.tar.gz doesn't match the release's SHA256SUMS"
-    mkdir -p /usr/local/bin
-    tar -xzf "$tmp/zoovm-macos-arm64.tar.gz" -C /usr/local/bin
-    chmod 755 /usr/local/bin/zoovm
-    rm -rf "$tmp"
-    if codesign -dv /usr/local/bin/zoovm 2>&1 | grep -q '^Authority=Developer ID Application'; then
-        ok "zoovm is signed with a Developer ID and notarized"
-    else
-        note "zoovm is ad-hoc signed (this release was built without the signing secrets)"
-    fi
-    # the Mac's egress daemon loads each VM's network policy into pf (macos/README.md, Network policy)
+
+    install_macos_runtime
+    # The Mac's egress daemon loads each VM's policy into pf.
+    mkdir -p /etc/sudoers.d
     printf '%s ALL=(root) NOPASSWD: /sbin/pfctl\n' "$NODE_USER" > /etc/sudoers.d/zoo-pf
     chmod 440 /etc/sudoers.d/zoo-pf
     visudo -cf /etc/sudoers.d/zoo-pf >/dev/null || { rm -f /etc/sudoers.d/zoo-pf; die "couldn't add the pfctl sudoers rule"; }
-    [ "$BASE" = 0 ] || build_base "$node_home"
-
-    join_node "$NODE_USER"
-    if [ "$BASE" = 0 ]; then echo "  Then build its base macOS VM from the server's page; it restores macOS from Apple's IPSW."
-    else echo "  The base VM is ready. For window tools, grant it Accessibility once (macos/README.md, step 4)."; fi
+    install_macos_helper
+    join_or_resume_macos_node "$node_home"
+    start_macos_preparation "$node_home"
     exit 0
 fi
 

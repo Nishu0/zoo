@@ -1408,6 +1408,7 @@
      },
      "os": {
       "enum": [
+       "linux",
        "darwin",
        "windows"
       ],
@@ -2446,8 +2447,15 @@
       "type": "string"
      },
      "server_id": {
-      "title": "Server Id",
-      "type": "null"
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Server Id"
      },
      "server_name": {
       "title": "Server Name",
@@ -2483,8 +2491,15 @@
       "type": "string"
      },
      "server_id": {
-      "title": "Server Id",
-      "type": "null"
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Server Id"
      },
      "size": {
       "maximum": 10.0,
@@ -5894,6 +5909,7 @@
       "required": true,
       "schema": {
        "enum": [
+        "linux",
         "darwin",
         "windows"
        ],
@@ -5988,6 +6004,7 @@
       "schema": {
        "default": "macos",
        "enum": [
+        "linux",
         "macos",
         "windows"
        ],

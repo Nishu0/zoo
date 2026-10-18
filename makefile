@@ -84,9 +84,9 @@ gateway-proto:
 	protoc -I gateway/proto --go_out=gateway --go_opt=module=zoo/gateway --go-grpc_out=gateway --go-grpc_opt=module=zoo/gateway gateway/proto/gateway.proto
 	uv run python -m grpc_tools.protoc -Iserver/gatewaypb=gateway/proto --python_out=. --pyi_out=. --grpc_python_out=. server/gatewaypb/gateway.proto
 
-# zoo-node for macOS and Windows, with the API's version, for installers and auto-update (node/dist/)
+# zoo-node for Linux, macOS and Windows, with the API's version, for installers and auto-update (node/dist/)
 node-dist:
-	cd node && for t in darwin/arm64 windows/amd64; do \
+	cd node && for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do \
 		os=$${t%/*}; arch=$${t#*/}; ext=$$( [ $$os = windows ] && echo .exe ); \
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags="-s -w -X main.version=$(VERSION)" -o dist/zoo-node-$$os-$$arch$$ext . || exit 1; \
 	done && echo $(VERSION) > dist/VERSION

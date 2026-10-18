@@ -19,6 +19,7 @@ trap 'rm -rf "$bundle_work"' EXIT
 bundle_root="$bundle_work/bundle"
 mkdir -p "$bundle_root/deploy/helm" "$bundle_root/images/$ARCH" "$bundle_work/rendered"
 cp "$repository_root/compose.yml" "$repository_root/Caddyfile" "$repository_root/.env.example" "$repository_root/install.sh" "$bundle_root/"
+write_image_compose "$bundle_root/compose.yml" "$bundle_root/compose.yml"
 cp -R "$repository_root/deploy/helm/zoo" "$bundle_root/deploy/helm/"
 stamp_chart "$bundle_root/deploy/helm/zoo/Chart.yaml"
 prepare_components "$bundle_root" all
@@ -46,7 +47,7 @@ write_bootstrap "$bundle_root/manifests/bootstrap.yaml"
 JWT_SECRET=bundle ZOO_VERSION="$ZOO_VERSION" ZOO_REGISTRY="$ZOO_REGISTRY" \
     docker compose --env-file /dev/null -f "$bundle_root/compose.yml" --profile domain config --images \
     | sort -u > "$bundle_root/images/$ARCH/docker.images"
-printf '%s/zoo-sandbox-desktop:%s\n%s/zoo-sandbox-code:%s\n' "$ZOO_REGISTRY" "$ZOO_VERSION" "$ZOO_REGISTRY" "$ZOO_VERSION" \
+printf '%s/zoo-sandbox-desktop:%s\n%s/zoo-sandbox-browser:%s\n%s/zoo-sandbox-code:%s\n' "$ZOO_REGISTRY" "$ZOO_VERSION" "$ZOO_REGISTRY" "$ZOO_VERSION" "$ZOO_REGISTRY" "$ZOO_VERSION" \
     >> "$bundle_root/images/$ARCH/docker.images"
 sort -u "$bundle_root/images/$ARCH/docker.images" -o "$bundle_root/images/$ARCH/docker.images"
 python3 - "$bundle_work/rendered" "$bundle_root/manifests" "$bundle_root/images/$ARCH/docker.images" \

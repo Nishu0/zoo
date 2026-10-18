@@ -38,12 +38,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [api, web, sandbox-desktop, sandbox-code, egress, gateway]
+        image: [api, web, sandbox-desktop, sandbox-browser, sandbox-code, egress, gateway]
         arch: [amd64, arm64]
         include:
           - { image: api, context: ., file: Dockerfile.api }
           - { image: web, context: web, file: web/Dockerfile }
           - { image: sandbox-desktop, context: ., file: Dockerfile }
+          - { image: sandbox-browser, context: ., file: Dockerfile.browser }
           - { image: sandbox-code, context: ., file: Dockerfile.code }
           - { image: egress, context: ., file: Dockerfile.egress }
           - { image: gateway, context: ., file: Dockerfile.gateway }
@@ -106,7 +107,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [api, web, sandbox-desktop, sandbox-code, egress, gateway]
+        image: [api, web, sandbox-desktop, sandbox-browser, sandbox-code, egress, gateway]
     steps:
       - uses: actions/download-artifact@v4
         with:

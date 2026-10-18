@@ -1,4 +1,9 @@
 .venv
+.git
+**/node_modules
+site/dist
+.pytest_cache
+.ruff_cache
 __pycache__
 *.db
 *.db-*

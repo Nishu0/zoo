@@ -1,13 +1,15 @@
 ---
 title: Quickstart
-description: Install a Docker/Kata host, create a sandbox, and connect an external client.
+description: Install Zoo, create a sandbox, and connect an external client.
 ---
 
-## 1. Prepare a Linux KVM host
+## 1. Prepare a host
 
-Use a dedicated Debian/Ubuntu Linux host with working hardware or nested virtualization,
-writable `/dev/kvm`, systemd and KSM. Missing virtualization is a hard error, not a weaker
-isolation mode. See [Install](/docs/get-started/install/) for the complete requirements.
+Install on Debian/Ubuntu Linux, macOS, or Windows with a running Linux Docker engine.
+On Mac and Windows, use Docker Desktop. Linux hosts with working KVM can use Kata for a
+separate guest kernel per sandbox. `ZOO_ISOLATION=auto` falls back to ordinary containers
+when Kata is absent; `kata` requires it. See [Install](/docs/get-started/install/) for the
+complete requirements and [Remote servers](/docs/guides/remote-servers/) to add more hosts.
 
 ```bash
 curl -fsSL https://github.com/chann44/zoo/releases/latest/download/install.sh | sudo bash -s -- --admin-email you@example.com

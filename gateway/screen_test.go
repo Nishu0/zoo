@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"compress/zlib"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -159,6 +160,47 @@ func TestScreenViewerRFBHandshakeAndFramebuffer(test *testing.T) {
 	wire := bytes.Join(rpc.sent, nil)
 	if len(wire) != 24 || !bytes.Equal(wire[:4], []byte{0, 0, 0, 1}) || !bytes.Equal(wire[16:20], []byte{140, 120, 100, 0}) {
 		test.Fatalf("synthetic framebuffer changed RFB protocol bytes: %v", wire)
+	}
+}
+
+func TestScreenViewerNegotiatesPersistentLosslessCompression(test *testing.T) {
+	_, session, _ := screenTestFixture(test)
+	rpc := &screenTestViewerRPC{ctx: test.Context()}
+	negotiation := []byte{2, 0, 0, 2, 0, 0, 0, 6, 0, 0, 0, 0}
+	viewer := &screenViewer{ctx: test.Context(), rpc: rpc, session: session,
+		input: &screenViewerInput{rpc: rpc, sandboxID: "sandbox", data: negotiation}}
+	if err := viewer.receive(); !errors.Is(err, io.EOF) {
+		test.Fatal(err)
+	}
+	viewer.format, _ = screenParseViewerFormat([]byte{32, 24, 0, 1, 0, 255, 0, 255, 0, 255, 16, 8, 0, 0, 0, 0})
+	frame, _, _ := session.Frame(test.Context())
+	var compressed []byte
+	for range 2 {
+		rpc.sent = nil
+		if err := viewer.frame(frame, frame.Bounds(), false); err != nil {
+			test.Fatal(err)
+		}
+		wire := bytes.Join(rpc.sent, nil)
+		if encoding := int32(binary.BigEndian.Uint32(wire[12:16])); encoding != vncZlib {
+			test.Fatalf("viewer requested compression but received encoding %d", encoding)
+		}
+		length := int(binary.BigEndian.Uint32(wire[16:20]))
+		if length != len(wire)-20 || length >= len(frame.Pix)/4 {
+			test.Fatalf("ineffective or malformed compressed frame: %d bytes", length)
+		}
+		compressed = append(compressed, wire[20:]...)
+	}
+	reader, err := zlib.NewReader(bytes.NewReader(compressed))
+	if err != nil {
+		test.Fatal(err)
+	}
+	defer reader.Close()
+	pixels := make([]byte, len(frame.Pix)*2)
+	if _, err := io.ReadFull(reader, pixels); err != nil {
+		test.Fatal(err)
+	}
+	if !bytes.Equal(pixels, bytes.Repeat([]byte{140, 120, 100, 0}, 64*64*2)) {
+		test.Fatal("compression changed pixels or reset the stream between updates")
 	}
 }
 

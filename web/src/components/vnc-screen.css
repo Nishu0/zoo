@@ -1,0 +1,7 @@
+/* Keep the local pointer legible at every remote resolution. The explicit
+   hotspot is the arrow tip; CSS cursor dimensions do not follow canvas scaling. */
+.zoo-vnc-screen canvas {
+  cursor:
+    url("./vnc-cursor.svg") 3 2,
+    default !important;
+}

@@ -60,7 +60,7 @@ from server.images import MEDIA_TYPES
 from server.jobs import WAITING, Jobs
 from server.platforms import PLATFORMS, os_of, parse
 from server.pool import Pool
-from server.registry import KINDS, TOOLS, has_screen, open_url, responsive
+from server.registry import KINDS, TOOLS, has_screen, responsive, start_browser
 from server.runtime import (
     IMAGE,
     VMS,
@@ -546,7 +546,7 @@ class SandboxApi:
                 if sandbox.status in ("running", "provisioning"):
                     raise HTTPException(status_code=409, detail="stop the sandbox before moving it")
                 if sandbox.kind not in VMS:
-                    if not runtime.is_kube():
+                    if sandbox.server_id or not runtime.is_kube():
                         raise ZooError("not_supported", "Docker sandboxes run on one host and cannot be moved.")
                     if payload.server_id is not None or payload.node_name is None:
                         raise ZooError("bad_request", "Kubernetes moves require node_name, not a registered server.")
@@ -905,8 +905,26 @@ class SandboxApi:
         ]
         if platform in VMS:
             return self.place_vm(platform, server_id, servers, db, queue)
+        from server import remote_docker
+
         if server_id not in (None, AUTO):
-            raise ZooError("not_supported", "Linux sandboxes use the configured runtime, not a registered server.")
+            if server_id not in {s.id for s in servers}:
+                raise HTTPException(status_code=404, detail="Linux-capable server not found")
+            if not remote_docker.available(server_id):
+                raise ZooError(
+                    "unavailable",
+                    "the server's Linux Docker runtime is not ready",
+                    "Start Docker in Linux-container mode and reconnect zoo-node.",
+                )
+            return server_id
+        if server_id == AUTO:
+            ready = [s for s in servers if remote_docker.available(s.id)]
+            if ready:
+                load = {s.id: 0 for s in ready}
+                for sandbox in db.list_all_sandboxes():
+                    if sandbox.server_id in load and sandbox.status in ("running", "provisioning"):
+                        load[sandbox.server_id] += 1
+                return min(load, key=lambda server_id: load[server_id])
         return None
 
     def place_vm(self, platform: str, server_id: str | None, servers: list, db: Querier, queue: bool = False) -> str:
@@ -921,7 +939,7 @@ class SandboxApi:
             return server_id
         load = {s.id: 0 for s in servers}
         for sb in db.list_all_sandboxes():
-            if sb.server_id in load and sb.status in ("running", "provisioning"):
+            if sb.server_id in load and sb.kind == platform and sb.status in ("running", "provisioning"):
                 load[sb.server_id] += 1
         best = min(load, key=load.get)
         if load[best] >= limit:
@@ -998,6 +1016,8 @@ class SandboxApi:
         pooled = self.pool.claim(db, payload.kind, server_id) if payload.size == sizes.DEFAULT else None
         sandbox_id = pooled.id if pooled else str(uuid.uuid4())
         config: dict[str, Any] = {"profiles": payload.profile_ids}
+        if server_id and payload.kind not in VMS:
+            config["remote_server_id"] = server_id
         if payload.kind not in VMS and pooled is None:
             config["home_claim"] = f"zoo-home-{sandbox_id}"
         if payload.admin:
@@ -1097,7 +1117,7 @@ class SandboxApi:
                 enforce(sandbox.model_copy(update={"status": "running"}), db)
 
         secrets, profiles = await asyncio.to_thread(state)
-        if runtime.is_kube():
+        if runtime.is_kube() and not sandbox.server_id:
             await asyncio.to_thread(runtime.resume, runtime_id)
         steps = [asyncio.to_thread(policy)]
         if secrets:
@@ -1113,14 +1133,14 @@ class SandboxApi:
 
         found = await asyncio.to_thread(started)
         self.logger.info("sandbox running", extra={"sandbox_id": sandbox.id, "warm": True})
-        if runtime.is_kube():
+        if runtime.is_kube() and not sandbox.server_id:
             try:
                 await asyncio.to_thread(self.bind, sandbox.id)
             except Exception as e:
                 self.logger.error("vm-control binding failed", extra={"sandbox_id": sandbox.id, "error": str(e)})
         if found is not None and found.kind == "browser":
             try:
-                await asyncio.to_thread(open_url, runtime_id, BROWSER_HOME)
+                await asyncio.to_thread(start_browser, runtime_id, BROWSER_HOME)
             except Exception as e:
                 self.logger.error("browser launch failed", extra={"sandbox_id": sandbox.id, "error": str(e)})
 
@@ -1187,6 +1207,9 @@ class SandboxApi:
                 env = {**env, "ZOO_VNC_PASSWORD": ensure_vnc_password(sandbox, db)}
             if sandbox.kind not in VMS:
                 env = {**env, **guest_env(sandbox.id, remote=server is not None)}
+                if sandbox.kind == "browser":
+                    env["ZOO_BROWSER_HOME"] = BROWSER_HOME
+                    env["ZOO_BROWSER_WAIT"] = "1"
             if sandbox.kind in VMS:
                 image = ""
             elif default or not desktop:
@@ -1218,7 +1241,7 @@ class SandboxApi:
         sandbox = self.mark_started(job)
         if sandbox is not None and sandbox.kind == "browser":
             try:
-                open_url(container_id, BROWSER_HOME)
+                start_browser(container_id, BROWSER_HOME)
             except Exception as e:
                 self.logger.error("browser launch failed", extra={"sandbox_id": sandbox_id, "error": str(e)})
 
@@ -1287,7 +1310,7 @@ class SandboxApi:
             except Exception as e:
                 self.logger.error("policy enforcement failed", extra={"sandbox_id": sandbox.id, "error": str(e)})
         self.logger.info("sandbox running", extra={"sandbox_id": sandbox.id, "server_id": sandbox.server_id})
-        if runtime.is_kube() and sandbox.kind not in VMS:
+        if runtime.is_kube() and sandbox.kind not in VMS and not sandbox.server_id:
             try:
                 self.bind(sandbox.id)
             except Exception as e:
@@ -1454,7 +1477,7 @@ class SandboxApi:
         if startup:
             self.jobs.kick()
         for sandbox in sandboxes:
-            if sandbox.kind not in VMS:
+            if sandbox.kind not in VMS and not sandbox.server_id:
                 continue
             if server_id is not None and sandbox.server_id != server_id:
                 continue
@@ -1462,7 +1485,7 @@ class SandboxApi:
                 continue
             alive = self.alive(sandbox)
             # outside the session: the screen check can take a while
-            hung = alive is True and self.hung(sandbox)
+            hung = sandbox.kind in VMS and alive is True and self.hung(sandbox)
             with db_manager.session() as db:
                 current = db.get_sandbox(id=sandbox.id)
                 if current.status != "running" or current.runtime_id != sandbox.runtime_id:
@@ -1573,7 +1596,7 @@ class SandboxApi:
     def freeze(self, sandbox: Sandbox):
         """Pauses a running Linux sandbox whole: its Kata VM through vm-control (Kubernetes) or its container."""
         assert sandbox.runtime_id is not None
-        if runtime.is_kube():
+        if runtime.is_kube() and not sandbox.server_id:
             config = json.loads(sandbox.config or "{}")
             state = vm_control.current_state(sandbox.id, sandbox.runtime_id, config)
             vm_control.pause(
@@ -1588,7 +1611,7 @@ class SandboxApi:
 
     def thaw(self, sandbox: Sandbox):
         assert sandbox.runtime_id is not None
-        if runtime.is_kube():
+        if runtime.is_kube() and not sandbox.server_id:
             config = json.loads(sandbox.config or "{}")
             state = vm_control.current_state(sandbox.id, sandbox.runtime_id, config)
             vm_control.resume(
@@ -1605,7 +1628,7 @@ class SandboxApi:
         """Records a Kubernetes sandbox's Kata VM generation for vm-control, once per pod it boots in."""
         with db_manager.session() as db:
             sandbox = db.get_sandbox(id=sandbox_id)
-        if sandbox is None or not sandbox.runtime_id:
+        if sandbox is None or not sandbox.runtime_id or sandbox.server_id or sandbox.kind in VMS:
             return
         config = json.loads(sandbox.config or "{}")
         if (config.get("vm_control") or {}).get("runtime_id") == sandbox.runtime_id:
@@ -1668,7 +1691,7 @@ class SandboxApi:
                 rows = [
                     sandbox
                     for sandbox in db.list_all_sandboxes()
-                    if sandbox.kind not in VMS and sandbox.runtime_id not in running
+                    if sandbox.kind not in VMS and not sandbox.server_id and sandbox.runtime_id not in running
                 ]
             else:
                 sandbox = db.get_sandbox_by_runtime_id(runtime_id=event["runtime_id"])

@@ -40,32 +40,46 @@ if (-not $admin) { throw 'run this in an elevated PowerShell (Run as administrat
 
 Write-Host '==> Checking this machine' -ForegroundColor White
 $os = Get-CimInstance Win32_OperatingSystem
-if ($os.Caption -match 'Home') { Fail "$($os.Caption): Hyper-V needs Windows Pro, Enterprise, Education or Server" }
+$docker = $false
+if (Get-Command docker -ErrorAction SilentlyContinue) {
+    try { $docker = ((& docker info --format '{{.OSType}}' 2>$null) -eq 'linux' -and $LASTEXITCODE -eq 0) }
+    catch { $docker = $false }
+}
+$native = $os.Caption -notmatch 'Home'
+if (-not $native -and -not $docker) { Fail "$($os.Caption): start Docker Desktop with Linux containers; native Windows VMs require Pro, Enterprise, Education or Server" }
 else { Ok $os.Caption }
-$cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
-$hypervisor = (Get-CimInstance Win32_ComputerSystem).HypervisorPresent
-if ($hypervisor -or $cpu.VirtualizationFirmwareEnabled) { Ok 'virtualization is on' }
-else { Fail 'virtualization is off in the firmware: turn on Intel VT-x or AMD-V in the BIOS/UEFI settings' }
-$hyperv = (Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All).State
-if ($hyperv -eq 'Enabled') { Ok 'Hyper-V is on' } else { Note 'Hyper-V is off; it will be turned on (needs a restart)' }
-$free = [math]::Floor((Get-PSDrive C).Free / 1GB)
-if ($free -ge 80) { Ok "$free GB free on C:" } else { Fail "$free GB free on C:, needs 80 GB for the base VM and sandboxes" }
-$memory = [math]::Floor($os.TotalVisibleMemorySize / 1MB)
-if ($memory -lt 8) { Fail "$memory GB of memory, needs 8 GB" }
-elseif ($memory -lt 16) { Note "$memory GB of memory; 16 GB or more runs more sandboxes at once" }
-else { Ok "$memory GB of memory" }
+$hyperv = 'Unavailable'
+if ($native) {
+    $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
+    $hypervisor = (Get-CimInstance Win32_ComputerSystem).HypervisorPresent
+    if ($hypervisor -or $cpu.VirtualizationFirmwareEnabled) { Ok 'virtualization is on' }
+    else { Fail 'virtualization is off in firmware: turn on Intel VT-x or AMD-V' }
+    try { $hyperv = (Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All).State }
+    catch { $native = $false; if (-not $docker) { Fail 'Hyper-V is unavailable and no Linux Docker engine is running' } }
+    if ($native) {
+        if ($hyperv -eq 'Enabled') { Ok 'Hyper-V is on' }
+        elseif ($docker -and -not $Iso) { $native = $false; Note 'Using Linux containers; enable Hyper-V to add native Windows VMs later' }
+        else { Note 'Hyper-V will be turned on (needs a restart)' }
+    }
+}
+if ($native) {
+    $free = [math]::Floor((Get-PSDrive C).Free / 1GB)
+    if ($free -ge 80) { Ok "$free GB free on C:" } else { Fail "$free GB free on C:, needs 80 GB for native Windows VMs" }
+    $memory = [math]::Floor($os.TotalVisibleMemorySize / 1MB)
+    if ($memory -lt 8) { Fail "$memory GB memory, needs 8 GB for native Windows VMs" }
+}
+if (-not $native -and $Iso) { Fail '-Iso needs Hyper-V and a Windows edition that supports native VMs' }
 if (-not $ControlPlane) { Note 'no -ControlPlane given, skipped the reachability check' }
 else {
     try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 "$($ControlPlane.TrimEnd('/'))/healthz" | Out-Null; Ok "control plane reachable at $ControlPlane" }
     catch { Note "can't reach $ControlPlane from here; the control plane must still reach this machine over SSH" }
 }
-$docker = [bool](Get-Command docker -ErrorAction SilentlyContinue)
-if ($docker) { Ok 'Docker found: this machine can also run Linux sandboxes' }
+if ($docker) { Ok 'Linux Docker engine is running: Linux desktop, browser and code are available' }
 else { Note 'no Docker: install Docker Desktop to also run Linux sandboxes here' }
 if ($script:Failed) { throw "pre-flight checks failed, nothing was changed. See $Docs" }
 if ($Check) { Write-Host '==> Pre-flight checks passed'; return }
 
-if ($hyperv -ne 'Enabled') {
+if ($native -and $hyperv -ne 'Enabled') {
     Write-Host '==> Turning on Hyper-V'
     Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All -NoRestart | Out-Null
     # run again, elevated, when this user next signs in: a one-shot logon task that removes itself
@@ -77,6 +91,7 @@ if ($hyperv -ne 'Enabled') {
     Set-Content -Path $self -Value $source -Encoding UTF8
     $quote = { param($v) "'" + ($v -replace "'", "''") + "'" }
     $again = "& $(& $quote $self) -Key $(& $quote $Key) -ControlPlane $(& $quote $ControlPlane) -Release $(& $quote $Release) -BaseVM $(& $quote $BaseVM)"
+    if ($Token) { $again += " -Token $(& $quote $Token)" }
     if ($Iso) { $again += " -Iso $(& $quote $Iso)" }
     if ($Edition) { $again += " -Edition $(& $quote $Edition)" }
     $again = "Unregister-ScheduledTask -TaskName ZooNodeInstall -Confirm:`$false; $again; Read-Host 'Press Enter to close'"
@@ -132,11 +147,11 @@ if ($Iso) {
     Ok "installing Windows into $BaseVM in the background (log: $root\install.log, 15 to 30 minutes)"
 }
 
-$runs = if ($docker) { 'Windows and Linux sandboxes' } else { 'Windows sandboxes' }
+$runs = if ($native -and $docker) { 'Windows VMs and Linux desktop, browser and code' } elseif ($docker) { 'Linux desktop, browser and code' } else { 'Windows VMs' }
 if ($Token) {
     if (-not $ControlPlane) { throw '-Token needs -ControlPlane (copy the command from Add server)' }
     $nodeExe = Join-Path $env:TEMP 'zoo-node-install.exe'
-    Invoke-WebRequest -UseBasicParsing "$($ControlPlane.TrimEnd('/'))/nodes/download/windows/amd64" -OutFile $nodeExe
+    Invoke-WebRequest -UseBasicParsing "$($ControlPlane.TrimEnd('/'))/v1/nodes/download/windows/amd64" -OutFile $nodeExe
     & $nodeExe join $Token --service --ssh-user $env:USERNAME
     if ($LASTEXITCODE -ne 0) { throw "zoo-node couldn't join; the token may be used or expired" }
     Remove-Item -Force $nodeExe
@@ -146,7 +161,7 @@ if ($Token) {
   It can run: $runs
 
   zoo-node runs as a Windows service and dials out to the control plane, so no inbound port is needed.
-  The server shows up under Servers. $(if ($Iso) { "The base Windows VM is installing; the server's page shows its progress." } else { "Then build its base Windows VM from the server's page." })
+  The server shows up under Servers. $(if ($Iso) { "The base Windows VM is installing; the server's page shows its progress." } elseif ($native) { "Then build its base Windows VM from the server's page." } else { "Keep Docker Desktop running in Linux-container mode." })
 "@
     exit 0
 }
@@ -169,5 +184,5 @@ Write-Host @"
 
   zoo-join:$line
 
-  $(if ($Iso) { "The base Windows VM is installing; the server's page shows its progress." } else { "Then build its base Windows VM from the server's page, from a Windows ISO you supply (or the evaluation ISO)." })
+  $(if ($Iso) { "The base Windows VM is installing; the server's page shows its progress." } elseif ($native) { "Then build its base Windows VM from the server's page, from a Windows ISO you supply (or the evaluation ISO)." } else { "Keep Docker Desktop running in Linux-container mode." })
 "@

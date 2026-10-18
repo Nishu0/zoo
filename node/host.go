@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -34,7 +35,7 @@ func (t target) check(ctx context.Context) error {
 	return conn.Close()
 }
 
-// hostTargets reaches the SSH server used by the macOS and Windows backends.
+// hostTargets reaches the SSH server used by the remote sandbox backends.
 func hostTargets() map[string]target {
 	return map[string]target{"ssh": {"tcp", "127.0.0.1:22"}}
 }
@@ -52,11 +53,13 @@ type Driver interface {
 func hostDrivers() []Driver {
 	switch runtime.GOOS {
 	case "darwin":
-		return []Driver{&zoovmDriver{}}
+		return []Driver{&zoovmDriver{}, &dockerDriver{}}
 	case "windows":
-		return []Driver{&hypervDriver{}}
+		return []Driver{&hypervDriver{}, &dockerDriver{}}
+	case "linux":
+		return []Driver{&dockerDriver{}}
 	default:
-		panic("zoo-node supports macOS and Windows hosts only")
+		panic("unsupported node operating system")
 	}
 }
 
@@ -86,6 +89,47 @@ func output(ctx context.Context, name string, args ...string) ([]byte, error) {
 
 // zoovm: macOS VMs on Apple's Virtualization framework (macos/zoovm).
 type zoovmDriver struct{}
+
+// Docker Desktop on Mac/Windows must be in Linux-container mode.
+type dockerDriver struct{}
+
+func (dockerDriver) Name() string { return "docker" }
+
+func dockerOutput(ctx context.Context, args ...string) ([]byte, error) {
+	name := "docker"
+	if runtime.GOOS == "windows" {
+		if _, err := exec.LookPath(name); err != nil {
+			name = filepath.Join(os.Getenv("ProgramFiles"), "Docker", "Docker", "resources", "bin", "docker.exe")
+		}
+	}
+	out, err := output(ctx, name, args...)
+	// LocalSystem has no Docker Desktop user context. Its Linux-engine pipe reaches
+	// the same engine as the SSH account's desktop-linux context, without TCP.
+	if err != nil && runtime.GOOS == "windows" {
+		return output(ctx, name, append([]string{"--host", `npipe:////./pipe/dockerDesktopLinuxEngine`}, args...)...)
+	}
+	return out, err
+}
+
+func (dockerDriver) Probe(ctx context.Context) (bool, string) {
+	out, err := dockerOutput(ctx, "info", "--format", "{{.OSType}} {{.ServerVersion}}")
+	if err != nil {
+		return false, err.Error()
+	}
+	fields := strings.Fields(string(out))
+	if len(fields) != 2 || fields[0] != "linux" {
+		return false, "Docker must run Linux containers"
+	}
+	return true, "Linux Docker " + fields[1]
+}
+
+func (dockerDriver) Sandboxes(ctx context.Context) ([]string, error) {
+	out, err := dockerOutput(ctx, "ps", "--filter", "label=zoo.sandbox", "--format", `{{.Label "zoo.sandbox"}}`)
+	if err != nil {
+		return nil, err
+	}
+	return strings.Fields(string(out)), nil
+}
 
 func (zoovmDriver) Name() string { return "zoovm" }
 

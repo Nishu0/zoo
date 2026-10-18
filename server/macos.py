@@ -28,7 +28,7 @@ USER = os.environ.get("ZOO_MACOS_USER", "admin")
 HOME = f"/Users/{USER}"
 ENV_FILE = f"{HOME}/.zoo/env"
 MAX_VMS = 2
-HOST_PATH = 'export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"; '
+HOST_PATH = 'export PATH="/usr/local/bin:/opt/homebrew/bin:$HOME/.local/bin:$PATH"; '
 SAFE_RULE = re.compile(r"^[A-Za-z0-9.:/_-]+$")
 ROOT = os.path.dirname(os.path.dirname(__file__))
 GUEST_BINARY = os.environ.get("ZOO_GUEST_DARWIN_BINARY", os.path.join(ROOT, "guest", "dist", "zoo-guest-darwin-arm64"))
@@ -145,8 +145,8 @@ def start(sandbox_id: str, server, env: dict[str, str], admin: bool = False) -> 
     server_id, name = server.id, vm_name(sandbox_id)
     connect(server_id, server.docker_url)
     cloned = run(server_id, f"zoovm get {name}")[0] == 0
-    if not cloned and not base_ready(server_id):
-        raise RuntimeError("the base VM isn't set up yet: finish its setup under Remote Servers, then start again")
+    if not cloned:
+        ensure_base(server_id)
     rid = runtime_id(server_id, sandbox_id)
     with lock:
         mac = starting.setdefault(server_id, threading.Lock())
@@ -272,6 +272,14 @@ def root_client(rid: str) -> paramiko.SSHClient:
 def set_admin(rid: str, admin: bool):
     """The guest user is an administrator with passwordless sudo only in an admin sandbox; otherwise an agent can't
     undo the VM's own pf rules or app policy."""
+    # macOS's SSH SACL initially permits administrators through a nested group.
+    # Preserve explicit bootstrap access before removing administrator rights.
+    ssh_access = (
+        "set -e\ndseditgroup -o read com.apple.access_ssh >/dev/null 2>&1 || "
+        "dseditgroup -o create com.apple.access_ssh\n"
+        "dseditgroup -o edit -a root -t user com.apple.access_ssh\n"
+        f"dseditgroup -o edit -a {shlex.quote(USER)} -t user com.apple.access_ssh\n"
+    )
     if admin:
         script = (
             f"dseditgroup -o checkmember -m {USER} admin >/dev/null || dseditgroup -o edit -a {USER} -t user admin\n"
@@ -279,10 +287,10 @@ def set_admin(rid: str, admin: bool):
         )
     else:
         script = (
-            f"rm -f /etc/sudoers.d/zoo\ndseditgroup -o edit -d {USER} -t user admin 2>/dev/null\n"
+            f"rm -f /etc/sudoers.d/zoo\ndseditgroup -o edit -d {USER} -t user admin 2>/dev/null || true\n"
             f"! dseditgroup -o checkmember -m {USER} admin >/dev/null"
         )
-    guest_check(rid, script, root=True)
+    guest_check(rid, ssh_access + script, root=True)
 
 
 def wait_for_guest(rid: str, timeout: int = 300):
@@ -672,6 +680,16 @@ def base_version(server_id: str) -> str:
     return version or mark_base(server_id)
 
 
+def desktop_ready(server_id: str) -> bool:
+    user = shlex.quote(USER)
+    command = (
+        f'uid=$(id -u {user}); test "$(stat -f %Su /dev/console)" = {user} '
+        '&& pgrep -u "$uid" -x Finder >/dev/null && pgrep -u "$uid" -x Dock >/dev/null '
+        '&& ! pgrep -u "$uid" -x "Setup Assistant|SetupAssistant" >/dev/null'
+    )
+    return guest(base_id(server_id), command, timeout=5, ssh=True)[0] == 0
+
+
 def base_ready(server_id: str) -> bool:
     if run(server_id, f"test -f {ready_marker()}")[0] == 0:
         return True
@@ -680,12 +698,12 @@ def base_ready(server_id: str) -> bool:
     if run(server_id, f"nc -z -G 2 $(zoovm ip {BASE_VM}) 22", timeout=10)[0] != 0:
         return False
     try:
-        ok = guest(base_id(server_id), "true", timeout=5, ssh=True)[0] == 0
+        ok = desktop_ready(server_id)
         if ok:
             sandbox_id = f"base-{server_id}"
             hub.bind(base_id(server_id), sandbox_id)
             install_guest(base_id(server_id), sandbox_id)
-            connected(base_id(server_id), "a11y").call("a11y", {"max_nodes": 1}, timeout=5)
+            ok = connected(base_id(server_id), "exec").run(["true"], timeout=5)[0] == 0
     except Exception:
         guests.pop(base_id(server_id), None)
         return False
@@ -694,8 +712,104 @@ def base_ready(server_id: str) -> bool:
     return ok
 
 
+PREPARE_HELPER = "/usr/local/libexec/zoo-macos/prepare-base.sh"
+PREPARATION = f'"$HOME"/.zoovm/preparation/{shlex.quote(BASE_VM)}'
+_preparation_locks: dict[str, threading.Lock] = {}
+
+
+@contextmanager
+def preparation_guard(server_id: str):
+    """Keep the Mac's verification lock until this SSH channel closes, across API/worker processes."""
+    transport = host(server_id).get_transport()
+    if transport is None:
+        raise RuntimeError("The Mac disconnected during preparation")
+    channel = transport.open_session(timeout=10)
+    try:
+        channel.settimeout(10)
+        channel.exec_command(
+            f"mkdir -p {PREPARATION} && /usr/bin/lockf -k -t 0 {PREPARATION}/verify.guard "
+            "/bin/sh -c 'printf \"locked\\n\"; cat >/dev/null'"
+        )
+        yield channel.makefile("rb").readline() == b"locked\n"
+    finally:
+        channel.close()
+
+
+def preparation_status(server_id: str) -> tuple[str, str] | None:
+    code, output, _ = run(
+        server_id,
+        f"test -f {PREPARATION}/state || exit 1; phase=$(cat {PREPARATION}/state); "
+        f'case "$phase" in ready|verifying|failed) ;; *) '
+        f"pid=$(cat {PREPARATION}/pid 2>/dev/null); "
+        'case "$pid" in ""|*[!0-9]*) phase=interrupted ;; *) kill -0 "$pid" 2>/dev/null || phase=interrupted ;; esac ;; esac; '
+        f'if [ "$phase" = verifying ]; then modified=$(stat -f %m {PREPARATION}/state 2>/dev/null || true); '
+        'case "$modified" in ""|*[!0-9]*) ;; *) [ $(($(date +%s) - modified)) -le 900 ] || phase=verification_failed ;; esac; fi; '
+        'if [ "$phase" = interrupted ]; then printf "failed\\nMac preparation stopped; retry preparation under Servers\\n"; '
+        'elif [ "$phase" = verification_failed ]; then printf "failed\\nGuest verification timed out; retry preparation under Servers and check the Mac install log\\n"; '
+        f'else printf "%s\\n" "$phase"; cat {PREPARATION}/error 2>/dev/null || true; fi',
+    )
+    if code != 0:
+        return None
+    lines = output.decode(errors="replace").splitlines()
+    return (lines[0], "\n".join(lines[1:])[-500:]) if lines else None
+
+
+def ensure_base(server_id: str):
+    """Agent creates wait for one shared preparation instead of entering Setup Assistant."""
+    status = base_status(server_id)
+    if status.get("ready"):
+        return
+    if status["state"] == "failed":
+        raise RuntimeError(status.get("message") or "macOS preparation failed; retry preparation under Servers")
+    if status["state"] != "installing":
+        base_install(server_id)
+    stage = status.get("message") or "Preparing the macOS base and guest tools"
+    raise Wait(f"{stage}; the sandbox will start automatically", window=3600)
+
+
 def base_status(server_id: str) -> dict:
     """State of the server's base VM: missing, installing, failed, stopped or running."""
+    preparation = preparation_status(server_id)
+    if preparation is not None:
+        phase, error = preparation
+        if phase == "failed":
+            return {
+                "state": "failed",
+                "message": error or "macOS preparation failed; retry preparation",
+                "ready": False,
+            }
+        if phase not in ("ready", "verifying"):
+            return {
+                "state": "installing",
+                "message": {
+                    "downloading": "Downloading macOS (once per host)",
+                    "installing": "Installing macOS",
+                    "configuring": "Creating the guest account and enabling remote access",
+                    "booting": "Starting the prepared guest",
+                }.get(phase, "Preparing macOS"),
+                "ready": False,
+            }
+        if phase == "verifying":
+            with lock:
+                finishing = _preparation_locks.setdefault(server_id, threading.Lock())
+            if finishing.acquire(blocking=False):
+                try:
+                    with preparation_guard(server_id) as acquired:
+                        # A different API/worker may have completed while this request waited for SSH.
+                        current = preparation_status(server_id) if acquired else None
+                        if current and current[0] == "verifying" and base_ready(server_id):
+                            if not desktop_ready(server_id):
+                                return {
+                                    "state": "installing",
+                                    "message": "Waiting for the guest desktop to finish setup",
+                                    "ready": False,
+                                }
+                            base_stop(server_id)
+                            check(server_id, f"printf 'ready\\n' > {PREPARATION}/state")
+                            return {"state": "stopped", "ready": True, "message": "Guest ready for agent sandboxes"}
+                finally:
+                    finishing.release()
+            return {"state": "installing", "message": "Verifying guest connection and commands", "ready": False}
     installing = run(server_id, f"pgrep -f '[z]oovm install {BASE_VM}'")[0] == 0
     log = run(server_id, f"tail -c 4000 {INSTALL_LOG} 2>/dev/null")[1].decode(errors="replace")
     last = re.split(r"[\r\n]+", log.strip())[-1] if log.strip() else ""
@@ -715,7 +829,25 @@ def base_status(server_id: str) -> dict:
 
 
 def base_install(server_id: str):
-    check(server_id, f"mkdir -p ~/.zoovm && nohup zoovm install {BASE_VM} > {INSTALL_LOG} 2>&1 < /dev/null &")
+    if not vnc_safe_name(BASE_VM) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", USER):
+        raise ZooError("bad_request", "invalid macOS base VM or guest account name")
+    if run(server_id, f"test -x {PREPARE_HELPER}")[0] != 0:
+        raise ZooError(
+            "unavailable",
+            "The Mac needs the automatic preparation helper",
+            "Run the Mac host setup command once to install it.",
+        )
+    key = public_key()
+    check(
+        server_id,
+        f"mkdir -p ~/.zoovm && printf '%s\\n' {shlex.quote(key)} | "
+        f"nohup {PREPARE_HELPER} --name {shlex.quote(BASE_VM)} --guest-user {shlex.quote(USER)} "
+        f">> {INSTALL_LOG} 2>&1 &",
+    )
+
+
+def vnc_safe_name(name: str) -> bool:
+    return re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", name) is not None
 
 
 def base_start(server_id: str) -> str:
@@ -724,6 +856,8 @@ def base_start(server_id: str) -> str:
 
 def base_stop(server_id: str):
     stop(base_id(server_id))
+    if BASE_VM in running_vms(server_id):
+        raise RuntimeError("The base VM is still stopping; retry preparation after it stops")
     if run(server_id, f"test -f {ready_marker()}")[0] == 0:
         mark_base(server_id)
 

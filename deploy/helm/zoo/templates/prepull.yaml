@@ -42,6 +42,19 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+        - name: browser
+          image: {{ default (include "zoo.image" (list . "sandbox-browser")) .Values.sandboxes.images.browser }}
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sleep", "infinity"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          {{- with .Values.sandboxes.prepull.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
         - name: code
           image: {{ default (include "zoo.image" (list . "sandbox-code")) .Values.sandboxes.images.code }}
           imagePullPolicy: IfNotPresent

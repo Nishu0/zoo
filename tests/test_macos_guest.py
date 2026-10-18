@@ -6,6 +6,8 @@ import pytest
 from server import macos
 from server.errors import ZooError
 
+CONNECTED = macos.connected
+
 
 class Agent:
     def __init__(self):
@@ -51,6 +53,13 @@ def test_admin_rights_follow_the_sandbox(monkeypatch):
         f"! dseditgroup -o checkmember -m {macos.USER} admin >/dev/null"
     )
     assert "NOPASSWD" in grant and "-a " + macos.USER in grant
+    # A nested admin membership can already satisfy checkmember, but disappears
+    # on demotion. Always add the explicit SSH SACL entry before removing admin.
+    explicit_ssh = f"dseditgroup -o edit -a {macos.USER} -t user com.apple.access_ssh"
+    assert drop.index(explicit_ssh) < drop.index(f"dseditgroup -o edit -d {macos.USER} -t user admin")
+    assert explicit_ssh in grant
+    assert "checkmember -m " + macos.USER + " com.apple.access_ssh" not in drop
+    assert drop.startswith("set -e\n")
 
 
 @pytest.mark.parametrize("missing", ["binary", "address"])
@@ -98,11 +107,11 @@ def base_bootstrap(monkeypatch):
         runtime_id=macos.base_id("host"),
         bind=Mock(),
         install=Mock(),
-        accessibility=Mock(return_value=({}, b"")),
+        execution=Mock(return_value=(0, b"", b"")),
         mark=Mock(return_value="ready-version"),
         timeline=Mock(),
     )
-    for name in ("bind", "install", "accessibility", "mark"):
+    for name in ("bind", "install", "execution", "mark"):
         state.timeline.attach_mock(getattr(state, name), name)
     monkeypatch.setattr(
         macos, "run", lambda server_id, command, timeout=60: (1 if command.startswith("test -f ") else 0, b"", b"")
@@ -112,23 +121,23 @@ def base_bootstrap(monkeypatch):
     monkeypatch.setattr(macos, "guests", {state.runtime_id: Mock()})
     monkeypatch.setattr(macos.hub, "bind", state.bind)
     monkeypatch.setattr(macos, "install_guest", state.install)
-    monkeypatch.setattr(macos, "connected", lambda runtime_id, service: SimpleNamespace(call=state.accessibility))
+    monkeypatch.setattr(macos, "connected", lambda runtime_id, service: SimpleNamespace(run=state.execution))
     monkeypatch.setattr(macos, "mark_base", state.mark)
     return state
 
 
-def test_base_is_marked_ready_only_after_guest_install_and_accessibility_probe(base_bootstrap):
+def test_base_is_marked_ready_only_after_guest_install_and_exec_probe(base_bootstrap):
     assert macos.base_ready(base_bootstrap.host)
     assert base_bootstrap.timeline.mock_calls == [
         call.bind(base_bootstrap.runtime_id, "base-host"),
         call.install(base_bootstrap.runtime_id, "base-host"),
-        call.accessibility("a11y", {"max_nodes": 1}, timeout=5),
+        call.execution(["true"], timeout=5),
         call.mark(base_bootstrap.host),
     ]
 
 
-@pytest.mark.parametrize("failure", ["install", "accessibility"])
-def test_base_is_not_marked_ready_when_guest_or_accessibility_setup_fails(base_bootstrap, failure):
+@pytest.mark.parametrize("failure", ["install", "execution"])
+def test_base_is_not_marked_ready_when_guest_install_or_exec_probe_fails(base_bootstrap, failure):
     getattr(base_bootstrap, failure).side_effect = ZooError("guest_unavailable", "base bootstrap failed")
     assert macos.base_ready(base_bootstrap.host) is False
     base_bootstrap.mark.assert_not_called()
@@ -141,3 +150,49 @@ def test_network_policy_keeps_the_guest_reaching_the_api(monkeypatch):
     monkeypatch.delenv("ZOO_API_URL", raising=False)
     with pytest.raises(ZooError, match="ZOO_API_URL"):
         macos.guest_rule()
+
+
+@pytest.mark.parametrize("unavailable", ["stopped", "ssh_port", "ssh_authentication"])
+def test_base_bootstrap_waits_for_running_vm_and_authenticated_guest_ssh(base_bootstrap, monkeypatch, unavailable):
+    if unavailable == "stopped":
+        monkeypatch.setattr(macos, "running_vms", lambda _: set())
+    elif unavailable == "ssh_port":
+        monkeypatch.setattr(macos, "run", lambda *args, **kwargs: (1, b"", b""))
+    else:
+        monkeypatch.setattr(macos, "guest", Mock(side_effect=ConnectionError("guest SSH not ready")))
+    assert macos.base_ready(base_bootstrap.host) is False
+    base_bootstrap.install.assert_not_called()
+    base_bootstrap.mark.assert_not_called()
+
+
+def test_prepared_base_marker_avoids_reinstalling_the_guest(base_bootstrap, monkeypatch):
+    monkeypatch.setattr(macos, "run", lambda *args, **kwargs: (0, b"", b""))
+    assert macos.base_ready(base_bootstrap.host)
+    base_bootstrap.bind.assert_not_called()
+    base_bootstrap.install.assert_not_called()
+    base_bootstrap.execution.assert_not_called()
+    base_bootstrap.mark.assert_not_called()
+
+
+def test_exec_capable_base_is_ready_without_optional_accessibility_permission(base_bootstrap, monkeypatch):
+    # Native macOS privacy permission is optional for shell/files and must not block unattended setup.
+    monkeypatch.setattr(macos.hub, "for_runtime", lambda _: Agent())
+    monkeypatch.setattr(macos, "connected", CONNECTED)
+    assert macos.base_ready(base_bootstrap.host)
+    base_bootstrap.mark.assert_called_once_with(base_bootstrap.host)
+
+
+@pytest.mark.parametrize("result", [(1, b"", b"permission denied"), (127, b"", b"command missing")])
+def test_connected_agent_is_not_ready_when_exec_probe_fails(base_bootstrap, result):
+    base_bootstrap.execution.return_value = result
+    assert macos.base_ready(base_bootstrap.host) is False
+    base_bootstrap.mark.assert_not_called()
+
+
+def test_base_with_setup_assistant_still_running_is_not_marked_ready(base_bootstrap, monkeypatch):
+    monkeypatch.setattr(macos, "desktop_ready", lambda _: False)
+    assert macos.base_ready(base_bootstrap.host) is False
+    base_bootstrap.bind.assert_not_called()
+    base_bootstrap.install.assert_not_called()
+    base_bootstrap.execution.assert_not_called()
+    base_bootstrap.mark.assert_not_called()

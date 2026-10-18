@@ -23,9 +23,9 @@ RUN go mod download
 COPY node/ ./
 COPY pyproject.toml /pyproject.toml
 RUN version=$(sed -n 's/^version = "\(.*\)"/\1/p' /pyproject.toml) && mkdir -p /dist \
- && for t in darwin/arm64 windows/amd64; do \
+ && for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do \
       os=${t%/*}; arch=${t#*/}; ext=$([ "$os" = windows ] && echo .exe || true); \
-      CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags="-s -w -X main.version=$version" -o /dist/zoo-node-$os-$arch$ext . ; \
+      CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags="-s -w -X main.version=$version" -o /dist/zoo-node-$os-$arch$ext . || exit 1; \
     done && echo "$version" > /dist/VERSION
 
 FROM python:3.12-slim

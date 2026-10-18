@@ -246,13 +246,13 @@ func (hub *nodeHub) authenticate(ctx context.Context) (nodeRecord, error) {
 		return nodeRecord{}, status.Error(codes.Unauthenticated, "unknown, expired or replaced node certificate")
 	}
 	if !supportedNodePlatform(record.OS, record.Arch) {
-		return nodeRecord{}, status.Error(codes.Unimplemented, "node hosts support only darwin/arm64 and windows/amd64")
+		return nodeRecord{}, status.Error(codes.Unimplemented, "unsupported node operating system or architecture")
 	}
 	return record, nil
 }
 
 func supportedNodePlatform(osName, arch string) bool {
-	return osName == "darwin" && arch == "arm64" || osName == "windows" && arch == "amd64"
+	return (osName == "linux" || osName == "darwin") && (arch == "arm64" || arch == "amd64") || osName == "windows" && arch == "amd64"
 }
 
 func validNodeRecord(record nodeRecord, certificate *x509.Certificate) bool {

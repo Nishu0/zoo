@@ -122,8 +122,8 @@ def test_join_refuses_bad_expired_and_foreign_tokens(client, alice):
     assert client.get("/v1/servers", headers=alice).json() == []
 
 
-@pytest.mark.parametrize("platform,os_name", [("macos", "darwin"), ("windows", "windows")])
-def test_mac_and_windows_nodes_bring_their_ssh_account_and_host_key(client, alice, platform, os_name):
+@pytest.mark.parametrize("platform,os_name", [("linux", "linux"), ("macos", "darwin"), ("windows", "windows")])
+def test_nodes_on_all_platforms_bring_their_ssh_account_and_host_key(client, alice, platform, os_name):
     made = new_token(client, alice, platform=platform)
     for field in ("ssh_user", "ssh_host_key"):
         _, res = join(client, made["token"], os_name, **{field: None})
@@ -138,7 +138,7 @@ def test_mac_and_windows_nodes_bring_their_ssh_account_and_host_key(client, alic
     assert node.ssh_host_key == HOST_KEY
     assert (
         "--token" in made["install_command"]
-        if platform == "macos"
+        if platform != "windows"
         else f" -Token '{made['token']}'" in made["install_command"]
     )
 
@@ -261,3 +261,43 @@ def test_docker_snapshots_go_through_object_storage(fake, monkeypatch):
     fake.originals["restore_snapshot"]("s", "snap1")
     assert host.created[-1][1]["volumes"] == {"zoo-home-s": {"bind": "/to", "mode": "rw"}}
     assert "find /to -mindepth 1 -delete" in host.helpers[-1].commands[0][-1]
+
+
+@pytest.mark.parametrize(
+    "name,relative", [("install.sh", "install.sh"), ("install-node.ps1", "windows/install-node.ps1")]
+)
+def test_public_installers_match_the_running_api_image(client, name, relative):
+    from pathlib import Path
+
+    response = client.get(f"/v1/nodes/install/{name}")
+    assert response.status_code == 200
+    assert response.content == (Path(nodes.ROOT) / relative).read_bytes()
+    assert response.headers["content-type"].startswith("text/plain")
+    assert client.get("/v1/nodes/install/unknown.sh").status_code == 422
+
+
+@pytest.mark.parametrize(
+    "platform,name", [("linux", "install.sh"), ("macos", "install.sh"), ("windows", "install-node.ps1")]
+)
+def test_enrollment_commands_download_installers_from_the_control_plane(client, alice, monkeypatch, platform, name):
+    from server import platforms
+
+    monkeypatch.setattr(platforms, "INSTALL_URL", None)
+    made = new_token(client, alice, platform=platform)
+    assert f"http://testserver/v1/nodes/install/{name}" in made["install_command"]
+    assert made["token"] in made["install_command"]
+
+
+def test_public_bootstrap_ssh_key_is_the_control_plane_public_identity_without_cache(client):
+    from server import ssh
+
+    first = client.get("/v1/nodes/bootstrap/ssh-key")
+    assert first.status_code == 200, first.text
+    assert first.headers["content-type"].startswith("text/plain")
+    assert first.headers["cache-control"] == "no-store"
+    assert first.text == ssh.public_key() + "\n"
+    assert ssh.validate_host_key(first.text) == first.text.strip()
+    assert first.text.startswith("ssh-ed25519 ")
+    assert "PRIVATE KEY" not in first.text
+    # Existing installers resume without authenticating again or rotating the SSH identity.
+    assert client.get("/v1/nodes/bootstrap/ssh-key").text == first.text

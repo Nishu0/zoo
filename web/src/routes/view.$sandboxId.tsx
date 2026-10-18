@@ -26,7 +26,9 @@ function SandboxView() {
     : sandbox.data?.status === "failed"
       ? (sandbox.data.error_message ?? "Sandbox failed to start.")
       : sandbox.data && sandbox.data.status !== "running"
-        ? `Sandbox is ${sandbox.data.status}…`
+        ? sandbox.data.job?.waiting && sandbox.data.job.last_error
+          ? sandbox.data.job.last_error.replace(/^Waiting:\s*/, "")
+          : `Sandbox is ${sandbox.data.status}…`
         : null
 
   return (

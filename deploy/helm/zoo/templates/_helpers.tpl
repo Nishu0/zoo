@@ -78,8 +78,12 @@ app.kubernetes.io/component: {{ index . 1 }}
   value: {{ .Values.metrics.port | quote }}
 - name: ZOO_SANDBOX_IMAGE
   value: {{ include "zoo.desktopImage" . | quote }}
+- name: ZOO_BROWSER_IMAGE
+  value: {{ default (include "zoo.image" (list . "sandbox-browser")) .Values.sandboxes.images.browser | quote }}
 - name: ZOO_CODE_IMAGE
   value: {{ default (include "zoo.image" (list . "sandbox-code")) .Values.sandboxes.images.code | quote }}
+- name: ZOO_EGRESS_IMAGE
+  value: {{ include "zoo.image" (list . "egress") | quote }}
 - name: ZOO_GATEWAY_PEERS
   value: {{ printf "%s-gateway-peers.%s.svc.cluster.local" (include "zoo.fullname" .) .Release.Namespace | quote }}
 - name: ZOO_GATEWAY_SERVICE

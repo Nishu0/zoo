@@ -1,22 +1,28 @@
 ---
 title: Isolation
-description: Kata VMs on both Linux backends and native VMs on Mac/Windows hosts.
+description: Docker isolation modes, Kata on Kubernetes, and native Mac/Windows VMs.
 ---
 
-## A VM boundary for every sandbox
+## Linux isolation
 
-Docker and Kubernetes are deployment choices, not isolation levels. Both Linux backends
-use Kata and require hardware virtualization. Docker uses `io.containerd.kata.v2`;
-Kubernetes uses RuntimeClass `kata`. The pinned Kubernetes Cloud Hypervisor configuration
-is amd64-only; Docker's supported QEMU shim also serves arm64.
+Docker supports three `ZOO_ISOLATION` modes: `auto` prefers Kata when available and otherwise
+uses ordinary Linux containers; `kata` requires runtime `io.containerd.kata.v2`; `runc` uses
+ordinary containers. This applies to local and enrolled remote Docker engines. Ordinary
+containers share their engine's Linux kernel. Docker Desktop runs that engine in a Linux
+VM; it does not provide a separate VM boundary for each ordinary container.
+
+Kubernetes uses RuntimeClass `kata` and requires hardware virtualization. The pinned
+Kubernetes Cloud Hypervisor configuration is amd64-only; Docker's supported Kata QEMU shim
+also serves arm64. Strict Kata mode requires a correctly configured engine and working KVM.
 
 macOS runs through Virtualization.framework on an enrolled Apple Silicon host. Windows
-runs through Hyper-V on an enrolled host. Linux capacity is never borrowed from those hosts.
+runs through Hyper-V on an enrolled host. Both host types can also run Linux desktop, Firefox browser, and code sandboxes through a Linux Docker engine.
 
 ## What the boundary protects
 
-Sandbox processes may have broad privileges inside their own VM without receiving the
-host kernel or control-plane credentials. Guest tools and the VNC path pass through the
+Kata and native VM sandboxes have a separate guest kernel. Ordinary Docker containers
+share the engine kernel and provide a different isolation boundary. Sandbox processes do
+not receive runtime sockets or control-plane credentials. Guest tools and the VNC path pass through the
 authenticated gateway; desktop ports are not published directly.
 
 A VM boundary is not a promise that every hypervisor, kernel or device has no vulnerability.

@@ -2,11 +2,15 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"net"
 	"reflect"
 	"strings"
 	"testing"
@@ -164,6 +168,91 @@ func TestVNCNodeSSHRequiresDBIdentityAndPinnedHostKey(test *testing.T) {
 		record.NodeURL = endpoint
 		if _, err := resolver.nodeSSH(ctx, record); status.Code(err) != codes.FailedPrecondition {
 			test.Fatalf("unregistered SSH endpoint accepted: %s, %v", endpoint, err)
+		}
+	}
+}
+
+func TestVNCSSHUsesPinnedKeyWhenHostOffersMultipleTypes(test *testing.T) {
+	_, identity, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		test.Fatal(err)
+	}
+	signer, err := ssh.NewSignerFromKey(identity)
+	if err != nil {
+		test.Fatal(err)
+	}
+	ecdsaKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		test.Fatal(err)
+	}
+	alternate, err := ssh.NewSignerFromKey(ecdsaKey)
+	if err != nil {
+		test.Fatal(err)
+	}
+	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		test.Fatal(err)
+	}
+	rsaSigner, err := ssh.NewSignerFromKey(rsaKey)
+	if err != nil {
+		test.Fatal(err)
+	}
+	for _, hostSigner := range []ssh.Signer{signer, rsaSigner} {
+		for _, pinned := range []bool{true, false} {
+			name := hostSigner.PublicKey().Type() + "/current-pin"
+			pin := hostSigner.PublicKey()
+			if !pinned {
+				name = hostSigner.PublicKey().Type() + "/changed-host-key"
+				public, _, err := ed25519.GenerateKey(rand.Reader)
+				if err != nil {
+					test.Fatal(err)
+				}
+				pin, err = ssh.NewPublicKey(public)
+				if err != nil {
+					test.Fatal(err)
+				}
+			}
+			test.Run(name, func(test *testing.T) {
+				listener, err := net.Listen("tcp", "127.0.0.1:0")
+				if err != nil {
+					test.Fatal(err)
+				}
+				defer listener.Close()
+				done := make(chan struct{})
+				go func() {
+					defer close(done)
+					transport, err := listener.Accept()
+					if err != nil {
+						return
+					}
+					defer transport.Close()
+					transport.SetDeadline(time.Now().Add(5 * time.Second))
+					config := &ssh.ServerConfig{PublicKeyCallback: func(_ ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+						if string(key.Marshal()) != string(signer.PublicKey().Marshal()) {
+							return nil, errors.New("wrong client identity")
+						}
+						return nil, nil
+					}}
+					config.AddHostKey(alternate)
+					config.AddHostKey(hostSigner)
+					connection, _, _, err := ssh.NewServerConn(transport, config)
+					if err == nil {
+						connection.Close()
+					}
+				}()
+				config := vncSSHConfig("viewer", signer, pin)
+				connection, err := ssh.Dial("tcp", listener.Addr().String(), config)
+				if err == nil {
+					connection.Close()
+				}
+				<-done
+				if pinned && err != nil {
+					test.Fatalf("valid pinned host with alternate key failed: %v", err)
+				}
+				if !pinned && err == nil {
+					test.Fatal("changed pinned host key accepted")
+				}
+			})
 		}
 	}
 }

@@ -28,9 +28,11 @@ def register(app: FastAPI):
         return {"status": "ok"}
 
     @app.get("/readyz", include_in_schema=False)
-    async def readyz(servers: bool = True):
-        """With servers=false only this process's own dependencies count: a Kubernetes readiness probe must not
-        take every API pod out of service because one remote server is down."""
+    async def readyz(servers: bool = False):
+        """Check service dependencies by default; servers=true also diagnoses enrolled hosts.
+
+        A tenant host going offline must not remove the control plane from service.
+        """
         names = list(CHECKS)
         probes = [check(fn) for fn in CHECKS.values()]
         found = []

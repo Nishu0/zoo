@@ -221,6 +221,9 @@ def test_health_probes(client, alice, monkeypatch, runtime_requirements):
 
     monkeypatch.setattr(health, "host_requirements", down)
     ready = client.get("/readyz")
+    assert ready.status_code == 200
+    assert "server:box" not in ready.json()["checks"]
+    ready = client.get("/readyz?servers=true")
     assert ready.status_code == 503
     assert ready.json()["checks"]["server:box"] == "No route to host"
 

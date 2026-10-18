@@ -595,6 +595,66 @@ func TestVNCInputsAndUnicodeKeysyms(test *testing.T) {
 	}
 }
 
+func TestVNCDoesNotPublishHalfPaintedUpdates(test *testing.T) {
+	session, fake := startFakeRFB(test, 32, 32, "password")
+	full := image.Rect(0, 0, 32, 32)
+	fakeRFBSend(test, fake, fakeRFBRectangle(full, vncRaw, fakeRFBPixels(32, 32, color.RGBA{R: 100, A: 255})))
+	_, version := awaitVNCVersion(test, session, 1)
+	partial := fakeRFBRectangle(full, vncRaw, fakeRFBPixels(32, 32, color.RGBA{A: 255}))
+	partial[3] = 2
+	fakeRFBSend(test, fake, partial)
+	deadline := time.Now().Add(time.Second)
+	for {
+		session.mu.Lock()
+		applied, ready := session.version > version, session.ready
+		session.mu.Unlock()
+		if applied {
+			if ready {
+				test.Fatal("viewer can capture a transient black rectangle before the update completes")
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			test.Fatal("first rectangle was not processed")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	final := fakeRFBRectangle(full, vncRaw, fakeRFBPixels(32, 32, color.RGBA{R: 200, A: 255}))
+	fakeRFBSend(test, fake, final[4:])
+	frame, _ := awaitVNCVersion(test, session, version+2)
+	if frame.RGBAAt(0, 0).R != 200 {
+		test.Fatal("completed update was not published")
+	}
+}
+
+func TestVNCSameSizeNotificationDoesNotRestartFullRefresh(test *testing.T) {
+	for _, encoding := range []int32{vncDesktopSize, vncExtendedDesktopSize} {
+		test.Run(fmt.Sprint(encoding), func(test *testing.T) {
+			session, fake := startFakeRFB(test, 32, 32, "password")
+			awaitRFBCommand(test, fake, 3)
+			var layout []byte
+			if encoding == vncExtendedDesktopSize {
+				layout = []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 32, 0, 32, 0, 0, 0, 0}
+			}
+			// x11vnc includes the current layout with full refreshes. Requesting
+			// another full refresh here repeats that layout forever after reconnect.
+			update := fakeRFBRectangle(image.Rect(0, 0, 32, 32), encoding, layout)
+			pixels := fakeRFBRectangle(image.Rect(0, 0, 32, 32), vncRaw, fakeRFBPixels(32, 32, color.RGBA{R: 200, A: 255}))
+			update[3] = 2
+			fakeRFBSend(test, fake, append(update, pixels[4:]...))
+			if request := awaitRFBCommand(test, fake, 3); request[1] != 1 {
+				test.Fatalf("unchanged layout restarted full refresh: %v", request)
+			}
+			ctx, cancel := context.WithTimeout(test.Context(), time.Second)
+			defer cancel()
+			frame, _, err := session.Frame(ctx)
+			if err != nil || frame.RGBAAt(0, 0).R != 200 {
+				test.Fatalf("reconnected viewer did not receive the framebuffer: %v", err)
+			}
+		})
+	}
+}
+
 func TestVNCResizeInvalidatesFullDiff(test *testing.T) {
 	session, fake := startFakeRFB(test, 32, 32, "password")
 	fakeRFBSend(test, fake, fakeRFBRectangle(image.Rect(0, 0, 32, 32), vncRaw, fakeRFBPixels(32, 32, color.RGBA{R: 1, A: 255})))

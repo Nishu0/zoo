@@ -209,9 +209,10 @@ sandboxes:
   spareVolumes: 4
   # a stopped sandbox stays paused (resumes instantly) this long, then is deleted down to its volume
   pauseMinutes: 30
-  # images; default to the release's zoo-sandbox-desktop and zoo-sandbox-code
+  # images; default to the release's desktop, browser, and code images
   images:
     desktop: ""
+    browser: ""
     code: ""
   imagePullSecret: ""
   # sandboxes reach the internet and the gateway, nothing else in the cluster

@@ -51,13 +51,13 @@ struct SlotLease: Codable, Equatable {
 final class BundleLock {
     var descriptor: Int32 = -1
 
-    init(_ key: String) throws {
+    init(_ key: String, wait: Bool = false) throws {
         let locks = root.appendingPathComponent(".locks")
         try FileManager.default.createDirectory(at: locks, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         let path = locks.appendingPathComponent(digest(Data(key.utf8))).path
         let opened = open(path, O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
         guard opened >= 0 else { throw Failure("cannot open VM lock: \(String(cString: strerror(errno)))") }
-        guard flock(opened, LOCK_EX | LOCK_NB) == 0 else {
+        guard flock(opened, LOCK_EX | (wait ? 0 : LOCK_NB)) == 0 else {
             close(opened)
             throw Failure("VM identity or slot is already in use")
         }
@@ -308,6 +308,7 @@ func configuration(_ name: String) throws -> VZVirtualMachineConfiguration {
 func download(_ url: URL, to destination: URL) throws {
     // curl shows progress and resumes a partial download if install is interrupted and run again.
     print("downloading \(url.absoluteString)")
+    fflush(stdout)
     let partial = destination.appendingPathExtension("part")
     let curl = Process()
     curl.executableURL = URL(fileURLWithPath: "/usr/bin/curl")
@@ -317,6 +318,42 @@ func download(_ url: URL, to destination: URL) throws {
     guard curl.terminationStatus == 0 else { throw Failure("download failed (curl exit \(curl.terminationStatus)); run install again to resume") }
     try? FileManager.default.removeItem(at: destination)
     try FileManager.default.moveItem(at: partial, to: destination)
+}
+
+// Restores share an immutable, build-specific IPSW outside VM bundles. Deleting
+// a base must not delete its expensive download, and only one writer resumes it.
+@MainActor
+func cachedRestoreImage(_ latest: VZMacOSRestoreImage, legacy: URL) async throws -> URL {
+    let cache = root.deletingLastPathComponent().appendingPathComponent("cache/restore")
+    try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+    let key = digest(Data(latest.buildVersion.utf8))
+    let destination = cache.appendingPathComponent("\(key).ipsw")
+    let lock = try BundleLock("restore-cache:\(key)", wait: true)
+    defer { withExtendedLifetime(lock) {} }
+    if FileManager.default.fileExists(atPath: destination.path) {
+        if let cached = try? await VZMacOSRestoreImage.image(from: destination), cached.buildVersion == latest.buildVersion {
+            print("using cached macOS restore image (\(latest.buildVersion))")
+            fflush(stdout)
+            return destination
+        }
+        // Keep a bad or mismatched artifact for diagnosis; never truncate an
+        // existing valid image in order to write a replacement download.
+        let quarantine = cache.appendingPathComponent("\(key).invalid-\(UUID().uuidString).ipsw")
+        try FileManager.default.moveItem(at: destination, to: quarantine)
+    }
+    if FileManager.default.fileExists(atPath: legacy.path),
+       let existing = try? await VZMacOSRestoreImage.image(from: legacy), existing.buildVersion == latest.buildVersion {
+        try FileManager.default.moveItem(at: legacy, to: destination)
+        print("cached existing macOS restore image (\(latest.buildVersion))")
+        fflush(stdout)
+        return destination
+    }
+    try download(latest.url, to: destination)
+    let downloaded = try await VZMacOSRestoreImage.image(from: destination)
+    guard downloaded.buildVersion == latest.buildVersion else {
+        throw Failure("downloaded macOS restore image has an unexpected build; cached image was not used")
+    }
+    return destination
 }
 
 @MainActor
@@ -342,10 +379,7 @@ func install(_ name: String, _ args: [String]) async throws {
     var ipsw = option(args, "--ipsw").map { URL(fileURLWithPath: $0) }
     if ipsw == nil {
         let latest = try await VZMacOSRestoreImage.latestSupported
-        ipsw = file(name, "restore.ipsw")
-        if !FileManager.default.fileExists(atPath: ipsw!.path) {
-            try download(latest.url, to: ipsw!)
-        }
+        ipsw = try await cachedRestoreImage(latest, legacy: file(name, "restore.ipsw"))
     }
     let image = try await VZMacOSRestoreImage.image(from: ipsw!)
     // the base's version (with when it was prepared) is what sandboxes record as the base they were cloned from
@@ -373,14 +407,15 @@ func install(_ name: String, _ args: [String]) async throws {
 
     let vm = VZVirtualMachine(configuration: try configuration(name))
     let installer = VZMacOSInstaller(virtualMachine: vm, restoringFromImageAt: ipsw!)
-    let observer = installer.progress.observe(\.fractionCompleted, options: [.new]) { progress, _ in
+    let observer = installer.progress.observe(\.fractionCompleted, options: [.initial, .new]) { progress, _ in
         print(String(format: "installing %.0f%%", progress.fractionCompleted * 100))
+        fflush(stdout)
     }
     try await installer.install()
     observer.invalidate()
     FileManager.default.createFile(atPath: file(name, "installed").path, contents: nil)
-    try? FileManager.default.removeItem(at: file(name, "restore.ipsw"))
-    print("installed \(name); run it with `zoovm run \(name)` and finish setup over VNC (see macos/README.md)")
+    print("installed \(name); Zoo can now prepare its guest account automatically")
+    fflush(stdout)
 }
 
 func clone(_ source: String, _ name: String) throws {

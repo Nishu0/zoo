@@ -47,12 +47,14 @@ def test_a_mac_cannot_host_windows_vms(zoo, user):
 
 
 @pytest.mark.parametrize("kind", ["desktop", "browser", "code"])
-def test_linux_rejects_explicit_servers(zoo, user, kind):
+def test_linux_requires_an_existing_server_and_ready_docker(zoo, user, kind):
     remote = add_server("alice@example.com", "windows")
-    for server_id in (remote, "missing"):
-        with pytest.raises(ZooError) as error:
-            place(zoo, user, server_id, kind)
-        assert error.value.code == "not_supported"
+    with pytest.raises(ZooError) as error:
+        place(zoo, user, remote, kind)
+    assert error.value.code == "unavailable"
+    with pytest.raises(HTTPException) as missing:
+        place(zoo, user, "missing", kind)
+    assert missing.value.status_code == 404
 
 
 def test_vms_need_a_server(zoo, user):

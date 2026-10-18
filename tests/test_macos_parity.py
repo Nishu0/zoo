@@ -4,6 +4,7 @@ window tools through the guest. Host commands are answered from outputs a real M
 import json
 import re
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -54,6 +55,7 @@ def mac(monkeypatch):
     monkeypatch.setattr(macos, "run", mac)
     monkeypatch.setattr(macos, "connect", lambda server_id, url: None)
     monkeypatch.setattr(macos, "base_ready", lambda server_id: True)
+    monkeypatch.setattr(macos, "base_status", lambda _: {"state": "stopped", "ready": True})
     for name in ("wait_for_guest", "set_admin", "write_env", "install_guest"):
         monkeypatch.setattr(macos, name, lambda *a, **k: None)
     monkeypatch.setattr(macos, "boot", lambda server_id, name: "vnc://:pw@127.0.0.1:5901")
@@ -218,3 +220,92 @@ def test_window_tools_use_the_guest(monkeypatch):
     monkeypatch.setattr(macos.hub, "for_runtime", lambda rid: None)
     with pytest.raises(ZooError, match="guest agent is not connected"):
         tools.window_minimize("r", "TextEdit:1")
+
+
+def test_sandbox_boot_waits_for_base_preparation_without_consuming_retry_attempts(client, alice, zoo, monkeypatch):
+    jobs = zoo.sandbox_api.jobs
+    monkeypatch.setattr(jobs, "inline", False)
+    # App-lifespan tests can leave the shared harness's worker bound to their closed loop.
+    # This test claims jobs manually and needs no background worker event loop.
+    monkeypatch.setattr(jobs, "loop", None)
+    monkeypatch.setattr(jobs, "event", None)
+    monkeypatch.setattr(jobs, "closing", False)
+    server_id = add_server("alice@example.com", "macos", "preparing")
+    reason = "Preparing macOS: installing guest tools"
+    prepared_runtime = f"macos:{server_id}:zoo-prepared"
+    start = Mock(side_effect=[Wait(reason), prepared_runtime])
+    monkeypatch.setattr(macos, "start", start)
+    monkeypatch.setattr(macos, "base_of", lambda _: "ready-version")
+    monkeypatch.setattr(sandbox_api, "enforce", lambda *args: None)
+    response = client.post("/sandboxes", json={"kind": "macos", "server_id": server_id}, headers=alice)
+    assert response.status_code == 201, response.text
+    sid = response.json()["id"]
+    with db_manager.session() as db:
+        [boot] = [job for job in db.list_jobs_by_state(state="queued") if job.sandbox_id == sid]
+    jobs.execute(present(jobs.claim(boot)))
+    with db_manager.session() as db:
+        waiting = present(db.get_job(id=boot.id))
+        sandbox = present(db.get_sandbox(id=sid))
+    assert (waiting.state, waiting.attempts, waiting.last_error) == ("queued", 0, WAITING + reason)
+    assert sandbox.status == "provisioning"
+    assert sandbox.runtime_id is None
+    assert sandbox.error_message is None
+    jobs.execute(present(jobs.claim(waiting)))
+    with db_manager.session() as db:
+        completed = present(db.get_job(id=boot.id))
+        sandbox = present(db.get_sandbox(id=sid))
+    assert completed.state == "succeeded"
+    assert completed.attempts == 1
+    assert sandbox.status == "running"
+    assert sandbox.runtime_id == prepared_runtime
+
+
+@pytest.mark.parametrize("state", ["missing", "stopped", "running"])
+def test_first_sandbox_prepares_an_unready_base_and_waits(mac, monkeypatch, state):
+    install = Mock()
+    monkeypatch.setattr(macos, "base_ready", lambda _: False)
+    monkeypatch.setattr(macos, "base_status", lambda _: {"state": state, "ready": False})
+    monkeypatch.setattr(macos, "base_install", install)
+    with pytest.raises(Wait, match="(?i)prepar"):
+        macos.start("first", SERVER, {})
+    install.assert_called_once_with(SERVER.id)
+    assert not any("zoovm clone" in command for command in mac.commands)
+
+
+def test_other_sandbox_boots_wait_for_preparation_already_in_progress(mac, monkeypatch):
+    install = Mock()
+    monkeypatch.setattr(macos, "base_ready", lambda _: False)
+    monkeypatch.setattr(macos, "base_status", lambda _: {"state": "installing", "progress": 42, "ready": False})
+    monkeypatch.setattr(macos, "base_install", install)
+    for sandbox_id in ("first", "second"):
+        with pytest.raises(Wait, match="(?i)prepar"):
+            macos.start(sandbox_id, SERVER, {})
+    install.assert_not_called()
+    assert not any("zoovm clone" in command for command in mac.commands)
+
+
+def test_failed_preparation_reports_the_reason_until_explicit_retry(mac, monkeypatch):
+    state = {"state": "failed", "ready": False, "message": "macOS restore download failed"}
+    install = Mock()
+    monkeypatch.setattr(macos, "base_ready", lambda _: False)
+    monkeypatch.setattr(macos, "base_status", lambda _: state)
+    monkeypatch.setattr(macos, "base_install", install)
+    with pytest.raises(RuntimeError, match="macOS restore download failed"):
+        macos.start("first", SERVER, {})
+    install.assert_not_called()
+    # Explicit Retry prepares again; sandbox boots then wait instead of repeating a failed restore.
+    macos.base_install(SERVER.id)
+    state.update(state="installing", message="downloading macOS")
+    with pytest.raises(Wait, match="downloading macOS; the sandbox will start automatically"):
+        macos.start("first", SERVER, {})
+    install.assert_called_once_with(SERVER.id)
+
+
+def test_existing_clone_boot_does_not_require_preparing_a_new_base(mac, monkeypatch):
+    mac.vms.add("zoo-existing")
+    install = Mock()
+    monkeypatch.setattr(macos, "base_ready", lambda _: False)
+    monkeypatch.setattr(macos, "base_status", lambda _: {"state": "failed", "ready": False})
+    monkeypatch.setattr(macos, "base_install", install)
+    assert macos.start("existing", SERVER, {}) == "macos:mac:zoo-existing"
+    install.assert_not_called()

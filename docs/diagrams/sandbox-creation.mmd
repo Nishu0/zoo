@@ -1,0 +1,26 @@
+sequenceDiagram
+    participant client as Dashboard / agent / SDK
+    participant api as Python API
+    participant db as Postgres
+    participant worker as Python worker
+    participant runtime as Selected local or remote runtime
+    participant guest as Sandbox guest
+    participant gateway as Go gateway
+    client->>api: Create sandbox with kind and optional server
+    api->>db: Authenticate, check quota and policy, select placement
+    alt Compatible warm sandbox available
+        api->>db: Claim warm sandbox
+        api->>gateway: Hand off identity, policy and secrets
+        api-->>client: Ready sandbox after handoff
+    else Cold provisioning required
+        api->>db: Save sandbox and durable boot job
+        api-->>client: Sandbox with pending job
+        worker->>db: Claim boot job
+        worker->>runtime: Create sandbox and attach persistent data
+        runtime-->>guest: Boot sandbox and guest daemon
+        guest->>gateway: Establish authenticated outbound connection
+        worker->>gateway: Configure and check guest readiness
+        worker->>db: Mark sandbox running and job complete
+    end
+    client->>api: Read state or subscribe to events via SSE
+    api-->>client: Current state / lifecycle events

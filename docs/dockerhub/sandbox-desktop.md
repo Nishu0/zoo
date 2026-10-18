@@ -1,6 +1,6 @@
 # Zoo desktop sandbox
 
-The image for `desktop` and `browser` sandboxes: Debian with XFCE, Firefox, the guest agent and VNC. Both Linux runtimes use Kata VMs. The native gateway relays the guest VNC connection; there is no direct public desktop port.
+The image for `desktop` sandboxes: Debian with XFCE, Firefox, the guest agent and VNC. Browser sandboxes use the separate `zoo-sandbox-browser` image, which shows only Firefox. Docker isolation follows `ZOO_ISOLATION` (Kata or ordinary containers); Kubernetes uses Kata VMs. The native gateway relays the guest VNC connection; there is no direct public desktop port.
 
 Part of [Zoo](https://github.com/chann44/zoo), self-hosted sandboxes for AI agents. Install a whole stack with:
 

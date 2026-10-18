@@ -13,7 +13,7 @@
 </p>
 
 Zoo gives AI agents their own computers: Linux, macOS or Windows desktops, browsers and shells. Linux sandboxes run in
-Kata VMs, macOS in Virtualization.framework and Windows in Hyper-V. Agents drive them over MCP, REST or the Python SDK;
+Kata VMs or ordinary Docker containers, macOS in Virtualization.framework and Windows in Hyper-V. Agents drive them over MCP, REST or the Python SDK;
 you watch, and take over when needed, from the dashboard.
 
 ## Quickstart
@@ -53,7 +53,8 @@ you watch, and take over when needed, from the dashboard.
    ```
 
 Docker is the default Linux runtime. Kubernetes is opt-in and runs Cloud Hypervisor on amd64 with node-local storage;
-both need KVM. Mac and Windows hosts join as nodes for native sandboxes. The full walkthrough is in the
+Kata needs KVM. Linux, Mac, and Windows hosts join as nodes; hosts with Linux Docker engines add
+Linux desktop, Firefox browser, and code capacity alongside supported native VMs. The full walkthrough is in the
 [quickstart](site/src/content/docs/docs/get-started/quickstart.md).
 
 ## Documentation
@@ -61,7 +62,7 @@ both need KVM. Mac and Windows hosts join as nodes for native sandboxes. The ful
 The [docs](site/src/content/docs/docs/index.mdx) are built with the site at `/docs`:
 
 - **Get started**: [Quickstart](site/src/content/docs/docs/get-started/quickstart.md) · [Install](site/src/content/docs/docs/get-started/install.md) · [Your first sandbox](site/src/content/docs/docs/get-started/first-sandbox.md) · [Connect Claude Code or Claude Desktop](site/src/content/docs/docs/get-started/mcp.md)
-- **Guides**: Mac and Windows hosts, native sandboxes, [policies](site/src/content/docs/docs/guides/policies.md), vault, HTTPS and backups, upgrading, Kubernetes, [building on Zoo](site/src/content/docs/docs/guides/building-on-zoo.md)
+- **Guides**: Linux, Mac, and Windows hosts, native sandboxes, [policies](site/src/content/docs/docs/guides/policies.md), vault, HTTPS and backups, upgrading, Kubernetes, [building on Zoo](site/src/content/docs/docs/guides/building-on-zoo.md)
 - **Concepts**: architecture, security model, runtimes
 - **Reference**: REST API, tools, SDK, CLI, configuration, errors, [performance targets](site/src/content/docs/docs/reference/performance.md)
 

@@ -8,351 +8,351 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from "./routes/__root"
-import { Route as AppRouteImport } from "./routes/_app"
-import { Route as LoginRouteImport } from "./routes/login"
-import { Route as RegisterRouteImport } from "./routes/register"
-import { Route as AppIndexRouteImport } from "./routes/_app/index"
-import { Route as AppAuditRouteImport } from "./routes/_app/audit"
-import { Route as AppMonitoringRouteImport } from "./routes/_app/monitoring"
-import { Route as AppServersRouteImport } from "./routes/_app/servers"
-import { Route as AppSettingsRouteImport } from "./routes/_app/settings"
-import { Route as AppVaultRouteImport } from "./routes/_app/vault"
-import { Route as AppWelcomeRouteImport } from "./routes/_app/welcome"
-import { Route as AppWorkspaceRouteImport } from "./routes/_app/workspace"
-import { Route as BaseServerIdRouteImport } from "./routes/base.$serverId"
-import { Route as ViewSandboxIdRouteImport } from "./routes/view.$sandboxId"
-import { Route as AppInviteTokenRouteImport } from "./routes/_app/invite.$token"
-import { Route as AppSandboxesIndexRouteImport } from "./routes/_app/sandboxes/index"
-import { Route as AppSandboxesSandboxIdRouteImport } from "./routes/_app/sandboxes/$sandboxId"
-import { Route as AppSandboxesSandboxIdIndexRouteImport } from "./routes/_app/sandboxes/$sandboxId/index"
-import { Route as AppSandboxesSandboxIdActivityRouteImport } from "./routes/_app/sandboxes/$sandboxId/activity"
-import { Route as AppSandboxesSandboxIdAppsRouteImport } from "./routes/_app/sandboxes/$sandboxId/apps"
-import { Route as AppSandboxesSandboxIdNetworkRouteImport } from "./routes/_app/sandboxes/$sandboxId/network"
-import { Route as AppSandboxesSandboxIdPermissionsRouteImport } from "./routes/_app/sandboxes/$sandboxId/permissions"
-import { Route as AppSandboxesSandboxIdProfilesRouteImport } from "./routes/_app/sandboxes/$sandboxId/profiles"
-import { Route as AppSandboxesSandboxIdSecretsRouteImport } from "./routes/_app/sandboxes/$sandboxId/secrets"
-import { Route as AppSandboxesSandboxIdServerRouteImport } from "./routes/_app/sandboxes/$sandboxId/server"
-import { Route as AppSandboxesSandboxIdShareRouteImport } from "./routes/_app/sandboxes/$sandboxId/share"
-import { Route as AppSandboxesSandboxIdSnapshotsRouteImport } from "./routes/_app/sandboxes/$sandboxId/snapshots"
-import { Route as AppSandboxesSandboxIdTerminalRouteImport } from "./routes/_app/sandboxes/$sandboxId/terminal"
+import { Route as rootRouteImport } from './routes/__root'
+import { Route as AppRouteImport } from './routes/_app'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as RegisterRouteImport } from './routes/register'
+import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppAuditRouteImport } from './routes/_app/audit'
+import { Route as AppMonitoringRouteImport } from './routes/_app/monitoring'
+import { Route as AppServersRouteImport } from './routes/_app/servers'
+import { Route as AppSettingsRouteImport } from './routes/_app/settings'
+import { Route as AppVaultRouteImport } from './routes/_app/vault'
+import { Route as AppWelcomeRouteImport } from './routes/_app/welcome'
+import { Route as AppWorkspaceRouteImport } from './routes/_app/workspace'
+import { Route as BaseServerIdRouteImport } from './routes/base.$serverId'
+import { Route as ViewSandboxIdRouteImport } from './routes/view.$sandboxId'
+import { Route as AppInviteTokenRouteImport } from './routes/_app/invite.$token'
+import { Route as AppSandboxesIndexRouteImport } from './routes/_app/sandboxes/index'
+import { Route as AppSandboxesSandboxIdRouteImport } from './routes/_app/sandboxes/$sandboxId'
+import { Route as AppSandboxesSandboxIdIndexRouteImport } from './routes/_app/sandboxes/$sandboxId/index'
+import { Route as AppSandboxesSandboxIdActivityRouteImport } from './routes/_app/sandboxes/$sandboxId/activity'
+import { Route as AppSandboxesSandboxIdAppsRouteImport } from './routes/_app/sandboxes/$sandboxId/apps'
+import { Route as AppSandboxesSandboxIdNetworkRouteImport } from './routes/_app/sandboxes/$sandboxId/network'
+import { Route as AppSandboxesSandboxIdPermissionsRouteImport } from './routes/_app/sandboxes/$sandboxId/permissions'
+import { Route as AppSandboxesSandboxIdProfilesRouteImport } from './routes/_app/sandboxes/$sandboxId/profiles'
+import { Route as AppSandboxesSandboxIdSecretsRouteImport } from './routes/_app/sandboxes/$sandboxId/secrets'
+import { Route as AppSandboxesSandboxIdServerRouteImport } from './routes/_app/sandboxes/$sandboxId/server'
+import { Route as AppSandboxesSandboxIdShareRouteImport } from './routes/_app/sandboxes/$sandboxId/share'
+import { Route as AppSandboxesSandboxIdSnapshotsRouteImport } from './routes/_app/sandboxes/$sandboxId/snapshots'
+import { Route as AppSandboxesSandboxIdTerminalRouteImport } from './routes/_app/sandboxes/$sandboxId/terminal'
 
 const AppRoute = AppRouteImport.update({
-  id: "/_app",
+  id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
-  id: "/login",
-  path: "/login",
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RegisterRoute = RegisterRouteImport.update({
-  id: "/register",
-  path: "/register",
+  id: '/register',
+  path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
-  id: "/",
-  path: "/",
+  id: '/',
+  path: '/',
   getParentRoute: () => AppRoute,
 } as any)
 const AppAuditRoute = AppAuditRouteImport.update({
-  id: "/audit",
-  path: "/audit",
+  id: '/audit',
+  path: '/audit',
   getParentRoute: () => AppRoute,
 } as any)
 const AppMonitoringRoute = AppMonitoringRouteImport.update({
-  id: "/monitoring",
-  path: "/monitoring",
+  id: '/monitoring',
+  path: '/monitoring',
   getParentRoute: () => AppRoute,
 } as any)
 const AppServersRoute = AppServersRouteImport.update({
-  id: "/servers",
-  path: "/servers",
+  id: '/servers',
+  path: '/servers',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
-  id: "/settings",
-  path: "/settings",
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => AppRoute,
 } as any)
 const AppVaultRoute = AppVaultRouteImport.update({
-  id: "/vault",
-  path: "/vault",
+  id: '/vault',
+  path: '/vault',
   getParentRoute: () => AppRoute,
 } as any)
 const AppWelcomeRoute = AppWelcomeRouteImport.update({
-  id: "/welcome",
-  path: "/welcome",
+  id: '/welcome',
+  path: '/welcome',
   getParentRoute: () => AppRoute,
 } as any)
 const AppWorkspaceRoute = AppWorkspaceRouteImport.update({
-  id: "/workspace",
-  path: "/workspace",
+  id: '/workspace',
+  path: '/workspace',
   getParentRoute: () => AppRoute,
 } as any)
 const BaseServerIdRoute = BaseServerIdRouteImport.update({
-  id: "/base/$serverId",
-  path: "/base/$serverId",
+  id: '/base/$serverId',
+  path: '/base/$serverId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ViewSandboxIdRoute = ViewSandboxIdRouteImport.update({
-  id: "/view/$sandboxId",
-  path: "/view/$sandboxId",
+  id: '/view/$sandboxId',
+  path: '/view/$sandboxId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppInviteTokenRoute = AppInviteTokenRouteImport.update({
-  id: "/invite/$token",
-  path: "/invite/$token",
+  id: '/invite/$token',
+  path: '/invite/$token',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSandboxesIndexRoute = AppSandboxesIndexRouteImport.update({
-  id: "/sandboxes/",
-  path: "/sandboxes/",
+  id: '/sandboxes/',
+  path: '/sandboxes/',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSandboxesSandboxIdRoute = AppSandboxesSandboxIdRouteImport.update({
-  id: "/sandboxes/$sandboxId",
-  path: "/sandboxes/$sandboxId",
+  id: '/sandboxes/$sandboxId',
+  path: '/sandboxes/$sandboxId',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSandboxesSandboxIdIndexRoute =
   AppSandboxesSandboxIdIndexRouteImport.update({
-    id: "/",
-    path: "/",
+    id: '/',
+    path: '/',
     getParentRoute: () => AppSandboxesSandboxIdRoute,
   } as any)
 const AppSandboxesSandboxIdActivityRoute =
   AppSandboxesSandboxIdActivityRouteImport.update({
-    id: "/activity",
-    path: "/activity",
+    id: '/activity',
+    path: '/activity',
     getParentRoute: () => AppSandboxesSandboxIdRoute,
   } as any)
 const AppSandboxesSandboxIdAppsRoute =
   AppSandboxesSandboxIdAppsRouteImport.update({
-    id: "/apps",
-    path: "/apps",
+    id: '/apps',
+    path: '/apps',
     getParentRoute: () => AppSandboxesSandboxIdRoute,
   } as any)
 const AppSandboxesSandboxIdNetworkRoute =
   AppSandboxesSandboxIdNetworkRouteImport.update({
-    id: "/network",
-    path: "/network",
+    id: '/network',
+    path: '/network',
     getParentRoute: () => AppSandboxesSandboxIdRoute,
   } as any)
 const AppSandboxesSandboxIdPermissionsRoute =
   AppSandboxesSandboxIdPermissionsRouteImport.update({
-    id: "/permissions",
-    path: "/permissions",
+    id: '/permissions',
+    path: '/permissions',
     getParentRoute: () => AppSandboxesSandboxIdRoute,
   } as any)
 const AppSandboxesSandboxIdProfilesRoute =
   AppSandboxesSandboxIdProfilesRouteImport.update({
-    id: "/profiles",
-    path: "/profiles",
+    id: '/profiles',
+    path: '/profiles',
     getParentRoute: () => AppSandboxesSandboxIdRoute,
   } as any)
 const AppSandboxesSandboxIdSecretsRoute =
   AppSandboxesSandboxIdSecretsRouteImport.update({
-    id: "/secrets",
-    path: "/secrets",
+    id: '/secrets',
+    path: '/secrets',
     getParentRoute: () => AppSandboxesSandboxIdRoute,
   } as any)
 const AppSandboxesSandboxIdServerRoute =
   AppSandboxesSandboxIdServerRouteImport.update({
-    id: "/server",
-    path: "/server",
+    id: '/server',
+    path: '/server',
     getParentRoute: () => AppSandboxesSandboxIdRoute,
   } as any)
 const AppSandboxesSandboxIdShareRoute =
   AppSandboxesSandboxIdShareRouteImport.update({
-    id: "/share",
-    path: "/share",
+    id: '/share',
+    path: '/share',
     getParentRoute: () => AppSandboxesSandboxIdRoute,
   } as any)
 const AppSandboxesSandboxIdSnapshotsRoute =
   AppSandboxesSandboxIdSnapshotsRouteImport.update({
-    id: "/snapshots",
-    path: "/snapshots",
+    id: '/snapshots',
+    path: '/snapshots',
     getParentRoute: () => AppSandboxesSandboxIdRoute,
   } as any)
 const AppSandboxesSandboxIdTerminalRoute =
   AppSandboxesSandboxIdTerminalRouteImport.update({
-    id: "/terminal",
-    path: "/terminal",
+    id: '/terminal',
+    path: '/terminal',
     getParentRoute: () => AppSandboxesSandboxIdRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
-  "/": typeof AppIndexRoute
-  "/login": typeof LoginRoute
-  "/register": typeof RegisterRoute
-  "/audit": typeof AppAuditRoute
-  "/monitoring": typeof AppMonitoringRoute
-  "/servers": typeof AppServersRoute
-  "/settings": typeof AppSettingsRoute
-  "/vault": typeof AppVaultRoute
-  "/welcome": typeof AppWelcomeRoute
-  "/workspace": typeof AppWorkspaceRoute
-  "/base/$serverId": typeof BaseServerIdRoute
-  "/view/$sandboxId": typeof ViewSandboxIdRoute
-  "/invite/$token": typeof AppInviteTokenRoute
-  "/sandboxes/$sandboxId": typeof AppSandboxesSandboxIdRouteWithChildren
-  "/sandboxes/": typeof AppSandboxesIndexRoute
-  "/sandboxes/$sandboxId/activity": typeof AppSandboxesSandboxIdActivityRoute
-  "/sandboxes/$sandboxId/apps": typeof AppSandboxesSandboxIdAppsRoute
-  "/sandboxes/$sandboxId/network": typeof AppSandboxesSandboxIdNetworkRoute
-  "/sandboxes/$sandboxId/permissions": typeof AppSandboxesSandboxIdPermissionsRoute
-  "/sandboxes/$sandboxId/profiles": typeof AppSandboxesSandboxIdProfilesRoute
-  "/sandboxes/$sandboxId/secrets": typeof AppSandboxesSandboxIdSecretsRoute
-  "/sandboxes/$sandboxId/server": typeof AppSandboxesSandboxIdServerRoute
-  "/sandboxes/$sandboxId/share": typeof AppSandboxesSandboxIdShareRoute
-  "/sandboxes/$sandboxId/snapshots": typeof AppSandboxesSandboxIdSnapshotsRoute
-  "/sandboxes/$sandboxId/terminal": typeof AppSandboxesSandboxIdTerminalRoute
-  "/sandboxes/$sandboxId/": typeof AppSandboxesSandboxIdIndexRoute
+  '/': typeof AppIndexRoute
+  '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
+  '/audit': typeof AppAuditRoute
+  '/monitoring': typeof AppMonitoringRoute
+  '/servers': typeof AppServersRoute
+  '/settings': typeof AppSettingsRoute
+  '/vault': typeof AppVaultRoute
+  '/welcome': typeof AppWelcomeRoute
+  '/workspace': typeof AppWorkspaceRoute
+  '/base/$serverId': typeof BaseServerIdRoute
+  '/view/$sandboxId': typeof ViewSandboxIdRoute
+  '/invite/$token': typeof AppInviteTokenRoute
+  '/sandboxes/$sandboxId': typeof AppSandboxesSandboxIdRouteWithChildren
+  '/sandboxes/': typeof AppSandboxesIndexRoute
+  '/sandboxes/$sandboxId/activity': typeof AppSandboxesSandboxIdActivityRoute
+  '/sandboxes/$sandboxId/apps': typeof AppSandboxesSandboxIdAppsRoute
+  '/sandboxes/$sandboxId/network': typeof AppSandboxesSandboxIdNetworkRoute
+  '/sandboxes/$sandboxId/permissions': typeof AppSandboxesSandboxIdPermissionsRoute
+  '/sandboxes/$sandboxId/profiles': typeof AppSandboxesSandboxIdProfilesRoute
+  '/sandboxes/$sandboxId/secrets': typeof AppSandboxesSandboxIdSecretsRoute
+  '/sandboxes/$sandboxId/server': typeof AppSandboxesSandboxIdServerRoute
+  '/sandboxes/$sandboxId/share': typeof AppSandboxesSandboxIdShareRoute
+  '/sandboxes/$sandboxId/snapshots': typeof AppSandboxesSandboxIdSnapshotsRoute
+  '/sandboxes/$sandboxId/terminal': typeof AppSandboxesSandboxIdTerminalRoute
+  '/sandboxes/$sandboxId/': typeof AppSandboxesSandboxIdIndexRoute
 }
 export interface FileRoutesByTo {
-  "/login": typeof LoginRoute
-  "/register": typeof RegisterRoute
-  "/audit": typeof AppAuditRoute
-  "/monitoring": typeof AppMonitoringRoute
-  "/servers": typeof AppServersRoute
-  "/settings": typeof AppSettingsRoute
-  "/vault": typeof AppVaultRoute
-  "/welcome": typeof AppWelcomeRoute
-  "/workspace": typeof AppWorkspaceRoute
-  "/base/$serverId": typeof BaseServerIdRoute
-  "/view/$sandboxId": typeof ViewSandboxIdRoute
-  "/": typeof AppIndexRoute
-  "/invite/$token": typeof AppInviteTokenRoute
-  "/sandboxes": typeof AppSandboxesIndexRoute
-  "/sandboxes/$sandboxId/activity": typeof AppSandboxesSandboxIdActivityRoute
-  "/sandboxes/$sandboxId/apps": typeof AppSandboxesSandboxIdAppsRoute
-  "/sandboxes/$sandboxId/network": typeof AppSandboxesSandboxIdNetworkRoute
-  "/sandboxes/$sandboxId/permissions": typeof AppSandboxesSandboxIdPermissionsRoute
-  "/sandboxes/$sandboxId/profiles": typeof AppSandboxesSandboxIdProfilesRoute
-  "/sandboxes/$sandboxId/secrets": typeof AppSandboxesSandboxIdSecretsRoute
-  "/sandboxes/$sandboxId/server": typeof AppSandboxesSandboxIdServerRoute
-  "/sandboxes/$sandboxId/share": typeof AppSandboxesSandboxIdShareRoute
-  "/sandboxes/$sandboxId/snapshots": typeof AppSandboxesSandboxIdSnapshotsRoute
-  "/sandboxes/$sandboxId/terminal": typeof AppSandboxesSandboxIdTerminalRoute
-  "/sandboxes/$sandboxId": typeof AppSandboxesSandboxIdIndexRoute
+  '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
+  '/audit': typeof AppAuditRoute
+  '/monitoring': typeof AppMonitoringRoute
+  '/servers': typeof AppServersRoute
+  '/settings': typeof AppSettingsRoute
+  '/vault': typeof AppVaultRoute
+  '/welcome': typeof AppWelcomeRoute
+  '/workspace': typeof AppWorkspaceRoute
+  '/base/$serverId': typeof BaseServerIdRoute
+  '/view/$sandboxId': typeof ViewSandboxIdRoute
+  '/': typeof AppIndexRoute
+  '/invite/$token': typeof AppInviteTokenRoute
+  '/sandboxes': typeof AppSandboxesIndexRoute
+  '/sandboxes/$sandboxId/activity': typeof AppSandboxesSandboxIdActivityRoute
+  '/sandboxes/$sandboxId/apps': typeof AppSandboxesSandboxIdAppsRoute
+  '/sandboxes/$sandboxId/network': typeof AppSandboxesSandboxIdNetworkRoute
+  '/sandboxes/$sandboxId/permissions': typeof AppSandboxesSandboxIdPermissionsRoute
+  '/sandboxes/$sandboxId/profiles': typeof AppSandboxesSandboxIdProfilesRoute
+  '/sandboxes/$sandboxId/secrets': typeof AppSandboxesSandboxIdSecretsRoute
+  '/sandboxes/$sandboxId/server': typeof AppSandboxesSandboxIdServerRoute
+  '/sandboxes/$sandboxId/share': typeof AppSandboxesSandboxIdShareRoute
+  '/sandboxes/$sandboxId/snapshots': typeof AppSandboxesSandboxIdSnapshotsRoute
+  '/sandboxes/$sandboxId/terminal': typeof AppSandboxesSandboxIdTerminalRoute
+  '/sandboxes/$sandboxId': typeof AppSandboxesSandboxIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  "/_app": typeof AppRouteWithChildren
-  "/login": typeof LoginRoute
-  "/register": typeof RegisterRoute
-  "/_app/audit": typeof AppAuditRoute
-  "/_app/monitoring": typeof AppMonitoringRoute
-  "/_app/servers": typeof AppServersRoute
-  "/_app/settings": typeof AppSettingsRoute
-  "/_app/vault": typeof AppVaultRoute
-  "/_app/welcome": typeof AppWelcomeRoute
-  "/_app/workspace": typeof AppWorkspaceRoute
-  "/base/$serverId": typeof BaseServerIdRoute
-  "/view/$sandboxId": typeof ViewSandboxIdRoute
-  "/_app/": typeof AppIndexRoute
-  "/_app/invite/$token": typeof AppInviteTokenRoute
-  "/_app/sandboxes/$sandboxId": typeof AppSandboxesSandboxIdRouteWithChildren
-  "/_app/sandboxes/": typeof AppSandboxesIndexRoute
-  "/_app/sandboxes/$sandboxId/activity": typeof AppSandboxesSandboxIdActivityRoute
-  "/_app/sandboxes/$sandboxId/apps": typeof AppSandboxesSandboxIdAppsRoute
-  "/_app/sandboxes/$sandboxId/network": typeof AppSandboxesSandboxIdNetworkRoute
-  "/_app/sandboxes/$sandboxId/permissions": typeof AppSandboxesSandboxIdPermissionsRoute
-  "/_app/sandboxes/$sandboxId/profiles": typeof AppSandboxesSandboxIdProfilesRoute
-  "/_app/sandboxes/$sandboxId/secrets": typeof AppSandboxesSandboxIdSecretsRoute
-  "/_app/sandboxes/$sandboxId/server": typeof AppSandboxesSandboxIdServerRoute
-  "/_app/sandboxes/$sandboxId/share": typeof AppSandboxesSandboxIdShareRoute
-  "/_app/sandboxes/$sandboxId/snapshots": typeof AppSandboxesSandboxIdSnapshotsRoute
-  "/_app/sandboxes/$sandboxId/terminal": typeof AppSandboxesSandboxIdTerminalRoute
-  "/_app/sandboxes/$sandboxId/": typeof AppSandboxesSandboxIdIndexRoute
+  '/_app': typeof AppRouteWithChildren
+  '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
+  '/_app/audit': typeof AppAuditRoute
+  '/_app/monitoring': typeof AppMonitoringRoute
+  '/_app/servers': typeof AppServersRoute
+  '/_app/settings': typeof AppSettingsRoute
+  '/_app/vault': typeof AppVaultRoute
+  '/_app/welcome': typeof AppWelcomeRoute
+  '/_app/workspace': typeof AppWorkspaceRoute
+  '/base/$serverId': typeof BaseServerIdRoute
+  '/view/$sandboxId': typeof ViewSandboxIdRoute
+  '/_app/': typeof AppIndexRoute
+  '/_app/invite/$token': typeof AppInviteTokenRoute
+  '/_app/sandboxes/$sandboxId': typeof AppSandboxesSandboxIdRouteWithChildren
+  '/_app/sandboxes/': typeof AppSandboxesIndexRoute
+  '/_app/sandboxes/$sandboxId/activity': typeof AppSandboxesSandboxIdActivityRoute
+  '/_app/sandboxes/$sandboxId/apps': typeof AppSandboxesSandboxIdAppsRoute
+  '/_app/sandboxes/$sandboxId/network': typeof AppSandboxesSandboxIdNetworkRoute
+  '/_app/sandboxes/$sandboxId/permissions': typeof AppSandboxesSandboxIdPermissionsRoute
+  '/_app/sandboxes/$sandboxId/profiles': typeof AppSandboxesSandboxIdProfilesRoute
+  '/_app/sandboxes/$sandboxId/secrets': typeof AppSandboxesSandboxIdSecretsRoute
+  '/_app/sandboxes/$sandboxId/server': typeof AppSandboxesSandboxIdServerRoute
+  '/_app/sandboxes/$sandboxId/share': typeof AppSandboxesSandboxIdShareRoute
+  '/_app/sandboxes/$sandboxId/snapshots': typeof AppSandboxesSandboxIdSnapshotsRoute
+  '/_app/sandboxes/$sandboxId/terminal': typeof AppSandboxesSandboxIdTerminalRoute
+  '/_app/sandboxes/$sandboxId/': typeof AppSandboxesSandboxIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    | "/"
-    | "/login"
-    | "/register"
-    | "/audit"
-    | "/monitoring"
-    | "/servers"
-    | "/settings"
-    | "/vault"
-    | "/welcome"
-    | "/workspace"
-    | "/base/$serverId"
-    | "/view/$sandboxId"
-    | "/invite/$token"
-    | "/sandboxes/$sandboxId"
-    | "/sandboxes/"
-    | "/sandboxes/$sandboxId/activity"
-    | "/sandboxes/$sandboxId/apps"
-    | "/sandboxes/$sandboxId/network"
-    | "/sandboxes/$sandboxId/permissions"
-    | "/sandboxes/$sandboxId/profiles"
-    | "/sandboxes/$sandboxId/secrets"
-    | "/sandboxes/$sandboxId/server"
-    | "/sandboxes/$sandboxId/share"
-    | "/sandboxes/$sandboxId/snapshots"
-    | "/sandboxes/$sandboxId/terminal"
-    | "/sandboxes/$sandboxId/"
+    | '/'
+    | '/login'
+    | '/register'
+    | '/audit'
+    | '/monitoring'
+    | '/servers'
+    | '/settings'
+    | '/vault'
+    | '/welcome'
+    | '/workspace'
+    | '/base/$serverId'
+    | '/view/$sandboxId'
+    | '/invite/$token'
+    | '/sandboxes/$sandboxId'
+    | '/sandboxes/'
+    | '/sandboxes/$sandboxId/activity'
+    | '/sandboxes/$sandboxId/apps'
+    | '/sandboxes/$sandboxId/network'
+    | '/sandboxes/$sandboxId/permissions'
+    | '/sandboxes/$sandboxId/profiles'
+    | '/sandboxes/$sandboxId/secrets'
+    | '/sandboxes/$sandboxId/server'
+    | '/sandboxes/$sandboxId/share'
+    | '/sandboxes/$sandboxId/snapshots'
+    | '/sandboxes/$sandboxId/terminal'
+    | '/sandboxes/$sandboxId/'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | "/login"
-    | "/register"
-    | "/audit"
-    | "/monitoring"
-    | "/servers"
-    | "/settings"
-    | "/vault"
-    | "/welcome"
-    | "/workspace"
-    | "/base/$serverId"
-    | "/view/$sandboxId"
-    | "/"
-    | "/invite/$token"
-    | "/sandboxes"
-    | "/sandboxes/$sandboxId/activity"
-    | "/sandboxes/$sandboxId/apps"
-    | "/sandboxes/$sandboxId/network"
-    | "/sandboxes/$sandboxId/permissions"
-    | "/sandboxes/$sandboxId/profiles"
-    | "/sandboxes/$sandboxId/secrets"
-    | "/sandboxes/$sandboxId/server"
-    | "/sandboxes/$sandboxId/share"
-    | "/sandboxes/$sandboxId/snapshots"
-    | "/sandboxes/$sandboxId/terminal"
-    | "/sandboxes/$sandboxId"
+    | '/login'
+    | '/register'
+    | '/audit'
+    | '/monitoring'
+    | '/servers'
+    | '/settings'
+    | '/vault'
+    | '/welcome'
+    | '/workspace'
+    | '/base/$serverId'
+    | '/view/$sandboxId'
+    | '/'
+    | '/invite/$token'
+    | '/sandboxes'
+    | '/sandboxes/$sandboxId/activity'
+    | '/sandboxes/$sandboxId/apps'
+    | '/sandboxes/$sandboxId/network'
+    | '/sandboxes/$sandboxId/permissions'
+    | '/sandboxes/$sandboxId/profiles'
+    | '/sandboxes/$sandboxId/secrets'
+    | '/sandboxes/$sandboxId/server'
+    | '/sandboxes/$sandboxId/share'
+    | '/sandboxes/$sandboxId/snapshots'
+    | '/sandboxes/$sandboxId/terminal'
+    | '/sandboxes/$sandboxId'
   id:
-    | "__root__"
-    | "/_app"
-    | "/login"
-    | "/register"
-    | "/_app/audit"
-    | "/_app/monitoring"
-    | "/_app/servers"
-    | "/_app/settings"
-    | "/_app/vault"
-    | "/_app/welcome"
-    | "/_app/workspace"
-    | "/base/$serverId"
-    | "/view/$sandboxId"
-    | "/_app/"
-    | "/_app/invite/$token"
-    | "/_app/sandboxes/$sandboxId"
-    | "/_app/sandboxes/"
-    | "/_app/sandboxes/$sandboxId/activity"
-    | "/_app/sandboxes/$sandboxId/apps"
-    | "/_app/sandboxes/$sandboxId/network"
-    | "/_app/sandboxes/$sandboxId/permissions"
-    | "/_app/sandboxes/$sandboxId/profiles"
-    | "/_app/sandboxes/$sandboxId/secrets"
-    | "/_app/sandboxes/$sandboxId/server"
-    | "/_app/sandboxes/$sandboxId/share"
-    | "/_app/sandboxes/$sandboxId/snapshots"
-    | "/_app/sandboxes/$sandboxId/terminal"
-    | "/_app/sandboxes/$sandboxId/"
+    | '__root__'
+    | '/_app'
+    | '/login'
+    | '/register'
+    | '/_app/audit'
+    | '/_app/monitoring'
+    | '/_app/servers'
+    | '/_app/settings'
+    | '/_app/vault'
+    | '/_app/welcome'
+    | '/_app/workspace'
+    | '/base/$serverId'
+    | '/view/$sandboxId'
+    | '/_app/'
+    | '/_app/invite/$token'
+    | '/_app/sandboxes/$sandboxId'
+    | '/_app/sandboxes/'
+    | '/_app/sandboxes/$sandboxId/activity'
+    | '/_app/sandboxes/$sandboxId/apps'
+    | '/_app/sandboxes/$sandboxId/network'
+    | '/_app/sandboxes/$sandboxId/permissions'
+    | '/_app/sandboxes/$sandboxId/profiles'
+    | '/_app/sandboxes/$sandboxId/secrets'
+    | '/_app/sandboxes/$sandboxId/server'
+    | '/_app/sandboxes/$sandboxId/share'
+    | '/_app/sandboxes/$sandboxId/snapshots'
+    | '/_app/sandboxes/$sandboxId/terminal'
+    | '/_app/sandboxes/$sandboxId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -363,194 +363,194 @@ export interface RootRouteChildren {
   ViewSandboxIdRoute: typeof ViewSandboxIdRoute
 }
 
-declare module "@tanstack/react-router" {
+declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    "/_app": {
-      id: "/_app"
-      path: ""
-      fullPath: "/"
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/login": {
-      id: "/login"
-      path: "/login"
-      fullPath: "/login"
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/register": {
-      id: "/register"
-      path: "/register"
-      fullPath: "/register"
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
       preLoaderRoute: typeof RegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/_app/": {
-      id: "/_app/"
-      path: "/"
-      fullPath: "/"
+    '/_app/': {
+      id: '/_app/'
+      path: '/'
+      fullPath: '/'
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
-    "/_app/audit": {
-      id: "/_app/audit"
-      path: "/audit"
-      fullPath: "/audit"
+    '/_app/audit': {
+      id: '/_app/audit'
+      path: '/audit'
+      fullPath: '/audit'
       preLoaderRoute: typeof AppAuditRouteImport
       parentRoute: typeof AppRoute
     }
-    "/_app/monitoring": {
-      id: "/_app/monitoring"
-      path: "/monitoring"
-      fullPath: "/monitoring"
+    '/_app/monitoring': {
+      id: '/_app/monitoring'
+      path: '/monitoring'
+      fullPath: '/monitoring'
       preLoaderRoute: typeof AppMonitoringRouteImport
       parentRoute: typeof AppRoute
     }
-    "/_app/servers": {
-      id: "/_app/servers"
-      path: "/servers"
-      fullPath: "/servers"
+    '/_app/servers': {
+      id: '/_app/servers'
+      path: '/servers'
+      fullPath: '/servers'
       preLoaderRoute: typeof AppServersRouteImport
       parentRoute: typeof AppRoute
     }
-    "/_app/settings": {
-      id: "/_app/settings"
-      path: "/settings"
-      fullPath: "/settings"
+    '/_app/settings': {
+      id: '/_app/settings'
+      path: '/settings'
+      fullPath: '/settings'
       preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRoute
     }
-    "/_app/vault": {
-      id: "/_app/vault"
-      path: "/vault"
-      fullPath: "/vault"
+    '/_app/vault': {
+      id: '/_app/vault'
+      path: '/vault'
+      fullPath: '/vault'
       preLoaderRoute: typeof AppVaultRouteImport
       parentRoute: typeof AppRoute
     }
-    "/_app/welcome": {
-      id: "/_app/welcome"
-      path: "/welcome"
-      fullPath: "/welcome"
+    '/_app/welcome': {
+      id: '/_app/welcome'
+      path: '/welcome'
+      fullPath: '/welcome'
       preLoaderRoute: typeof AppWelcomeRouteImport
       parentRoute: typeof AppRoute
     }
-    "/_app/workspace": {
-      id: "/_app/workspace"
-      path: "/workspace"
-      fullPath: "/workspace"
+    '/_app/workspace': {
+      id: '/_app/workspace'
+      path: '/workspace'
+      fullPath: '/workspace'
       preLoaderRoute: typeof AppWorkspaceRouteImport
       parentRoute: typeof AppRoute
     }
-    "/base/$serverId": {
-      id: "/base/$serverId"
-      path: "/base/$serverId"
-      fullPath: "/base/$serverId"
+    '/base/$serverId': {
+      id: '/base/$serverId'
+      path: '/base/$serverId'
+      fullPath: '/base/$serverId'
       preLoaderRoute: typeof BaseServerIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/view/$sandboxId": {
-      id: "/view/$sandboxId"
-      path: "/view/$sandboxId"
-      fullPath: "/view/$sandboxId"
+    '/view/$sandboxId': {
+      id: '/view/$sandboxId'
+      path: '/view/$sandboxId'
+      fullPath: '/view/$sandboxId'
       preLoaderRoute: typeof ViewSandboxIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/_app/invite/$token": {
-      id: "/_app/invite/$token"
-      path: "/invite/$token"
-      fullPath: "/invite/$token"
+    '/_app/invite/$token': {
+      id: '/_app/invite/$token'
+      path: '/invite/$token'
+      fullPath: '/invite/$token'
       preLoaderRoute: typeof AppInviteTokenRouteImport
       parentRoute: typeof AppRoute
     }
-    "/_app/sandboxes/": {
-      id: "/_app/sandboxes/"
-      path: "/sandboxes"
-      fullPath: "/sandboxes/"
+    '/_app/sandboxes/': {
+      id: '/_app/sandboxes/'
+      path: '/sandboxes'
+      fullPath: '/sandboxes/'
       preLoaderRoute: typeof AppSandboxesIndexRouteImport
       parentRoute: typeof AppRoute
     }
-    "/_app/sandboxes/$sandboxId": {
-      id: "/_app/sandboxes/$sandboxId"
-      path: "/sandboxes/$sandboxId"
-      fullPath: "/sandboxes/$sandboxId"
+    '/_app/sandboxes/$sandboxId': {
+      id: '/_app/sandboxes/$sandboxId'
+      path: '/sandboxes/$sandboxId'
+      fullPath: '/sandboxes/$sandboxId'
       preLoaderRoute: typeof AppSandboxesSandboxIdRouteImport
       parentRoute: typeof AppRoute
     }
-    "/_app/sandboxes/$sandboxId/": {
-      id: "/_app/sandboxes/$sandboxId/"
-      path: "/"
-      fullPath: "/sandboxes/$sandboxId/"
+    '/_app/sandboxes/$sandboxId/': {
+      id: '/_app/sandboxes/$sandboxId/'
+      path: '/'
+      fullPath: '/sandboxes/$sandboxId/'
       preLoaderRoute: typeof AppSandboxesSandboxIdIndexRouteImport
       parentRoute: typeof AppSandboxesSandboxIdRoute
     }
-    "/_app/sandboxes/$sandboxId/activity": {
-      id: "/_app/sandboxes/$sandboxId/activity"
-      path: "/activity"
-      fullPath: "/sandboxes/$sandboxId/activity"
+    '/_app/sandboxes/$sandboxId/activity': {
+      id: '/_app/sandboxes/$sandboxId/activity'
+      path: '/activity'
+      fullPath: '/sandboxes/$sandboxId/activity'
       preLoaderRoute: typeof AppSandboxesSandboxIdActivityRouteImport
       parentRoute: typeof AppSandboxesSandboxIdRoute
     }
-    "/_app/sandboxes/$sandboxId/apps": {
-      id: "/_app/sandboxes/$sandboxId/apps"
-      path: "/apps"
-      fullPath: "/sandboxes/$sandboxId/apps"
+    '/_app/sandboxes/$sandboxId/apps': {
+      id: '/_app/sandboxes/$sandboxId/apps'
+      path: '/apps'
+      fullPath: '/sandboxes/$sandboxId/apps'
       preLoaderRoute: typeof AppSandboxesSandboxIdAppsRouteImport
       parentRoute: typeof AppSandboxesSandboxIdRoute
     }
-    "/_app/sandboxes/$sandboxId/network": {
-      id: "/_app/sandboxes/$sandboxId/network"
-      path: "/network"
-      fullPath: "/sandboxes/$sandboxId/network"
+    '/_app/sandboxes/$sandboxId/network': {
+      id: '/_app/sandboxes/$sandboxId/network'
+      path: '/network'
+      fullPath: '/sandboxes/$sandboxId/network'
       preLoaderRoute: typeof AppSandboxesSandboxIdNetworkRouteImport
       parentRoute: typeof AppSandboxesSandboxIdRoute
     }
-    "/_app/sandboxes/$sandboxId/permissions": {
-      id: "/_app/sandboxes/$sandboxId/permissions"
-      path: "/permissions"
-      fullPath: "/sandboxes/$sandboxId/permissions"
+    '/_app/sandboxes/$sandboxId/permissions': {
+      id: '/_app/sandboxes/$sandboxId/permissions'
+      path: '/permissions'
+      fullPath: '/sandboxes/$sandboxId/permissions'
       preLoaderRoute: typeof AppSandboxesSandboxIdPermissionsRouteImport
       parentRoute: typeof AppSandboxesSandboxIdRoute
     }
-    "/_app/sandboxes/$sandboxId/profiles": {
-      id: "/_app/sandboxes/$sandboxId/profiles"
-      path: "/profiles"
-      fullPath: "/sandboxes/$sandboxId/profiles"
+    '/_app/sandboxes/$sandboxId/profiles': {
+      id: '/_app/sandboxes/$sandboxId/profiles'
+      path: '/profiles'
+      fullPath: '/sandboxes/$sandboxId/profiles'
       preLoaderRoute: typeof AppSandboxesSandboxIdProfilesRouteImport
       parentRoute: typeof AppSandboxesSandboxIdRoute
     }
-    "/_app/sandboxes/$sandboxId/secrets": {
-      id: "/_app/sandboxes/$sandboxId/secrets"
-      path: "/secrets"
-      fullPath: "/sandboxes/$sandboxId/secrets"
+    '/_app/sandboxes/$sandboxId/secrets': {
+      id: '/_app/sandboxes/$sandboxId/secrets'
+      path: '/secrets'
+      fullPath: '/sandboxes/$sandboxId/secrets'
       preLoaderRoute: typeof AppSandboxesSandboxIdSecretsRouteImport
       parentRoute: typeof AppSandboxesSandboxIdRoute
     }
-    "/_app/sandboxes/$sandboxId/server": {
-      id: "/_app/sandboxes/$sandboxId/server"
-      path: "/server"
-      fullPath: "/sandboxes/$sandboxId/server"
+    '/_app/sandboxes/$sandboxId/server': {
+      id: '/_app/sandboxes/$sandboxId/server'
+      path: '/server'
+      fullPath: '/sandboxes/$sandboxId/server'
       preLoaderRoute: typeof AppSandboxesSandboxIdServerRouteImport
       parentRoute: typeof AppSandboxesSandboxIdRoute
     }
-    "/_app/sandboxes/$sandboxId/share": {
-      id: "/_app/sandboxes/$sandboxId/share"
-      path: "/share"
-      fullPath: "/sandboxes/$sandboxId/share"
+    '/_app/sandboxes/$sandboxId/share': {
+      id: '/_app/sandboxes/$sandboxId/share'
+      path: '/share'
+      fullPath: '/sandboxes/$sandboxId/share'
       preLoaderRoute: typeof AppSandboxesSandboxIdShareRouteImport
       parentRoute: typeof AppSandboxesSandboxIdRoute
     }
-    "/_app/sandboxes/$sandboxId/snapshots": {
-      id: "/_app/sandboxes/$sandboxId/snapshots"
-      path: "/snapshots"
-      fullPath: "/sandboxes/$sandboxId/snapshots"
+    '/_app/sandboxes/$sandboxId/snapshots': {
+      id: '/_app/sandboxes/$sandboxId/snapshots'
+      path: '/snapshots'
+      fullPath: '/sandboxes/$sandboxId/snapshots'
       preLoaderRoute: typeof AppSandboxesSandboxIdSnapshotsRouteImport
       parentRoute: typeof AppSandboxesSandboxIdRoute
     }
-    "/_app/sandboxes/$sandboxId/terminal": {
-      id: "/_app/sandboxes/$sandboxId/terminal"
-      path: "/terminal"
-      fullPath: "/sandboxes/$sandboxId/terminal"
+    '/_app/sandboxes/$sandboxId/terminal': {
+      id: '/_app/sandboxes/$sandboxId/terminal'
+      path: '/terminal'
+      fullPath: '/sandboxes/$sandboxId/terminal'
       preLoaderRoute: typeof AppSandboxesSandboxIdTerminalRouteImport
       parentRoute: typeof AppSandboxesSandboxIdRoute
     }
@@ -587,7 +587,7 @@ const AppSandboxesSandboxIdRouteChildren: AppSandboxesSandboxIdRouteChildren = {
 
 const AppSandboxesSandboxIdRouteWithChildren =
   AppSandboxesSandboxIdRoute._addFileChildren(
-    AppSandboxesSandboxIdRouteChildren
+    AppSandboxesSandboxIdRouteChildren,
   )
 
 interface AppRouteChildren {
@@ -631,9 +631,9 @@ export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
 
-import type { getRouter } from "./router.tsx"
-import type { createStart } from "@tanstack/react-start"
-declare module "@tanstack/react-start" {
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
     router: Awaited<ReturnType<typeof getRouter>>

@@ -162,7 +162,7 @@ export const serverSchema = z.object({
   name: z.string(),
   docker_url: z.string(),
   bind_address: z.string(),
-  platform: z.enum(["macos", "windows"]),
+  platform: z.enum(["linux", "macos", "windows"]),
   capabilities: z.array(z.string()),
   created_at: z.string(),
   node: nodeSchema.nullable().default(null),

@@ -5,7 +5,7 @@ description: VM boundaries, least privilege, native identity, secrets and explic
 
 ## Sandbox boundary
 
-Every Linux sandbox has a Kata guest kernel. macOS and Windows have native VM boundaries.
+Kata Linux sandboxes have a separate guest kernel; ordinary Docker containers share the engine kernel. `ZOO_ISOLATION=kata` requires Kata on Docker. macOS and Windows sandboxes have native VM boundaries.
 The API never treats absence of a required guest as permission to execute tools another way.
 Guest disconnection fails tool requests with `guest_unavailable`.
 
@@ -13,16 +13,16 @@ API keys, workspace membership, scoped permissions and sandbox policies authoriz
 before dispatch. Keep the public API behind trusted TLS, and keep private gateway RPC/peer
 listeners off the public internet.
 
-## Native host enrollment
+## Host enrollment
 
-Only macOS and Windows enroll through zoo-node. Join tokens are short-lived and single-use;
+Linux, macOS, and Windows hosts enroll through zoo-node. Join tokens are short-lived and single-use;
 the token binds the control plane and its CA. The native node stream uses mTLS on 7443.
 An HTTP ingress is not a substitute for that stream's public address.
 
 The node CA, encrypted private material and VM-host identity live in Postgres. The API
 supplies the host key needed by its VM helper; do not replace database identity with a
 shared directory of private keys. Host helper operations travel over authenticated node
-transport rather than opening a generic host backend.
+transport. Linux Docker operations use pinned SSH and `docker system dial-stdio` over the same outbound tunnel; no Docker TCP listener is exposed. Treat the enrolled account and its Docker access as privileged host credentials.
 
 ## Secrets
 

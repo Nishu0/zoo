@@ -62,15 +62,10 @@ if (-not $Version) {
 if ($Version -notmatch '^\d+\.\d+\.\d+([.-][A-Za-z0-9.-]+)?$') { throw "invalid Zoo release version '$Version'" }
 
 Say "Downloading Zoo $Version"
-$work = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid())
-New-Item -ItemType Directory -Force $work, $Dir | Out-Null
-try {
-    Invoke-WebRequest -UseBasicParsing "https://github.com/$Repo/archive/refs/tags/v$Version.zip" -OutFile "$work\zoo.zip"
-    Expand-Archive "$work\zoo.zip" $work
-    $source = Get-ChildItem $work -Directory | Select-Object -First 1
-    Copy-Item "$($source.FullName)\compose.yml" $Dir
-    $example = Get-Content "$($source.FullName)\.env.example"
-} finally { Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue }
+New-Item -ItemType Directory -Force $Dir | Out-Null
+$release = "https://github.com/$Repo/releases/download/v$Version"
+Invoke-WebRequest -UseBasicParsing "$release/compose.yml" -OutFile "$Dir\compose.yml"
+$example = (Invoke-WebRequest -UseBasicParsing "$release/env.example").Content -split '\r?\n'
 
 # the LAN address, so remote servers and this machine's VMs can reach the API
 $address = (Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq 'Up' } |

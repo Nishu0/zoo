@@ -1,0 +1,25 @@
+flowchart LR
+    caller["MCP client or REST / SDK caller"]
+    entry["MCP tool wrapper or REST tool endpoint"]
+    auth["Authenticate user / API key and workspace"]
+    checks["Check membership, sandbox access, permission, kind, arguments"]
+    registry["Shared tool registry - select platform implementation"]
+    gateway["Go gateway"]
+    guest["zoo-guest"]
+    shellFiles["Shell, files, terminal, accessibility, windows and apps"]
+    vnc["Gateway-owned VNC session"]
+    linuxTransport["Linux: tunnel through guest to VNC"]
+    nativeTransport["Mac / Windows: node tunnel and pinned SSH to VNC"]
+    display["Sandbox screen and input"]
+    record["Record execution and redact secret values in tool results"]
+
+    caller --> entry --> auth --> checks --> registry
+    registry -->|"Shell / files / OS operations"| gateway
+    gateway -->|"GuestCall / GuestStream"| guest
+    guest --> shellFiles
+    registry -->|"Screenshot / mouse / keyboard RPCs"| vnc
+    vnc --> linuxTransport --> display
+    vnc --> nativeTransport --> display
+    shellFiles --> record
+    display --> record
+    record --> result["Return result to caller"]

@@ -11,7 +11,7 @@ description: Two Linux runtimes, native connection ownership, persistent data an
 | Python worker | Lifecycle jobs, warm-pool refill, retention and backups |
 | Native Go gateway | Guest/node streams, active VNC sessions and replica routing |
 | zoo-guest | Shell, files, terminal, accessibility, windows, apps, secrets and tunnels inside a sandbox |
-| zoo-node | Dial-out macOS/Windows host daemon; authenticated VM-helper operations |
+| zoo-node | Dial-out Linux/macOS/Windows host daemon; authenticated runtime operations |
 | zoo-egress | Host-enforced network policy, outside Linux sandboxes and on VM hosts |
 | Postgres | Authoritative state, envelope keys, node CA, host credentials, jobs and events |
 | Object storage | Backups, portable profiles and runtime-specific exported data |
@@ -21,16 +21,19 @@ External clients decide what to do and call REST, MCP or the SDK.
 
 ## The two Linux runtimes
 
-`ZOO_RUNTIME=docker` uses one local Docker host, with a Kata VM per sandbox and a Docker
-home volume. Linux capacity is that host's capacity. Docker sandboxes do not move between hosts.
+`ZOO_RUNTIME=docker` uses the installation's local Linux Docker engine. Enrolled Linux,
+Mac, and Windows hosts can add Linux Docker engines through zoo-node. Each Docker sandbox
+keeps its home volume on its selected engine; Docker homes do not move between hosts
+automatically. `ZOO_ISOLATION` selects Kata or ordinary containers; see [Isolation](/docs/concepts/runtimes/).
 
 `ZOO_RUNTIME=kube` uses Kata pods on Kubernetes, with local TopoLVM home claims and CSI
 snapshots. Placement selects an eligible node and binds storage to it; local storage does
 not automatically follow a pod to another machine. Supported moves export/restore data
 through object storage and require compatible destination capacity.
 
-Mac and Windows hosts provide only their native VM types. They are not extra Docker
-capacity and never receive a host Docker tunnel.
+Mac and Windows hosts also provide their respective native VM types. Linux hosts provide
+Linux desktop, Firefox browser, and code sandboxes. Remote Docker API calls travel over
+pinned SSH through the authenticated node tunnel.
 
 ## Connection ownership and ports
 
