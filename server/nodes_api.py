@@ -7,7 +7,7 @@ import uuid
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from db.connection import db_manager
@@ -51,6 +51,13 @@ class JoinResponse(BaseModel):
     endpoints: list[str]
 
 
+class EnrollmentStatusRequest(BaseModel):
+    certificate: str = Field(min_length=1, max_length=10_000)
+    timestamp: int = Field(strict=True, ge=0, le=2**63 - 1)
+    nonce: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")
+    signature: str = Field(min_length=1, max_length=2000)
+
+
 def api_url(request: Request) -> str:
     return os.environ.get("ZOO_API_URL") or str(request.base_url).rstrip("/")
 
@@ -73,9 +80,21 @@ class NodesApi:
     def _register_routes(self):
         current_user = self.auth.current_user
 
+        @self.app.post("/nodes/enrollment/status", include_in_schema=False)
+        def enrollment_status(payload: EnrollmentStatusRequest):
+            try:
+                result = nodes.enrollment_status(
+                    payload.certificate, payload.timestamp, payload.nonce, payload.signature
+                )
+            except nodes.EnrollmentProofError as error:
+                raise HTTPException(status_code=401, detail=str(error)) from error
+            return JSONResponse(result, headers={"Cache-Control": "no-store"})
+
         @self.app.get("/nodes/bootstrap/ssh-key", include_in_schema=False)
         def bootstrap_ssh_key():
-            return Response(macos.public_key().strip() + "\n", media_type="text/plain", headers={"Cache-Control": "no-store"})
+            return Response(
+                macos.public_key().strip() + "\n", media_type="text/plain", headers={"Cache-Control": "no-store"}
+            )
 
         @self.app.get("/nodes/bootstrap/macos", include_in_schema=False)
         def macos_bootstrap():

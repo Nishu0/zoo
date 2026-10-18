@@ -132,7 +132,7 @@ def test_base_is_marked_ready_only_after_guest_install_and_exec_probe(base_boots
         call.bind(base_bootstrap.runtime_id, "base-host"),
         call.install(base_bootstrap.runtime_id, "base-host"),
         call.execution(["true"], timeout=5),
-        call.mark(base_bootstrap.host),
+        call.mark(base_bootstrap.host, verified=True),
     ]
 
 
@@ -179,7 +179,7 @@ def test_exec_capable_base_is_ready_without_optional_accessibility_permission(ba
     monkeypatch.setattr(macos.hub, "for_runtime", lambda _: Agent())
     monkeypatch.setattr(macos, "connected", CONNECTED)
     assert macos.base_ready(base_bootstrap.host)
-    base_bootstrap.mark.assert_called_once_with(base_bootstrap.host)
+    base_bootstrap.mark.assert_called_once_with(base_bootstrap.host, verified=True)
 
 
 @pytest.mark.parametrize("result", [(1, b"", b"permission denied"), (127, b"", b"command missing")])

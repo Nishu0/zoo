@@ -1055,49 +1055,177 @@ macos_node_identity() { # HOME
     [[ "$NODE_KEY" =~ ^ssh-ed25519\ [A-Za-z0-9+/=]+$ ]] || die "the control-plane SSH public key is invalid"
 }
 
-join_or_resume_macos_node() { # HOME
+# Authenticate possession of the stored key before reusing this enrollment.
+# A supplied token independently pins the intended authority, including over HTTP.
+macos_enrollment_status() { # HOME; 0 current, 1 reenroll, 2 unavailable/invalid
+    ZOO_ENROLLMENT_TOKEN="$NODE_TOKEN" python3 - "$1/.zoo-node" "$CONTROL_PLANE" <<'PYENROLL'
+import base64, hashlib, json, os, re, secrets, subprocess, sys, time, urllib.request
+from pathlib import Path
+directory, api = Path(sys.argv[1]), sys.argv[2].rstrip("/")
+try:
+    config = json.loads((directory / "config.json").read_text())
+    if config["api"].rstrip("/") != api:
+        raise ValueError("different control plane")
+    token = os.environ.get("ZOO_ENROLLMENT_TOKEN", "")
+    if token:
+        if not token.startswith("zn1."):
+            raise ValueError("invalid token")
+        encoded = token[4:]
+        claim = json.loads(base64.b64decode(encoded + "=" * (-len(encoded) % 4), altchars=b"-_", validate=True))
+        if (claim.get("u", "").rstrip("/") != api or not claim.get("s")
+                or not re.fullmatch(r"[a-fA-F0-9]{64}", claim.get("f", ""))):
+            raise ValueError("invalid token binding")
+        authority = subprocess.run(["openssl", "x509", "-in", str(directory / "ca.crt"), "-outform", "DER"],
+                                   check=True, capture_output=True).stdout
+        if hashlib.sha256(authority).hexdigest() != claim["f"].lower():
+            sys.exit(1)
+    timestamp, nonce = int(time.time()), secrets.token_hex(32)
+    message = f"zoo-node-enrollment-v1\n{timestamp}\n{nonce}\n".encode()
+    signature = subprocess.run(["openssl", "dgst", "-sha256", "-sign", str(directory / "node.key")],
+                               input=message, check=True, capture_output=True).stdout
+    payload = {"certificate": (directory / "node.crt").read_text(), "timestamp": timestamp,
+               "nonce": nonce, "signature": base64.b64encode(signature).decode()}
+    request = urllib.request.Request(api + "/v1/nodes/enrollment/status", data=json.dumps(payload).encode(),
+                                     headers={"Content-Type": "application/json"}, method="POST")
+    # Enrollment proof must never follow a redirect to another host.
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *args, **kwargs):
+            return None
+    with urllib.request.build_opener(NoRedirect).open(request, timeout=20) as response:
+        result = json.loads(response.read(65536))
+    if result.get("status") == "current":
+        if result.get("node_id") != config["node_id"] or result.get("server_id") != config["server_id"]:
+            raise ValueError("identity mismatch")
+        sys.exit(0)
+    if result.get("status") == "reenroll" and result.get("reason") in {
+            "authority_changed", "expired", "registration_missing", "registration_replaced"}:
+        sys.exit(1)
+except Exception:
+    pass
+sys.exit(2)
+PYENROLL
+}
+
+resume_macos_node_service() { # HOME [RESTART=0]
     local directory="$1/.zoo-node" agent="$1/Library/LaunchAgents/dev.zoo.node.plist" uid domain bin
-    if ! macos_existing_node "$1"; then
-        join_node "$NODE_USER"
-    else
-        say "Resuming this Mac's existing Zoo registration"
-        bin="$directory/bin/zoo-node"
-        if [ ! -x "$bin" ]; then
-            local temporary arch
-            case "$(uname -m)" in arm64) arch=arm64 ;; *) arch=amd64 ;; esac
-            temporary=$(mktemp)
-            curl -fsSL --retry 3 "$CONTROL_PLANE/v1/nodes/download/darwin/$arch" -o "$temporary" \
-                || die "couldn't restore the enrolled node binary"
-            install -d -o "$NODE_USER" -g staff -m 700 "$directory/bin"
-            install -o "$NODE_USER" -g staff -m 755 "$temporary" "$bin"
-            rm -f "$temporary"
-        fi
-        mkdir -p "$(dirname "$agent")" /usr/local/bin
-        # Keep the service definition current without replacing its credentials.
-        python3 - "$bin" "$directory" "$agent" <<'PY'
+    bin="$directory/bin/zoo-node"
+    if [ ! -x "$bin" ]; then
+        local temporary arch
+        case "$(uname -m)" in arm64) arch=arm64 ;; *) arch=amd64 ;; esac
+        temporary=$(mktemp) || return 1
+        curl -fsSL --retry 3 "$CONTROL_PLANE/v1/nodes/download/darwin/$arch" -o "$temporary" \
+            || return 1
+        install -d -o "$NODE_USER" -g staff -m 700 "$directory/bin" || return 1
+        install -o "$NODE_USER" -g staff -m 755 "$temporary" "$bin" || return 1
+        rm -f "$temporary"
+    fi
+    mkdir -p "$(dirname "$agent")" || return 1
+    [ -d /usr/local/bin ] || mkdir -p /usr/local/bin || return 1
+    # Keep the service definition current without replacing its credentials.
+    python3 - "$bin" "$directory" "$agent" <<'PY' || return 1
 import plistlib, sys
 binary, directory, target = sys.argv[1:]
 value = {"Label": "dev.zoo.node", "ProgramArguments": [binary, "run", "--dir", directory],
-         "EnvironmentVariables": {"PATH": "/Applications/Docker.app/Contents/Resources/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"},
-         "RunAtLoad": True, "KeepAlive": True,
-         "StandardOutPath": directory + "/node.log", "StandardErrorPath": directory + "/node.log"}
+ "EnvironmentVariables": {"PATH": "/Applications/Docker.app/Contents/Resources/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"},
+ "RunAtLoad": True, "KeepAlive": True,
+ "StandardOutPath": directory + "/node.log", "StandardErrorPath": directory + "/node.log"}
 with open(target, "wb") as output:
     plistlib.dump(value, output)
 PY
-        chown "$NODE_USER:staff" "$(dirname "$agent")" "$agent"
-        chmod 644 "$agent"
-        ln -sf "$bin" /usr/local/bin/zoo-node
-        uid=$(id -u "$NODE_USER")
+    chown "$NODE_USER:staff" "$(dirname "$agent")" "$agent" || return 1
+    chmod 644 "$agent" || return 1
+    if [ "$(readlink /usr/local/bin/zoo-node 2>/dev/null || true)" != "$bin" ]; then
+        ln -sf "$bin" /usr/local/bin/zoo-node || return 1
+    fi
+    uid=$(id -u "$NODE_USER") || return 1
+    if [ "${2:-0}" = 1 ]; then
         for domain in "gui/$uid" "user/$uid"; do
-            if as_user launchctl print "$domain/dev.zoo.node" >/dev/null 2>&1 \
-                || as_user launchctl bootstrap "$domain" "$agent" >/dev/null 2>&1; then
-                ok "zoo-node service is enabled; existing enrollment retained"
-                break
-            fi
+            as_user launchctl bootout "$domain/dev.zoo.node" >/dev/null 2>&1 || true
         done
-        as_user launchctl print "gui/$uid/dev.zoo.node" >/dev/null 2>&1 \
-            || as_user launchctl print "user/$uid/dev.zoo.node" >/dev/null 2>&1 \
-            || die "couldn't resume the enrolled zoo-node service"
+    fi
+    for domain in "gui/$uid" "user/$uid"; do
+        if as_user launchctl print "$domain/dev.zoo.node" >/dev/null 2>&1 \
+            || as_user launchctl bootstrap "$domain" "$agent" >/dev/null 2>&1; then
+            ok "zoo-node service is enabled"
+            break
+        fi
+    done
+    as_user launchctl print "gui/$uid/dev.zoo.node" >/dev/null 2>&1 \
+        || as_user launchctl print "user/$uid/dev.zoo.node" >/dev/null 2>&1 \
+        || return 1
+}
+
+# Stage a token-pinned join before stopping or replacing the old identity. A
+# failed join leaves the running node untouched; a failed restart rolls it back.
+reenroll_macos_node() ( # HOME; subshell owns transaction cleanup
+    # Subshell variables survive into EXIT; Bash drops function locals first.
+    enroll_home="$1" enroll_directory="$1/.zoo-node" enroll_stopped=0 enroll_promoted=0 enroll_committed=0
+    enroll_staged=$(as_user mktemp -d "$enroll_home/.zoo-node-enroll.XXXXXXXX") || exit 1
+    enroll_backup="$enroll_staged.previous"
+    # shellcheck disable=SC2329 # Invoked by the EXIT trap.
+    cleanup_enrollment() {
+        local result=$?
+        trap - EXIT
+        if [ "$enroll_promoted" = 1 ] && [ "$enroll_committed" = 0 ]; then
+            for enroll_domain in "gui/$enroll_uid" "user/$enroll_uid"; do
+                as_user launchctl bootout "$enroll_domain/dev.zoo.node" >/dev/null 2>&1 || true
+            done
+            rm -rf "$enroll_directory"
+            mv "$enroll_backup" "$enroll_directory"
+            resume_macos_node_service "$enroll_home" 1 >/dev/null 2>&1 || true
+        elif [ -d "$enroll_backup" ] && [ ! -e "$enroll_directory" ]; then
+            mv "$enroll_backup" "$enroll_directory"
+            resume_macos_node_service "$enroll_home" 1 >/dev/null 2>&1 || true
+        elif [ "$enroll_stopped" = 1 ] && [ "$enroll_committed" = 0 ]; then
+            resume_macos_node_service "$enroll_home" 1 >/dev/null 2>&1 || true
+        fi
+        rm -rf "$enroll_staged"
+        if [ "$enroll_committed" = 1 ]; then rm -rf "$enroll_backup"; fi
+        exit "$result"
+    }
+    trap cleanup_enrollment EXIT
+    case "$(uname -m)" in arm64) enroll_arch=arm64 ;; *) enroll_arch=amd64 ;; esac
+    as_user mkdir -p "$enroll_staged/bin" || exit 1
+    curl -fsSL --retry 3 "$CONTROL_PLANE/v1/nodes/download/darwin/$enroll_arch" -o "$enroll_staged/bin/zoo-node" || exit 1
+    chown "$NODE_USER:staff" "$enroll_staged/bin/zoo-node" || exit 1
+    chmod 755 "$enroll_staged/bin/zoo-node" || exit 1
+    # Suppress untrusted remote error text: it may echo submitted credentials.
+    as_user "$enroll_staged/bin/zoo-node" join "$NODE_TOKEN" --ssh-user "$NODE_USER" --dir "$enroll_staged" >/dev/null 2>&1 || exit 1
+    [ -s "$enroll_staged/config.json" ] && [ -s "$enroll_staged/node.key" ] && [ -s "$enroll_staged/node.crt" ] && [ -s "$enroll_staged/ca.crt" ] || exit 1
+    enroll_uid=$(id -u "$NODE_USER") || exit 1
+    enroll_stopped=1
+    for enroll_domain in "gui/$enroll_uid" "user/$enroll_uid"; do
+        as_user launchctl bootout "$enroll_domain/dev.zoo.node" >/dev/null 2>&1 || true
+    done
+    for enroll_domain in "gui/$enroll_uid" "user/$enroll_uid"; do
+        if as_user launchctl print "$enroll_domain/dev.zoo.node" >/dev/null 2>&1; then exit 1; fi
+    done
+    mv "$enroll_directory" "$enroll_backup" || exit 1
+    enroll_promoted=1
+    mv "$enroll_staged" "$enroll_directory" || exit 1
+    resume_macos_node_service "$enroll_home" 1 || exit 1
+    enroll_committed=1
+)
+
+join_or_resume_macos_node() { # HOME
+    local directory="$1/.zoo-node" status
+    if ! macos_existing_node "$1"; then
+        join_node "$NODE_USER"
+    else
+        status=0
+        macos_enrollment_status "$1" || status=$?
+        case "$status" in
+            0)
+                say "Resuming this Mac's verified Zoo registration"
+                resume_macos_node_service "$1" || die "couldn't resume the enrolled zoo-node service"
+                ;;
+            1)
+                [ -n "$NODE_TOKEN" ] || die "this Mac's registration is no longer current; run the new setup command from Servers > Add server"
+                say "Refreshing this Mac's Zoo registration"
+                reenroll_macos_node "$1" || die "couldn't refresh Zoo enrollment; previous credentials were preserved; copy a fresh Add server setup command"
+                ;;
+            *) die "couldn't securely verify this Mac's registration; credentials were preserved; check the control plane connection and retry" ;;
+        esac
     fi
     printf '%s\n' "$NODE_KEY" > "$directory/control-plane.pub"
     chown "$NODE_USER:staff" "$directory/control-plane.pub"
@@ -1148,7 +1276,11 @@ start_macos_preparation() { # HOME
         note "base preparation deferred; creating a macOS sandbox will prepare it automatically"
         return
     fi
-    if [ -f "$1/.zoovm/vms/$name/zoo-ready" ]; then ok "macOS template is already prepared"; return; fi
+    if [ -f "$1/.zoovm/vms/$name/zoo-ready" ] \
+        && [ -f "$1/.zoovm/vms/$name/zoo-controller-key" ] \
+        && [ "$(cat "$1/.zoovm/vms/$name/zoo-controller-key")" = "$NODE_KEY" ]; then
+        ok "macOS template is already prepared"; return
+    fi
     say "Starting automatic macOS preparation in the background"
     # Arguments travel as positional values; spaces in restore-image paths are preserved.
     # shellcheck disable=SC2016

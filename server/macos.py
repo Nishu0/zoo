@@ -223,17 +223,22 @@ def guest_client(rid: str) -> paramiko.SSHClient:
     # The guest sits on the Mac's private NAT network, reachable only from the Mac itself
     # (directly or through its SSH connection). Each clone gets fresh host keys, so there is nothing to pin.
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(
-        ip,
-        username=USER,
-        sock=tunnel,
-        pkey=private_key(),
-        allow_agent=False,
-        look_for_keys=False,
-        timeout=15,
-        banner_timeout=15,
-        auth_timeout=15,
-    )
+    try:
+        client.connect(
+            ip,
+            username=USER,
+            sock=tunnel,
+            pkey=private_key(),
+            allow_agent=False,
+            look_for_keys=False,
+            timeout=15,
+            banner_timeout=15,
+            auth_timeout=15,
+        )
+    except BaseException:
+        client.close()
+        tunnel.close()
+        raise
     client.get_transport().set_keepalive(30)
     guests[rid] = client
     return client
@@ -660,7 +665,100 @@ def ready_marker() -> str:
     return f"{vm_dir(BASE_VM)}/zoo-ready"
 
 
-def mark_base(server_id: str) -> str:
+def controller_key_marker() -> str:
+    return f"{vm_dir(BASE_VM)}/zoo-controller-key"
+
+
+def recover_base_key(rid: str):
+    """Recover an enrolled Zoo base after its control plane replaced its SSH identity."""
+    server_id, name = parse(rid)
+    if rid != base_id(server_id):
+        raise ValueError("controller key recovery is restricted to the base VM")
+    password_path = f"{vm_dir(name)}/password"
+    code, encoded_password, _ = run(
+        server_id,
+        f"test -f {vm_dir(name)}/zoo-seeded && test ! -L {password_path} "
+        f'&& test -f {password_path} && test "$(stat -f %Lp {password_path})" = 600 '
+        f'&& test "$(stat -f %u {password_path})" = "$(id -u)" && cat {password_path}',
+    )
+    if code != 0:
+        raise RuntimeError("the base has no private Zoo bootstrap password")
+    password = encoded_password.decode("ascii", errors="replace").strip()
+    if re.fullmatch(r"[0-9a-f]{36}", password) is None:
+        raise RuntimeError("the base has no valid Zoo bootstrap password")
+    old_key = run(server_id, f"cat {controller_key_marker()} 2>/dev/null")[1].decode().strip()
+    if old_key:
+        old_key = validate_controller_key(old_key)
+    new_key = validate_controller_key(public_key())
+    ip = check(server_id, f"zoovm ip {name}").strip()
+    tunnel = open_socket(server_id, (ip, 22))
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        client.connect(
+            ip,
+            username=USER,
+            password=password,
+            sock=tunnel,
+            allow_agent=False,
+            look_for_keys=False,
+            timeout=15,
+            banner_timeout=15,
+            auth_timeout=15,
+        )
+        # No password enters a command, log, guest file, or root password login.
+        proof = f'test -f /var/db/zoo/done && test "$(cat /var/db/zoo/user)" = {shlex.quote(USER)}'
+        verification = f'test "$(id -un)" = {shlex.quote(USER)} && sudo -n /bin/sh -c {shlex.quote(proof)}'
+        output_of(execute(client, verification, None, 10))
+        script = r"""set -eu
+IFS= read -r new_key
+IFS= read -r old_key
+user=$1
+test -f /var/db/zoo/done
+test "$(cat /var/db/zoo/user)" = "$user"
+for directory in /var/root/.ssh "/Users/$user/.ssh"; do
+    test ! -L "$directory"
+    mkdir -p "$directory"
+    chmod 700 "$directory"
+    target="$directory/authorized_keys"
+    test ! -L "$target"
+    temporary=$(mktemp "$directory/.authorized_keys.XXXXXX")
+    trap 'rm -f "$temporary"' EXIT
+    if test -f "$target"; then
+        while IFS= read -r line || test -n "$line"; do
+            test "$line" = "$new_key" && continue
+            if test -n "$old_key" && test "$line" = "$old_key"; then continue; fi
+            printf '%s\n' "$line"
+        done < "$target" > "$temporary"
+    fi
+    printf '%s\n' "$new_key" >> "$temporary"
+    chmod 600 "$temporary"
+    case "$directory" in
+        /var/root/*) chown root:wheel "$directory" "$temporary" ;;
+        *) chown "$user:staff" "$directory" "$temporary" ;;
+    esac
+    mv -f "$temporary" "$target"
+    trap - EXIT
+done
+"""
+        command = f"sudo -n /bin/sh -c {shlex.quote(script)} zoo-key-recovery {shlex.quote(USER)}"
+        output_of(execute(client, command, f"{new_key}\n{old_key}\n".encode(), 15))
+    finally:
+        client.close()
+        tunnel.close()
+        for cache in (guests, roots):
+            stale = cache.pop(rid, None)
+            if stale is not None:
+                stale.close()
+
+
+def validate_controller_key(key: str) -> str:
+    from server.ssh import validate_host_key
+
+    return validate_host_key(key)
+
+
+def mark_base(server_id: str, *, verified: bool = False) -> str:
     """Gives the base VM a new version, `<macOS version>-<build>-<UTC minute>`: when it's first found ready, and each
     time it's stopped after a change, so sandboxes cloned before and after differ."""
     os_version, build = "macos", "unknown"
@@ -670,6 +768,8 @@ def mark_base(server_id: str) -> str:
             info = json.loads(out)
             os_version, build = info.get("os") or os_version, info.get("build") or build
     version = f"{os_version}-{build}-{time.strftime('%Y%m%d%H%M', time.gmtime())}"
+    if verified:
+        check(server_id, f"printf '%s\\n' {shlex.quote(public_key())} > {controller_key_marker()}")
     check(server_id, f"printf '%s\\n' {shlex.quote(version)} > {ready_marker()}")
     return version
 
@@ -691,24 +791,37 @@ def desktop_ready(server_id: str) -> bool:
 
 
 def base_ready(server_id: str) -> bool:
-    if run(server_id, f"test -f {ready_marker()}")[0] == 0:
+    if (
+        run(
+            server_id,
+            f"test -f {ready_marker()} && test -f {controller_key_marker()} "
+            f'&& test "$(cat {controller_key_marker()})" = {shlex.quote(public_key())}',
+        )[0]
+        == 0
+    ):
         return True
     if BASE_VM not in running_vms(server_id):
         return False
     if run(server_id, f"nc -z -G 2 $(zoovm ip {BASE_VM}) 22", timeout=10)[0] != 0:
         return False
     try:
-        ok = desktop_ready(server_id)
+        try:
+            ok = desktop_ready(server_id)
+        except paramiko.AuthenticationException:
+            recover_base_key(base_id(server_id))
+            ok = desktop_ready(server_id)
         if ok:
             sandbox_id = f"base-{server_id}"
             hub.bind(base_id(server_id), sandbox_id)
             install_guest(base_id(server_id), sandbox_id)
             ok = connected(base_id(server_id), "exec").run(["true"], timeout=5)[0] == 0
     except Exception:
-        guests.pop(base_id(server_id), None)
+        stale = guests.pop(base_id(server_id), None)
+        if stale is not None:
+            stale.close()
         return False
     if ok:
-        mark_base(server_id)
+        mark_base(server_id, verified=True)
     return ok
 
 

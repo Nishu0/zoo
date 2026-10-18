@@ -1,5 +1,7 @@
 # Zoo component, API, tool, and security map
 
+For a simple list of component names and their uses, see [Zoo components](components.md).
+
 This map describes the current checkout, including optional runtime paths. It is a code walkthrough, not a verification of a running installation or a security audit. Solid arrows show calls or connections; dotted arrows show configuration or optional integrations. Replies travel back over the same connection.
 
 Zoo supplies computers and tools to external AI agents. The model, planner, and decision loop live in the external client.
@@ -29,30 +31,7 @@ flowchart TB
         guest["zoo-guest - daemon inside each sandbox"]
         egress["Host egress enforcement - outside sandbox"]
     end
-
-    person --> web
-    web -->|"REST, SSE, viewer and terminal WebSockets"| api
-    agent -->|"MCP /mcp or REST /v1"| api
-    sdk -->|"REST /v1"| api
-    api -->|"Authorize, read/write, enqueue jobs"| db
-    worker -->|"Claim jobs and update state"| db
-    api -->|"Private TLS gRPC :7444"| gateway
-    worker -->|"Private TLS gRPC :7444"| gateway
-    gateway -->|"Resolve placement and identities"| db
-    api -->|"Profiles and backup access"| objects
-    worker -->|"Backup and restore data"| objects
-    worker -->|"Provision, stop, snapshot"| localRuntime
-    worker -->|"Host operations through gateway tunnel"| gateway
-    node -->|"Outbound mTLS stream to gateway :7443"| gateway
-    node -->|"Tunnel to pinned host SSH"| hostRuntime
-    localRuntime -->|"Runs"| sandbox
-    hostRuntime -->|"Runs"| sandbox
-    sandbox -->|"Contains"| guest
-    guest -->|"Outbound authenticated WebSocket /guest/connect"| gateway
-    localRuntime -.->|"Install network policy"| egress
-    hostRuntime -.->|"Install network policy"| egress
-    sandbox -->|"Outbound traffic subject to policy"| egress
-    egress -->|"Allowed traffic"| internet["Internet / external services"]
+    internet["Internet / external services"]
 ```
 
 The API and worker share Python code but run as separate services in Compose. Postgres is also the durable job store; there is no separate Redis or message broker in this deployment. API requests can perform runtime work too, including claiming a warm sandbox and applying configuration; cold lifecycle work runs in the worker.
@@ -136,7 +115,7 @@ sequenceDiagram
     api-->>client: Current state / lifecycle events
 ```
 
-Docker homes stay on the selected engine; Kubernetes homes use node-local storage. Object storage supports export/restore and profiles rather than automatically making homes portable. Docker stop initially freezes the container; Kubernetes has a separate VM-control pause/resume path. Later cleanup can remove compute while retaining home storage. Native VM saved states have platform and identity constraints.
+Docker homes stay on the selected engine; Kubernetes homes use node-local storage. Object storage supports export/restore and profiles rather than automatically making homes portable. Docker stop initially freezes the container; Kubernetes lifecycle stop/resume uses VM-control. Separately, Kubernetes warm-pool pause/resume helpers use guest process signals rather than whole-VM pause. Later cleanup can remove compute while retaining home storage. Native VM saved states have platform and identity constraints.
 
 ## 4. API map
 

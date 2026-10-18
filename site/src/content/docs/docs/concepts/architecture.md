@@ -64,8 +64,10 @@ it ready. An empty or incompatible pool does not justify bypassing policy checks
 
 Stopping a Linux sandbox pauses it first: on Kubernetes its Kata VM through VM-control, on
 Docker its container (`docker pause`, which freezes the sandbox's processes; the VM keeps
-its memory). `resumable` marks that case while the public state remains stopped, and the
-next start resumes it. After `ZOO_PAUSE_MINUTES` (default 30), or sooner on a node with
+its memory). The separate Kubernetes warm-pool pause/resume helpers use guest process
+signals rather than whole-VM pause. `resumable` marks the lifecycle stop case while the
+public state remains stopped, and the next start resumes it. After `ZOO_PAUSE_MINUTES`
+(default 30), or sooner on a node with
 less than 10% of its memory free (oldest first), the sandbox is deleted down to its home
 volume and the next start is a cold boot. A process freeze does not release memory. Native platform saved-state reuse also has identity/host restrictions.
 

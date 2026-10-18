@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from urllib.parse import urlparse
 
 from cryptography import x509
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
@@ -188,6 +189,53 @@ def serial_of(cert: x509.Certificate) -> str:
 
 def expiry_of(cert: x509.Certificate) -> datetime.datetime:
     return cert.not_valid_after_utc
+
+
+class EnrollmentProofError(ValueError):
+    """The caller did not prove possession of its claimed node identity."""
+
+
+def enrollment_status(certificate: str, timestamp: int, nonce: str, signature: str) -> dict[str, str]:
+    """Read-only proof that local credentials still belong to this control plane.
+
+    Only an authenticated holder gets a definitive re-enrollment result. Storage
+    and availability failures propagate so an installer cannot mistake downtime
+    for permission to replace a working registration.
+    """
+    instant = now()
+    if abs(instant.timestamp() - timestamp) > 120:
+        raise EnrollmentProofError("node enrollment proof has expired; check the host clock")
+    message = f"zoo-node-enrollment-v1\n{timestamp}\n{nonce}\n".encode()
+    try:
+        cert = x509.load_pem_x509_certificate(certificate.encode())
+        key = cert.public_key()
+        if not isinstance(key, ec.EllipticCurvePublicKey):
+            raise TypeError("node keys must be EC keys")
+        key.verify(base64.b64decode(signature, validate=True), message, ec.ECDSA(hashes.SHA256()))
+        common_name = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
+        if not isinstance(common_name, str):
+            raise TypeError("node identity must be text")
+        node_id = str(uuid.UUID(common_name))
+        if node_id != common_name or cert.extensions.get_extension_for_class(x509.BasicConstraints).value.ca:
+            raise ValueError("invalid node identity")
+        if ExtendedKeyUsageOID.CLIENT_AUTH not in cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value:
+            raise ValueError("not a node client certificate")
+    except (ValueError, TypeError, IndexError, InvalidSignature, x509.ExtensionNotFound) as error:
+        raise EnrollmentProofError("invalid node enrollment proof") from error
+
+    try:
+        cert.verify_directly_issued_by(authority().certificate)
+    except (ValueError, TypeError, InvalidSignature):
+        return {"status": "reenroll", "reason": "authority_changed"}
+    if instant < cert.not_valid_before_utc or instant >= expiry_of(cert):
+        return {"status": "reenroll", "reason": "expired"}
+    with db_manager.session() as db:
+        node = db.get_node(id=node_id)
+        if node is None or db.get_server(id=node.server_id) is None:
+            return {"status": "reenroll", "reason": "registration_missing"}
+    if node.serial != serial_of(cert) or node.cert_expires_at != expiry_of(cert):
+        return {"status": "reenroll", "reason": "registration_replaced"}
+    return {"status": "current", "node_id": node.id, "server_id": node.server_id}
 
 
 def pem(cert: x509.Certificate) -> str:
