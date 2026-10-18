@@ -1,6 +1,6 @@
 [project]
 name = "zoo"
-version = "0.1.7"
+version = "0.1.8"
 description = "Self-hosted sandboxes (Linux, macOS, Windows) for AI agents, driven over MCP, REST and a Python SDK"
 
 readme = "README.md"

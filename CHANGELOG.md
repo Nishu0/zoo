@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.8](https://github.com/chann44/zoo/compare/v0.1.7...v0.1.8) (2026-10-18)
+
+
+### Bug Fixes
+
+* instaler stole and not able to add macos as a server for mac os sandbox fixed ([69a5393](https://github.com/chann44/zoo/commit/69a5393a1cfd1b276429491375c91991dae10a74))
+
 ## [0.1.7](https://github.com/chann44/zoo/compare/v0.1.6...v0.1.7) (2026-10-18)
 
 
