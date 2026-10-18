@@ -1,7 +1,7 @@
 [project]
 name = "zoo"
 version = "0.1.6"
-description = "Self-hosted sandboxes (Linux, macOS, Windows) for AI agents, driven over MCP, REST and a Python SDK"
+description = "Self-hosted sandboxes for AI agents."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

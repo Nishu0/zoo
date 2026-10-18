@@ -63,8 +63,7 @@ export default defineConfig({
     integrations: [
         starlight({
             title: "Zoo",
-            description:
-                "Self-hosted sandboxes for AI agents: install, connect agents over MCP, REST and SDK, and operate Linux, macOS and Windows sandboxes.",
+            description: "Self-hosted sandboxes for AI agents.",
             logo: { src: "./src/assets/zoo-mark.png" },
             favicon: "/favicon.png",
             social: [{ icon: "github", label: "GitHub", href: "https://github.com/chann44/zoo" }],
