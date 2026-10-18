@@ -16,6 +16,24 @@ responsible for applicable platform licensing.
 
 ## Prepare the host
 
+To install the control plane and enroll this same Mac, start Docker Desktop and run:
+
+```bash
+curl -fsSL https://github.com/chann44/zoo/releases/latest/download/install.sh | \
+  sudo bash -s -- --admin-email you@example.com
+```
+
+**A full Mac install starts fresh.** It removes the selected installation's `.env`,
+the `zoo` Docker project's containers and volumes, and Zoo Docker sandbox/helper
+containers. This deletes the old accounts, database and object-store data. Other
+Docker applications and native macOS VM disks are retained. `--check` makes no changes.
+To refresh or retry host setup without resetting the control plane, use `--node` below.
+
+The local dashboard uses `http://localhost:3000` and the API uses
+`http://localhost:8000`, independent of the Mac's Wi-Fi address. Native guests reach
+the published API through their discovered virtual-network gateway. For hosts on
+other machines, configure a reachable domain with `--domain` instead of localhost.
+
 Use the dashboard's **Add server → Mac** command with its one-time token, control-plane
 URL and API-provided key. The native daemon enrolls and dials the gateway over mTLS.
 `install.sh --node` can prepare the base; `--ipsw PATH` selects a restore image and
@@ -49,10 +67,15 @@ curl -fsSL http://your-zoo-server:8000/v1/nodes/install/install.sh | \
   sudo bash -s -- --node --control-plane http://your-zoo-server:8000
 ```
 
-An enrolled Mac keeps its existing registration and certificates; rerunning setup does
+An enrolled Mac keeps its existing registration and certificates; rerunning `--node` setup does
 not create a second server or spend another join token. The installer refreshes its
 restricted root-owned helper and resumes the existing node service. Base preparation
 resumes automatically; there are no separate guest-account or repair commands.
+
+After a fresh control-plane installation, use the complete new **Add server** command
+to replace an old registration. Its one-time token pins the new control plane's
+certificate authority, including when changing from a LAN URL to localhost. Replacement
+is staged and rolls back on failure; it does not delete native VM disks.
 
 `--check` performs preflight checks without installing or preparing a VM. `--no-base`
 defers background preparation until a sandbox is requested. `--ipsw PATH` selects a

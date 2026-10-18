@@ -152,6 +152,59 @@ def test_network_policy_keeps_the_guest_reaching_the_api(monkeypatch):
         macos.guest_rule()
 
 
+@pytest.mark.parametrize("api", ["http://localhost:8000", "http://127.0.0.1:8000", "http://[::1]:8000"])
+def test_localhost_guest_bootstrap_and_policy_use_the_vm_nat_gateway(monkeypatch, tmp_path, api):
+    monkeypatch.setenv("ZOO_API_URL", api)
+    monkeypatch.setenv("JWT_SECRET", "test-only")
+    binary = tmp_path / "zoo-guest"
+    binary.write_bytes(b"guest build")
+    monkeypatch.setattr(macos, "GUEST_BINARY", str(binary))
+    route = Mock(return_value="192.168.64.1\n")
+    monkeypatch.setattr(macos, "guest_check", route)
+    monkeypatch.setattr(macos, "guest", Mock(return_value=(0, b"", b"")))
+    monkeypatch.setattr(macos.hub, "for_sandbox", lambda sandbox_id: object())
+    rid = "macos:srv:zoo-sb"
+    macos.install_guest(rid, "sb")
+    configs = [entry.kwargs.get("stdin", b"") for entry in route.call_args_list]
+    assert any(b"ZOO_GUEST_URL=ws://192.168.64.1:8000/guest/connect\n" in config for config in configs)
+    assert any(entry.kwargs.get("ssh") for entry in route.call_args_list if "/sbin/route" in entry.args[1])
+    assert macos.guest_rule(rid) == ["pass out quick proto tcp to 192.168.64.1 port 8000 keep state"]
+    assert macos.native_guest_endpoint(rid) == ("192.168.64.1", 8000)
+
+
+@pytest.mark.parametrize("gateway", ["", "127.0.0.1", "0.0.0.0", "not-an-address", "192.168.64.1; echo bad"])
+def test_localhost_guest_connection_fails_clearly_when_nat_gateway_is_invalid(monkeypatch, gateway):
+    monkeypatch.setenv("ZOO_API_URL", "http://localhost:8000")
+    monkeypatch.setattr(macos, "guest_check", Mock(return_value=gateway))
+    with pytest.raises(ZooError, match="gateway"):
+        macos.native_guest_endpoint("macos:srv:zoo-sb")
+
+
+def test_remote_mac_keeps_public_api_connection_and_policy(monkeypatch):
+    monkeypatch.setenv("ZOO_API_URL", "https://zoo.example/api")
+    commands = Mock(side_effect=AssertionError("remote API must not need NAT discovery"))
+    monkeypatch.setattr(macos, "guest_check", commands)
+    assert macos.native_guest_endpoint("macos:srv:zoo-sb") == ("zoo.example", 443)
+    assert macos.guest_rule("macos:srv:zoo-sb") == ["pass out quick proto tcp to zoo.example port 443 keep state"]
+
+
+def test_localhost_network_policy_preserves_guest_connection_under_default_deny(monkeypatch):
+    import json
+
+    monkeypatch.setenv("ZOO_API_URL", "http://localhost:8000")
+    monkeypatch.setattr(macos, "ensure_egress", lambda server_id: None)
+    monkeypatch.setattr(macos, "running_vms", lambda server_id: {"zoo-sb"})
+    host, guest = Mock(return_value="192.168.64.2"), Mock(return_value="192.168.64.1")
+    monkeypatch.setattr(macos, "check", host)
+    monkeypatch.setattr(macos, "guest_check", guest)
+    macos.apply_network("macos:srv:zoo-sb", "deny", False, [])
+    policy = json.loads(host.call_args.kwargs["stdin"])
+    assert policy["always"] == [{"ip": "192.168.64.1", "port": 8000}]
+    rules = guest.call_args.kwargs["stdin"].decode()
+    assert "pass out quick proto tcp to 192.168.64.1 port 8000 keep state" in rules
+    assert rules.endswith("block return out all\n")
+
+
 @pytest.mark.parametrize("unavailable", ["stopped", "ssh_port", "ssh_authentication"])
 def test_base_bootstrap_waits_for_running_vm_and_authenticated_guest_ssh(base_bootstrap, monkeypatch, unavailable):
     if unavailable == "stopped":

@@ -96,6 +96,154 @@ def test_existing_registration_cannot_be_silently_redirected_to_another_control_
     assert b"already enrolled" in result.stderr
 
 
+def test_fresh_desktop_install_can_replace_old_lan_enrollment(installer):
+    installer.enroll()
+    result = installer.run(
+        "CONTROL_PLANE=http://localhost:8000\n"
+        f"NODE_TOKEN=fresh-token\nNODE_KEY={shlex.quote(KEY)}\n"
+        f"macos_node_identity {shlex.quote(str(installer.home))}",
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr.decode()
+
+
+@pytest.mark.parametrize(
+    "mode", ["fresh", "leftovers", "orphan-volumes", "check", "insufficient-disk", "download-failed", "cleanup-failed", "complete"]
+)
+def test_desktop_install_starts_clean_on_localhost_after_complete_preflight(installer, tmp_path, mode):
+    import tarfile
+
+    destination = tmp_path / "deployment"
+    destination.mkdir()
+    old_env = destination / ".env"
+    if mode not in ("fresh", "orphan-volumes"):
+        old_env.write_text("JWT_SECRET=old-secret\nZOO_API_URL=http://192.168.1.6:8000\n")
+    disk = installer.home / ".zoovm/vms/zoo-macos-base/disk.img"
+    disk.parent.mkdir(parents=True)
+    disk.write_bytes(b"native VM disk")
+    archive = tmp_path / "source.tar.gz"
+    node = tmp_path / "zoo-node"
+    node.write_text(
+        '#!/usr/bin/env python3\nimport json, pathlib, sys\n'
+        'directory = pathlib.Path(sys.argv[sys.argv.index("--dir") + 1])\n'
+        'config = {"api":"http://localhost:8000","node_id":"new-node","server_id":"new-server",'
+        '"endpoints":["localhost:7443"]}\n'
+        '(directory / "config.json").write_text(json.dumps(config))\n'
+        'for name in ("node.key", "node.crt", "ca.crt"): (directory / name).write_text("new-" + name)\n'
+    )
+    node.chmod(0o755)
+    with tarfile.open(archive, "w:gz") as payload:
+        for name in (".env.example", "compose.yml", "Caddyfile"):
+            payload.add(ROOT / name, arcname="source/" + name)
+    trace = shlex.quote(str(installer.trace))
+    stubs = f"""
+dscl() {{ printf 'NFSHomeDirectory: %s\\n' {shlex.quote(str(installer.home))}; }}
+uname() {{ case "$1" in -m) echo arm64 ;; -s) echo Darwin ;; esac; }}
+sw_vers() {{ echo 15.6; }}
+sysctl() {{ echo 25769803776; }}
+need_disk() {{ echo "disk $2" >> {trace}; {"fail 'not enough disk'" if mode == "insufficient-disk" else ":"}; }}
+require_tools() {{ :; }}
+chown() {{ :; }}
+scutil() {{ echo test-mac; }}
+curl() {{
+    echo download >> {trace}
+    {"return 1" if mode == "download-failed" else ":"}
+    local destination='' url=''
+    while [ "$#" -gt 0 ]; do case "$1" in -o) destination=$2; shift 2 ;; http*) url=$1; shift ;; *) shift ;; esac; done
+    case "$url" in
+        */download/darwin/*) cp {shlex.quote(str(node))} "$destination" ;;
+        *) cp {shlex.quote(str(archive))} "$destination" ;;
+    esac
+}}
+as_user() {{ "$@"; }}
+docker() {{
+    printf '%s\\n' "$*" >> {trace}
+    case "$*" in
+        'ps -aq --filter label=com.docker.compose.project=zoo') {"echo abc123" if mode not in ("fresh", "orphan-volumes") else ":"} ;;
+        'ps -aq --filter label=zoo.sandbox') {"echo def456" if mode not in ("fresh", "orphan-volumes") else ":"} ;;
+        'ps -aq --filter label=zoo.helper') {"echo fed987" if mode not in ("fresh", "orphan-volumes") else ":"} ;;
+        'container inspect '*) return 1 ;;
+        'volume ls -q --filter '*) {"printf 'zoo_pg-data\\nzoo-egress\\n'" if mode != "fresh" else ":"} ;;
+        'volume ls -q') {"printf 'zoo_pg-data\\nzoo-egress\\nunrelated-data\\n'" if mode != "fresh" else ":"} ;;
+        'network ls -q '*) : ;;
+        'volume rm '*) {"return 1" if mode == "cleanup-failed" else ":"} ;;
+        *' exec -T api '*) printf '%s\\n' '{{"token":"fixture-token","key":"{KEY}","control_plane":"http://localhost:8000","password":null}}' ;;
+        *) : ;;
+    esac
+}}
+"""
+    body = (
+        f"NODE_USER=test_user\nZOO_HOME={shlex.quote(str(destination))}\nZOO_VERSION=0.1.6\n"
+        f"ADMIN_EMAILS=test@example.com\nCHECK_ONLY={int(mode == 'check')}\ninstall_desktop\n"
+    )
+    if mode == "complete":
+        installer.enroll()
+        stubs += f"""
+id() {{ if [ "$#" -eq 1 ]; then echo 0; else echo 501; fi; }}
+nc() {{ return 0; }}
+visudo() {{ :; }}
+launchctl() {{
+    echo "service $*" >> {trace}
+    case "$1" in
+        print) [ -f {shlex.quote(str(tmp_path / 'active-service'))} ] ;;
+        bootstrap) touch {shlex.quote(str(tmp_path / 'active-service'))} ;;
+        bootout) rm -f {shlex.quote(str(tmp_path / 'active-service'))} ;;
+    esac
+}}
+authorize() {{ echo authorize >> {trace}; }}
+install_macos_runtime() {{ echo runtime >> {trace}; }}
+install_macos_helper() {{ echo helper >> {trace}; }}
+macos_enrollment_status() {{ return 1; }}
+start_macos_preparation() {{ echo preparation >> {trace}; }}
+"""
+        main = installer.script.read_text().split('if [[ "${BASH_SOURCE[0]:-$0}" != "$0" ]]; then return 0; fi', 1)[1]
+        body = f"set -- --user test_user --dir {shlex.quote(str(destination))} --version 0.1.6 --admin-email test@example.com\n" + main
+    result = installer.run(
+        body,
+        stubs=stubs,
+        check=False,
+    )
+    events = installer.trace.read_text().splitlines()
+    assert disk.read_bytes() == b"native VM disk"
+    if mode in ("check", "insufficient-disk"):
+        assert old_env.read_text().startswith("JWT_SECRET=old-secret")
+        assert not any(" rm " in event or event == "download" for event in events)
+        assert (result.returncode == 0) is (mode == "check")
+    elif mode in ("cleanup-failed", "download-failed"):
+        assert result.returncode != 0
+        assert old_env.read_text().startswith("JWT_SECRET=old-secret")
+        assert not any(" up " in event for event in events)
+        if mode == "download-failed":
+            assert not any(event.startswith(("rm ", "volume rm ", "network rm ")) for event in events)
+    else:
+        assert result.returncode == 0, result.stderr.decode()
+        config = dict(line.split("=", 1) for line in old_env.read_text().splitlines() if "=" in line)
+        assert config["ZOO_API_URL"] == "http://localhost:8000"
+        assert config["JWT_SECRET"] != "old-secret"
+        assert config["CORS_ORIGINS"].split(",")[0] == "http://localhost:3000"
+        assert b"Adding this Mac" in result.stdout
+        assert "disk 80" in events
+        assert not any("unrelated-data" in event and "volume rm" in event for event in events)
+        if mode in ("leftovers", "complete"):
+            assert "rm -f abc123" in events
+            assert "rm -f def456" in events
+            assert "rm -f fed987" in events
+            assert "volume rm zoo_pg-data" in events
+            assert "volume rm zoo-egress" in events
+            assert events.index("download") < events.index("rm -f abc123")
+        if mode == "orphan-volumes":
+            assert "volume rm zoo_pg-data" in events
+            assert not any(event.startswith("rm ") for event in events)
+        if mode == "complete":
+            enrolled = json.loads((installer.home / ".zoo-node/config.json").read_text())
+            assert enrolled["api"] == "http://localhost:8000"
+            assert enrolled["endpoints"] == ["localhost:7443"]
+            assert enrolled["node_id"] == "new-node"
+            assert events.index("authorize") < events.index("runtime") < events.index("helper")
+            assert any(event.startswith("service bootstrap") for event in events)
+            assert events[-1] == "preparation"
+
+
 def test_existing_node_resumes_with_a_used_token_and_keeps_its_identity(installer):
     directory = installer.enroll()
     original = {name: (directory / name).read_bytes() for name in ("config.json", "node.key", "node.crt", "ca.crt")}
@@ -428,6 +576,19 @@ def test_same_ca_consumed_token_reuses_signed_registration_without_redeeming_tok
 
 def test_new_token_pinned_to_another_ca_classifies_stale_credentials_before_network(enrollment_probe):
     assert enrollment_probe.run(enrollment_probe.token("0" * 64)).returncode == 1
+    assert not enrollment_probe.state.requests
+
+
+@pytest.mark.parametrize("fresh_token", [False, True])
+def test_address_change_requires_valid_token_and_transactional_reenrollment(installer, enrollment_probe, fresh_token):
+    config_file = installer.home / ".zoo-node/config.json"
+    config = json.loads(config_file.read_text())
+    config["api"] = "http://192.168.1.6:8000"
+    config_file.write_text(json.dumps(config))
+    before = config_file.read_bytes()
+    result = enrollment_probe.run(enrollment_probe.token() if fresh_token else "")
+    assert result.returncode == (1 if fresh_token else 2)
+    assert config_file.read_bytes() == before
     assert not enrollment_probe.state.requests
 
 

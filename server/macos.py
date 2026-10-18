@@ -1,5 +1,6 @@
 import contextlib
 import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -7,7 +8,7 @@ import shlex
 import threading
 import time
 from contextlib import contextmanager
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit, urlunsplit
 
 import paramiko
 
@@ -352,6 +353,38 @@ def write_env(rid: str, env: dict[str, str], ssh: bool = False):
     guest_check(rid, f"mkdir -p {HOME}/.zoo && umask 077 && cat > {ENV_FILE}", stdin=lines.encode(), ssh=ssh)
 
 
+def native_guest_host(rid: str, hostname: str) -> str:
+    """A local API lives on the VM's NAT host, rather than the VM's loopback.
+
+    Read the actual route over authenticated SSH; neither Wi-Fi addresses nor a
+    hardcoded vmnet subnet are stable across Macs. Docker publishes the ingress
+    on the Mac, including this virtual interface.
+    """
+    try:
+        loopback = ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        loopback = hostname.lower().rstrip(".") == "localhost"
+    if not loopback:
+        return hostname
+    gateway = guest_check(
+        rid, "/sbin/route -n get default | /usr/bin/awk '$1 == \"gateway:\" {print $2}'", ssh=True
+    ).strip()
+    try:
+        address = ipaddress.IPv4Address(gateway)
+        if not address.is_private or address.is_loopback or address.is_unspecified or address.is_multicast:
+            raise ValueError("not a NAT gateway")
+    except ValueError as error:
+        raise ZooError(
+            "guest_unavailable", "the macOS guest's NAT gateway is unavailable", "Check the VM's virtual network."
+        ) from error
+    return str(address)
+
+
+def native_guest_endpoint(rid: str) -> tuple[str, int] | None:
+    endpoint = guest_endpoint()
+    return (native_guest_host(rid, endpoint[0]), endpoint[1]) if endpoint else None
+
+
 def install_guest(rid: str, sandbox_id: str, timeout: float = 15):
     """Copies zoo-guest into the VM when it changed, writes its config, and (re)starts it as a LaunchAgent in the
     auto-logged-in user's session."""
@@ -362,6 +395,13 @@ def install_guest(rid: str, sandbox_id: str, timeout: float = 15):
             "the macOS guest build or connection address is missing",
             "Build zoo-guest and configure the gateway address.",
         )
+    target = urlsplit(env["ZOO_GUEST_URL"])
+    hostname = native_guest_host(rid, target.hostname or "")
+    if hostname != target.hostname:
+        if target.scheme == "wss":
+            raise ZooError("guest_unavailable", "local HTTPS needs a hostname reachable from the macOS guest")
+        authority = f"{hostname}:{target.port}" if target.port else hostname
+        env["ZOO_GUEST_URL"] = urlunsplit(target._replace(netloc=authority))
     with open(GUEST_BINARY, "rb") as f:
         binary = f.read()
     path = f"{HOME}/.zoo/bin/zoo-guest"
@@ -573,7 +613,8 @@ def apply_network(rid: str, default_action: str, allow_dns: bool, rules: list[tu
     server_id, name = parse(rid)
     ensure_egress(server_id)
     ip = check(server_id, f"zoovm ip {name}").strip()
-    data = egress.policy(rid, [ip], default_action, allow_dns, rules, egress.always(guest_endpoint()))
+    endpoint = native_guest_endpoint(rid)
+    data = egress.policy(rid, [ip], default_action, allow_dns, rules, egress.always(endpoint))
     live = " ".join(egress.file_name(n) for n in running_vms(server_id) | {name})
     path = egress.file_name(name)
     # drop the policies of VMs that are gone, so a VM given their address doesn't inherit one
@@ -587,7 +628,7 @@ def apply_network(rid: str, default_action: str, allow_dns: bool, rules: list[tu
         "set skip on lo0",
         # Zoo reaches the guest over SSH; keep state so replies pass a default-deny policy.
         "pass in quick proto tcp to any port 22 keep state",
-        *guest_rule(),
+        *guest_rule(rid, endpoint=endpoint),
         "pass out quick proto udp to any port 67 keep state",
         f"{'pass' if allow_dns else 'block return'} out quick proto {{ tcp udp }} to any port 53",
     ]
@@ -607,9 +648,9 @@ def apply_network(rid: str, default_action: str, allow_dns: bool, rules: list[tu
     )
 
 
-def guest_rule() -> list[str]:
+def guest_rule(rid: str | None = None, *, endpoint: tuple[str, int] | None = None) -> list[str]:
     """Lets zoo-guest reach the API whatever the policy says."""
-    endpoint = guest_endpoint()
+    endpoint = endpoint or (native_guest_endpoint(rid) if rid else guest_endpoint())
     if endpoint is None or not SAFE_RULE.match(endpoint[0]):
         return []
     return [f"pass out quick proto tcp to {endpoint[0]} port {endpoint[1]} keep state"]

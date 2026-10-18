@@ -59,6 +59,10 @@ Docker Desktop (Linux sandboxes as containers; add this Mac as a server for macO
   install.sh --runtime kube [--device EMPTY_BLOCK_DEVICE | --disk-gb GB]
   install.sh --bundle PATH [--runtime docker|kube]
 
+On macOS, a full install starts fresh: it removes the selected installation's
+.env and the Zoo Docker project's containers and volumes (accounts and data).
+Use --node to refresh only the Mac host integration, or --check to check without changes.
+
 Bundles contain binaries, charts, manifests and both runtimes' images for one
 architecture. PATH accepts a .tar.zst archive or its .parts index. Offline hosts
 must already have python3, openssl, zstd, tar, systemd and iptables; kube also
@@ -864,13 +868,51 @@ install_linux() {
 
 # macOS: the control plane in Docker Desktop. Docker Desktop has no KVM, so Linux sandboxes run as plain containers
 # inside its VM; macOS sandboxes run on this Mac once it is added as a server.
+reset_desktop() {
+    local containers volumes all_volumes networks item marker inventory
+    say "Starting fresh: removing Zoo Docker containers, volumes and $ZOO_HOME/.env"
+    # Scope cleanup to the Zoo project. Never prune Docker or follow an old .env.
+    containers=$(as_user docker ps -aq --filter label=com.docker.compose.project=zoo) \
+        || die "couldn't list Zoo containers; configuration was preserved"
+    if marker=$(as_user docker container inspect zoo-egress --format '{{ index .Config.Labels "zoo.egress" }}' 2>/dev/null); then
+        [ "$marker" = 1 ] || die "container zoo-egress belongs to another application"
+        as_user docker rm -f zoo-egress || die "couldn't remove Zoo egress"
+        # It may also be in the Compose inventory; refresh after removing it.
+        containers=$(as_user docker ps -aq --filter label=com.docker.compose.project=zoo) || die "couldn't list Zoo containers"
+    fi
+    for marker in zoo.sandbox zoo.helper; do
+        inventory=$(as_user docker ps -aq --filter "label=$marker") || die "couldn't list Zoo workloads"
+        containers+=$'\n'"$inventory"
+    done
+    while IFS= read -r item; do
+        [ -z "$item" ] || as_user docker rm -f "$item" || die "couldn't remove Zoo container $item"
+    done < <(printf '%s\n' "$containers" | sort -u)
+    volumes=$(as_user docker volume ls -q --filter label=com.docker.compose.project=zoo) || die "couldn't list Zoo volumes"
+    all_volumes=$(as_user docker volume ls -q) || die "couldn't list Docker volumes"
+    # Include volumes left by old installations without Compose ownership labels.
+    while IFS= read -r item; do
+        case "$item" in zoo_pg-data|zoo_seaweedfs-data|zoo_caddy-data|zoo_lgtm-data|zoo-egress) volumes+=$'\n'"$item" ;; esac
+    done <<< "$all_volumes"
+    while IFS= read -r item; do
+        [ -z "$item" ] || as_user docker volume rm "$item" || die "couldn't remove Zoo volume $item; stop containers using it and retry"
+    done < <(printf '%s\n' "$volumes" | sort -u)
+    networks=$(as_user docker network ls -q --filter label=com.docker.compose.project=zoo) || die "couldn't list Zoo networks"
+    while IFS= read -r item; do
+        [ -z "$item" ] || as_user docker network rm "$item" || die "couldn't remove Zoo network $item"
+    done <<< "$networks"
+    rm -f "$ZOO_HOME/.env" "$ZOO_HOME/compose.override.yml"
+}
+
 install_desktop() {
-    local user_home
+    local user_home item
     NODE_USER=${NODE_USER:-${SUDO_USER:-}}
     if [ -z "$NODE_USER" ] || [ "$NODE_USER" = root ]; then die "run this with sudo from your own account, or pass --user"; fi
+    [[ "$NODE_USER" =~ ^[A-Za-z_][A-Za-z0-9_-]{0,30}$ ]] || die "invalid host account name"
     [ "$RUNTIME" = docker ] && [ -z "$BUNDLE" ] || die "on a Mac Zoo runs in Docker Desktop; --runtime kube and --bundle need Linux"
     user_home=$(dscl . -read "/Users/$NODE_USER" NFSHomeDirectory | sed 's/^NFSHomeDirectory:[[:space:]]*//')
+    [ -d "$user_home" ] || die "the enrolled account has no home directory"
     [ "$ZOO_HOME" != /opt/zoo ] || ZOO_HOME="$user_home/zoo"
+    export PATH="/Applications/Docker.app/Contents/Resources/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
     say "Checking this Mac"
     if command -v docker >/dev/null; then ok "Docker CLI"; else fail "install Docker Desktop (https://www.docker.com/products/docker-desktop/), start it, then run this again"; fi
     if command -v docker >/dev/null && as_user docker info >/dev/null 2>&1; then ok "Docker Desktop is running"; else fail "start Docker Desktop, then run this again"; fi
@@ -878,32 +920,42 @@ install_desktop() {
     if python3 -c 'import sys; assert sys.version_info >= (3, 9)' 2>/dev/null; then ok "python3"; else fail "python3 is missing; run xcode-select --install"; fi
     need_disk "$user_home" 20
     need_memory $(( $(sysctl -n hw.memsize) / 1073741824 )) 8 16
-    # another Zoo in this Docker (a source checkout's `docker compose up`, say) shares the zoo project's volumes and
-    # the zoo-egress container name, and its database has other credentials
-    local resume=0 other
-    if [ -e "$ZOO_HOME/.env" ]; then resume=1; note "$ZOO_HOME/.env exists; carrying on with that installation"
-    elif command -v docker >/dev/null; then
-        other=$( { as_user docker ps -aq --filter name='^zoo-egress$'; as_user docker volume ls -q --filter name='^zoo_pg-data$'; } 2>/dev/null)
-        if [ -n "$other" ]; then
-            fail "Docker already has another Zoo (container zoo-egress or volume zoo_pg-data). Stop it with: docker compose -p zoo down && docker rm -f zoo-egress. Its database stays in volume zoo_pg-data; remove that volume (docker volume rm zoo_pg-data) to install fresh"
-        else ok "no other Zoo in Docker"; fi
+    if [ -n "$ADMIN_EMAILS" ]; then
+        require_tools nc launchctl systemsetup visudo ssh-keygen openssl shasum codesign
+        local major
+        major=$(sw_vers -productVersion | cut -d. -f1)
+        if [ "$major" -lt 14 ]; then fail "macOS sandboxes need macOS 14 or later"; fi
+        if [ "$(uname -m)" = arm64 ]; then
+            macos_node_disk "$user_home"
+            need_memory $(( $(sysctl -n hw.memsize) / 1073741824 )) 16 32
+        fi
+        if [ "$BASE" = 1 ] && [ -n "$IPSW" ]; then
+            as_user test -f "$IPSW" && as_user test -r "$IPSW" || fail "--ipsw must name a readable restore image"
+        fi
     fi
+    note "full installation resets Zoo accounts and Docker data; --node only refreshes host setup"
     preflight_done
 
     WORK=$(mktemp -d)
-    trap 'rm -rf "$WORK"' EXIT
+    trap 'result=$?; rm -rf "$WORK"; exit "$result"' EXIT
     if [ -z "$ZOO_VERSION" ]; then
         ZOO_VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest")
         ZOO_VERSION="${ZOO_VERSION##*/v}"
     fi
     [[ "$ZOO_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || die "invalid Zoo release version"
+    # A fresh control plane and its native runtime use the same release.
+    NATIVE_VERSION_REQUESTED=1
     PAYLOAD="$WORK/payload"
     mkdir -p "$PAYLOAD" "$ZOO_HOME"
     curl -fsSL --retry 3 "https://github.com/$REPO/archive/refs/tags/v$ZOO_VERSION.tar.gz" -o "$WORK/zoo-source.tar.gz"
     tar -xzf "$WORK/zoo-source.tar.gz" -C "$PAYLOAD" --strip-components=1
-    # the LAN address, so other servers and this Mac's VMs can reach the API
-    HOST_ADDRESS=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo 127.0.0.1)
-    [ "$resume" = 1 ] || write_config
+    # Download and validate the payload before removing an existing installation.
+    for item in .env.example compose.yml Caddyfile; do
+        [ -s "$PAYLOAD/$item" ] || die "release payload is missing $item"
+    done
+    reset_desktop
+    HOST_ADDRESS=localhost
+    write_config
     cp "$PAYLOAD/compose.yml" "$PAYLOAD/Caddyfile" "$ZOO_HOME/"
     write_image_compose "$ZOO_HOME/compose.yml" "$ZOO_HOME/compose.yml"
     write_docker_ingress
@@ -927,11 +979,13 @@ install_desktop() {
         --email "${ADMIN_EMAILS%%,*}" --name "$(scutil --get ComputerName 2>/dev/null || hostname -s)") \
         || die "couldn't get a join token from Zoo; add this Mac from Servers > Add server > Mac"
     # the JSON is its last line; anything logged before it is skipped
-    eval "$(printf '%s\n' "$joined" | tail -n 1 | python3 -c '
+    joined=$(printf '%s\n' "$joined" | tail -n 1 | python3 -c '
 import json, shlex, sys
 j = json.load(sys.stdin)
 for name, key in (("NODE_TOKEN", "token"), ("NODE_KEY", "key"), ("CONTROL_PLANE", "control_plane"), ("ADMIN_PASSWORD", "password")):
-    print(name + "=" + shlex.quote(j[key] or str()))')"
+    print(name + "=" + shlex.quote(j[key] or str()))') || die "invalid bootstrap response from Zoo"
+    eval "$joined"
+    [ -n "$NODE_TOKEN" ] && [ -n "$NODE_KEY" ] && [ -n "$CONTROL_PLANE" ] || die "incomplete bootstrap response from Zoo"
     if [ -n "$ADMIN_PASSWORD" ]; then
         say "Admin account: ${ADMIN_EMAILS%%,*} with password $ADMIN_PASSWORD (shown once; change it after signing in)"
     else
@@ -1038,7 +1092,10 @@ macos_node_identity() { # HOME
     if macos_existing_node "$1"; then
         stored=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["api"].rstrip("/"))' "$1/.zoo-node/config.json")
         [ -n "$CONTROL_PLANE" ] || CONTROL_PLANE=$stored
-        [ "$CONTROL_PLANE" = "$stored" ] || die "this account is already enrolled with $stored; use that control plane's setup command"
+        if [ "$CONTROL_PLANE" != "$stored" ]; then
+            [ -n "$NODE_TOKEN" ] && [ -n "$NODE_KEY" ] \
+                || die "this account is already enrolled with $stored; use that control plane's setup command"
+        fi
         if [ -z "$NODE_KEY" ] && [ -s "$1/.zoo-node/control-plane.pub" ]; then
             cached=$(cat "$1/.zoo-node/control-plane.pub")
             if [[ "$cached" =~ ^ssh-ed25519\ [A-Za-z0-9+/=]+$ ]]; then NODE_KEY=$cached; fi
@@ -1064,9 +1121,10 @@ from pathlib import Path
 directory, api = Path(sys.argv[1]), sys.argv[2].rstrip("/")
 try:
     config = json.loads((directory / "config.json").read_text())
-    if config["api"].rstrip("/") != api:
-        raise ValueError("different control plane")
+    address_changed = config["api"].rstrip("/") != api
     token = os.environ.get("ZOO_ENROLLMENT_TOKEN", "")
+    if address_changed and not token:
+        raise ValueError("different control plane")
     if token:
         if not token.startswith("zn1."):
             raise ValueError("invalid token")
@@ -1078,6 +1136,11 @@ try:
         authority = subprocess.run(["openssl", "x509", "-in", str(directory / "ca.crt"), "-outform", "DER"],
                                    check=True, capture_output=True).stdout
         if hashlib.sha256(authority).hexdigest() != claim["f"].lower():
+            sys.exit(1)
+        if address_changed:
+            # A complete Add server command explicitly requests a new binding.
+            # Re-enroll transactionally: join verifies the token's CA before any
+            # old credentials are replaced, and rejects expired/consumed tokens.
             sys.exit(1)
     timestamp, nonce = int(time.time()), secrets.token_hex(32)
     message = f"zoo-node-enrollment-v1\n{timestamp}\n{nonce}\n".encode()
