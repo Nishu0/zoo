@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/chann44/zoo/compare/v0.1.6...v0.1.7) (2026-10-18)
+
+
+### Bug Fixes
+
+* vnc queu bug fixed for mac ([5305e49](https://github.com/chann44/zoo/commit/5305e49906ec27adc73b29a5f3ac36ed9f8b0610))
+
 ## [0.1.6](https://github.com/chann44/zoo/compare/v0.1.5...v0.1.6) (2026-10-18)
 
 
