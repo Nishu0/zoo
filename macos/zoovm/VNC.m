@@ -12,6 +12,10 @@
 @end
 
 id ZooVNCStart(VZVirtualMachine *vm, NSString *password) {
+    // Runner creates its VZVirtualMachine on the default main queue. VNC's
+    // accessor observers must use that same serial queue, including callbacks
+    // triggered when a viewer connects or disconnects.
+    dispatch_assert_queue(dispatch_get_main_queue());
     Class security = NSClassFromString(@"_VZVNCAuthenticationSecurityConfiguration");
     Class server = NSClassFromString(@"_VZVNCServer");
     if (security == nil || server == nil) {
@@ -19,7 +23,7 @@ id ZooVNCStart(VZVirtualMachine *vm, NSString *password) {
     }
     id configuration = [(id<ZooVNCSecurity>)[security alloc] initWithPassword:password];
     id<ZooVNCServer> vnc = [(id<ZooVNCServer>)[server alloc] initWithPort:0
-                                                                    queue:dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0)
+                                                                    queue:dispatch_get_main_queue()
                                                     securityConfiguration:configuration];
     [vnc setVirtualMachine:vm];
     [vnc start];

@@ -96,7 +96,7 @@ jobs:
           echo "$result"
           echo "$result" | jq -e '.status == "Accepted"' >/dev/null || { echo "::error::notarization was not accepted"; exit 1; }
           codesign --verify --strict --verbose=2 macos/zoovm/.build/zoovm
-      - run: tar -czf zoovm-macos-arm64.tar.gz -C macos/zoovm/.build zoovm
+      - run: COPYFILE_DISABLE=1 tar -czf zoovm-macos-arm64.tar.gz -C macos/zoovm/.build zoovm
       - uses: actions/upload-artifact@v4
         with:
           name: zoovm

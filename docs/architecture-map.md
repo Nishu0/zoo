@@ -1,6 +1,6 @@
 # Zoo component, API, tool, and security map
 
-For a simple list of component names and their uses, see [Zoo components](components.md).
+For a simple list of component names and their uses, see [Zoo components](components.mmd).
 
 This map describes the current checkout, including optional runtime paths. It is a code walkthrough, not a verification of a running installation or a security audit. Solid arrows show calls or connections; dotted arrows show configuration or optional integrations. Replies travel back over the same connection.
 

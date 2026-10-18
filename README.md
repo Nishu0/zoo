@@ -68,4 +68,4 @@ The [docs](site/src/content/docs/docs/index.mdx) are built with the site at `/do
 
 Development and contributing: [docs/development.md](docs/development.md). Security: [SECURITY.md](SECURITY.md).
 
-Repository walkthroughs: [Components and their uses](docs/components.md) · [API, tools, and security map](docs/architecture-map.md).
+Repository walkthroughs: [Components and their uses](docs/components.mmd) · [API, tools, and security map](docs/architecture-map.md).
