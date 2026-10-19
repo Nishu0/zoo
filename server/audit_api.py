@@ -25,8 +25,8 @@ from db.generated.query import CreateAuditLogParams, ListAuditLogsParams, ListAu
 from server import pages
 from server.auth_api import AuthApi, Member, require
 from server.limits import client_ip
+from server.utils import to_stamp
 from server.writer import writer
-from utils.time import to_stamp
 
 EXPORT_PAGE = 1000
 # these write their own, richer entries (server/security.py audit)

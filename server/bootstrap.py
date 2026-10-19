@@ -17,7 +17,7 @@ from db.generated.query import CreateUserParams
 from server import nodes
 from server.auth_api import personal_workspace
 from server.ssh import public_key
-from utils.hash import PaswwordUtils
+from server.utils import PaswwordUtils
 
 
 def admin(email: str) -> tuple[str, str, str | None]:

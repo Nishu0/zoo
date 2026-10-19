@@ -35,7 +35,6 @@ from db.generated.query import (
     CreateSnapshotParams,
     Querier,
 )
-from logger.logger import logger
 from server import (
     audit_api,
     labels,
@@ -58,6 +57,7 @@ from server.gateway_client import client
 from server.guest import Terminal, guest_env, hub
 from server.images import MEDIA_TYPES
 from server.jobs import WAITING, Jobs
+from server.logger import logger
 from server.platforms import PLATFORMS, os_of, parse
 from server.pool import Pool
 from server.registry import KINDS, TOOLS, has_screen, responsive, start_browser
@@ -96,8 +96,8 @@ from server.security import (
 )
 from server.telemetry import tracer
 from server.tools import FileSystem, ShellTools
+from server.utils import to_stamp
 from server.writer import writer
-from utils.time import to_stamp
 
 IMAGE_SLUG = "zoo-sandbox"
 IMAGE_VERSION = "latest"

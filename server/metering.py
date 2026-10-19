@@ -20,12 +20,12 @@ from pydantic import BaseModel
 
 from db.connection import db_manager
 from db.generated.query import Querier
-from logger.logger import logger
 from server import labels, sizes, workers
 from server.auth_api import AuthApi, Member, require
 from server.jobs import stamp
+from server.logger import logger
+from server.utils import to_stamp
 from server.writer import writer
-from utils.time import to_stamp
 
 METER_SECONDS = 60
 METRICS = ("cpu_minutes", "memory_mb_minutes", "storage_gb_hours")

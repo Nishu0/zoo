@@ -17,8 +17,8 @@ from datetime import UTC, datetime, timedelta
 from db.connection import db_manager
 from db.generated.models import Job
 from db.generated.query import CreateJobParams, Querier
-from logger.logger import logger
 from server import metrics
+from server.logger import logger
 
 PARALLEL = 8
 POLL_SECONDS = 1

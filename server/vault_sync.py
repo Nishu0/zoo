@@ -17,9 +17,9 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from db.generated.query import Querier
-from logger.logger import logger
 from server import metrics
 from server.guest import hub
+from server.logger import logger
 from server.runtime import SECRETS_DIR, VMS, write_secrets
 from server.security import secret_values, secrets_changed
 

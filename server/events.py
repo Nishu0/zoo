@@ -30,11 +30,11 @@ from pydantic import BaseModel
 from db.connection import db_manager
 from db.generated.models import Event, Server
 from db.generated.query import ListEventsParams, ListLateEventsParams, Querier
-from logger.logger import logger
 from server import idempotency, labels, metrics, workers
 from server.auth_api import AuthApi, Member
 from server.jobs import stamp
-from utils.time import to_stamp
+from server.logger import logger
+from server.utils import to_stamp
 
 RETENTION = timedelta(days=float(os.environ.get("ZOO_EVENT_RETENTION_DAYS", "7")))
 PAGE = 200

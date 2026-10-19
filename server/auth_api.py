@@ -21,13 +21,12 @@ from db.async_generated.query import EnsureWorkspaceQuotaParams as AsyncQuotaPar
 from db.connection import IntegrityError, db_manager
 from db.generated.models import User
 from db.generated.query import CreateAPIKeyParams, CreateUserParams, Querier
-from logger.logger import logger
 from server import labels, quotas
 from server.cache import cache
 from server.limits import API_KEY, LOGIN_PER_EMAIL, LOGIN_PER_IP, SIGNUP_PER_IP, client_ip
+from server.logger import logger
+from server.utils import PaswwordUtils, to_stamp
 from server.writer import writer
-from utils.hash import PaswwordUtils
-from utils.time import to_stamp
 
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_TTL = timedelta(hours=24)

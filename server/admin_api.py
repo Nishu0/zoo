@@ -11,7 +11,7 @@ from db.generated.query import Querier
 from server import backups
 from server.auth_api import AuthApi, Member, UserResponse
 from server.sandbox_api import SandboxApi, SandboxResponse, to_response
-from utils.time import to_stamp
+from server.utils import to_stamp
 
 PUBLIC_IP = os.environ.get("ZOO_PUBLIC_IP")
 

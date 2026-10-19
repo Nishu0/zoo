@@ -11,9 +11,9 @@ from pydantic import BaseModel, Field
 from db.connection import db_manager
 from db.generated.models import Node, Profile, ProfileVersion, Server
 from db.generated.query import CreateProfileParams, CreateProfileVersionParams, Querier
-from logger.logger import logger
 from server import events, macos, nodes, objects, remote_docker, runtime, tickets, windows
 from server.auth_api import AuthApi, Member
+from server.logger import logger
 from server.platforms import PLATFORMS, capabilities_of, parse
 from server.pool import KINDS as POOL_KINDS
 from server.pool import MAX_SIZE as POOL_MAX
@@ -29,7 +29,7 @@ from server.sandbox_api import (
     relay_screen,
 )
 from server.security import audit, encrypt_bytes
-from utils.time import to_stamp
+from server.utils import to_stamp
 
 ADMINS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()}
 

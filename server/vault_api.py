@@ -16,12 +16,12 @@ from pydantic import BaseModel, Field
 from db.connection import db_manager
 from db.generated.models import VaultSecret
 from db.generated.query import CreateVaultSecretParams, ListVaultSecretsByWorkspaceRow, Querier
-from logger.logger import logger
 from server import vault_sync
 from server.auth_api import AuthApi, Member
+from server.logger import logger
 from server.sandbox_api import SandboxApi
 from server.security import audit, encrypt, secrets_changed
-from utils.time import to_stamp
+from server.utils import to_stamp
 
 NAME_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]{0,63}$"
 ACTIVITY_LIMIT = 100

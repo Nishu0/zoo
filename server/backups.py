@@ -25,8 +25,8 @@ from datetime import UTC, datetime, timedelta
 
 from db.connection import db_manager
 from db.generated.query import CreateSnapshotParams
-from logger.logger import logger
 from server import audit_api, objects, workers
+from server.logger import logger
 from server.runtime import remove_snapshot
 
 INTERVAL = timedelta(hours=float(os.environ.get("ZOO_BACKUP_INTERVAL_HOURS", "24")))

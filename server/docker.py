@@ -15,9 +15,9 @@ import docker
 import docker.errors
 import requests
 
-from logger.logger import logger
 from server import egress, objects, sizes
 from server.errors import ZooError
+from server.logger import logger
 
 IMAGE = os.environ.get("ZOO_SANDBOX_IMAGE", "zoo-sandbox:latest")
 BROWSER_IMAGE = os.environ.get("ZOO_BROWSER_IMAGE", "zoo-browser:latest")

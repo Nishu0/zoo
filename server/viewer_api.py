@@ -21,12 +21,12 @@ from pydantic import BaseModel, Field
 from db.connection import db_manager
 from db.generated.models import ViewerLink
 from db.generated.query import CreateViewerLinkParams, Querier
-from logger.logger import logger
 from server.auth_api import AuthApi, Member, require
 from server.jobs import stamp
+from server.logger import logger
 from server.registry import has_screen
 from server.sandbox_api import SandboxApi
-from utils.time import to_stamp
+from server.utils import to_stamp
 
 MAX_HOURS = int(os.environ.get("ZOO_MAX_VIEWER_LINK_HOURS", "24"))
 # who may put /embed pages in a frame: space- or comma-separated origins, as CSP frame-ancestors takes them

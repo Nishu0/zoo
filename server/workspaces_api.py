@@ -28,7 +28,7 @@ from db.generated.query import (
 )
 from server import labels, quotas, sizes
 from server.auth_api import ROLES, AuthApi, Member
-from utils.time import to_stamp
+from server.utils import to_stamp
 
 INVITATION_TTL = timedelta(days=7)
 ADMINS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()}

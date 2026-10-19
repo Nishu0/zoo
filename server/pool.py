@@ -21,9 +21,9 @@ from datetime import UTC, datetime
 from db.connection import db_manager
 from db.generated.models import PoolSandbox
 from db.generated.query import CreatePoolSandboxParams, Querier
-from logger.logger import logger
 from server import metrics, runtime
 from server.guest import guest_env, hub
+from server.logger import logger
 from server.security import SYSTEM, VNC_PASSWORD, decrypt, encrypt
 
 KINDS = ("desktop", "browser", "code")

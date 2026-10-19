@@ -20,10 +20,10 @@ import paramiko
 from cryptography.hazmat.decrepit.ciphers.algorithms import TripleDES
 from cryptography.hazmat.primitives.ciphers import Cipher, modes
 
-from logger.logger import logger
 from server import egress, objects
 from server.errors import ZooError
 from server.guest import GuestError, guest_endpoint, guest_env, hub
+from server.logger import logger
 from server.ssh import alive, execute, open_client, output_of
 
 PREFIX = "windows:"

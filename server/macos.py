@@ -12,11 +12,11 @@ from urllib.parse import urlparse, urlsplit, urlunsplit
 
 import paramiko
 
-from logger.logger import logger
 from server import egress, objects
 from server.errors import ZooError
 from server.guest import guest_endpoint, guest_env, hub
 from server.jobs import Wait
+from server.logger import logger
 from server.ssh import alive, execute, open_client, output_of, private_key
 from server.ssh import public_key as host_public_key
 from server.vnc import VNC, password_of

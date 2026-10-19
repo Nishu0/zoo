@@ -8,7 +8,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from db.async_connection import async_db
 from db.connection import db_manager
-from logger.logger import logger
 from mcp_tools.server import build_mcp
 from server import (
     backups,
@@ -30,6 +29,7 @@ from server.cache import cache
 from server.events import EventsApi
 from server.gateway_client import client
 from server.guest import hub
+from server.logger import logger
 from server.metering import UsageApi
 from server.monitor import MonitoringApi
 from server.nodes import hub as node_hub

@@ -18,7 +18,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from logger.logger import logger
+from server.logger import logger
 
 DOCS_URL = os.environ.get(
     "ZOO_DOCS_URL", "https://github.com/chann44/zoo/blob/main/site/src/content/docs/docs/reference/errors.md"

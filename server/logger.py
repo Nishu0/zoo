@@ -26,7 +26,6 @@ class Logger(logging.Formatter):
             "levelname",
             "levelno",
             "lineno",
-            "module",
             "msecs",
             "message",
             "msg",

@@ -16,7 +16,7 @@ from server import macos, nodes
 from server.auth_api import AuthApi, Member
 from server.platforms import capabilities_of
 from server.ssh import validate_host_key
-from utils.time import to_stamp
+from server.utils import to_stamp
 
 PLATFORM_OF = {"linux": "linux", "darwin": "macos", "windows": "windows"}
 

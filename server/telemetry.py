@@ -18,7 +18,7 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-from logger.logger import logger
+from server.logger import logger
 from server.metrics import DURATION_BUCKETS, error
 
 tracer = trace.get_tracer("zoo")
