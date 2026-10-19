@@ -7,9 +7,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from server import objects, sandbox_api, windows
-from server.errors import ZooError
-from server.guest import token
+from apps.server import objects, sandbox_api, windows
+from apps.server.errors import ZooError
+from apps.server.guest import token
 
 SOURCE = SimpleNamespace(id="winsrc-1234", docker_url="node://zoo@winsrc-1234")
 TARGET = SimpleNamespace(id="wintgt", docker_url="node://zoo@wintgt")

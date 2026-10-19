@@ -8,12 +8,12 @@ from unittest.mock import Mock
 
 import pytest
 
+from apps.server import jobs as jobs_module
+from apps.server import macos, macos_tools, objects, sandbox_api
+from apps.server.errors import ZooError
+from apps.server.jobs import WAITING, Handler, Wait
+from apps.server.sandbox_api import AUTO, CreateSandboxRequest
 from db.connection import db_manager
-from server import jobs as jobs_module
-from server import macos, macos_tools, objects, sandbox_api
-from server.errors import ZooError
-from server.jobs import WAITING, Handler, Wait
-from server.sandbox_api import AUTO, CreateSandboxRequest
 from tests.conftest import member, present
 from tests.test_sandboxes import add_server
 

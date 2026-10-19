@@ -4,8 +4,8 @@ import asyncio
 import json
 from types import SimpleNamespace
 
-from server.errors import ZooError
-from server.gatewaypb import gateway_pb2 as protocol
+from apps.server.errors import ZooError
+from apps.server.gatewaypb import gateway_pb2 as protocol
 
 
 class FakeGateway:

@@ -8,9 +8,9 @@ from unittest.mock import Mock
 
 import pytest
 
+from apps.server import docker, remote_docker, remote_snapshots, runtime
+from apps.server.errors import ZooError
 from db.connection import db_manager
-from server import docker, remote_docker, remote_snapshots, runtime
-from server.errors import ZooError
 from tests.conftest import GATEWAY, present, runtime_of, sql
 from tests.test_nodes import fake_session, join, new_token
 from tests.test_sandboxes import add_server

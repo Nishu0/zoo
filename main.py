@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from server.server import Server
+from apps.server.server import Server
 
 
 def main():

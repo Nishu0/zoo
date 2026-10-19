@@ -4,10 +4,10 @@ from unittest.mock import Mock
 
 import pytest
 
+from apps.server import kube, objects
+from apps.server.errors import ZooError
 from db.connection import db_manager
 from db.generated.query import Querier
-from server import kube, objects
-from server.errors import ZooError
 from tests.conftest import present
 
 

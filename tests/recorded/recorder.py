@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 
-from server import macos, macos_tools, registry, windows, windows_tools
+from apps.server import macos, macos_tools, registry, windows, windows_tools
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SEAMS: dict[str, dict[str, list[Any]]] = {
@@ -66,7 +66,7 @@ def rebuild(error: dict) -> Exception:
 
 def ssh_tools(platform: str) -> list[str]:
     """Tools whose implementation on this platform goes through the guest rather than the gateway screen."""
-    from server.registry import TOOLS
+    from apps.server.registry import TOOLS
 
     return [
         name

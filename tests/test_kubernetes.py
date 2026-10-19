@@ -12,7 +12,7 @@ from unittest.mock import Mock
 import httpx
 import pytest
 
-from server import docker, kms, kube, objects, runtime
+from apps.server import docker, kms, kube, objects, runtime
 from tests.conftest import ADMIN_EMAIL, signup
 
 
@@ -251,7 +251,7 @@ def test_aws_credentials_from_eks_pod_identity(tmp_path, monkeypatch):
 
 
 def test_readiness_can_leave_remote_servers_out(client, alice, monkeypatch, runtime_requirements):
-    from server import health
+    from apps.server import health
     from tests.test_sandboxes import add_server
 
     checked = []
@@ -288,7 +288,7 @@ def test_the_kubernetes_status(client, alice, monkeypatch):
         return [{"name": "runtime class", "ok": True, "detail": "kata (handler kata)"}]
 
     monkeypatch.setattr(kube, "check", check)
-    from server import servers_api
+    from apps.server import servers_api
 
     monkeypatch.setattr(servers_api, "_kube_checked", {})
     status = client.get("/kubernetes", headers=alice).json()

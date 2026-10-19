@@ -3,7 +3,7 @@ import json
 import tarfile
 from datetime import UTC, datetime, timedelta
 
-from server import vault_api
+from apps.server import vault_api
 from tests.conftest import present, runtime_of, sql
 
 

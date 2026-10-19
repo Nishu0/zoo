@@ -88,11 +88,11 @@ egress-dist: egress-darwin egress-windows
 # after changing node/proto/node.proto (needs protoc, protoc-gen-go and protoc-gen-go-grpc)
 proto:
 	cd node && protoc -I proto --go_out=nodepb --go_opt=paths=source_relative --go-grpc_out=nodepb --go-grpc_opt=paths=source_relative proto/node.proto
-	uv run python -m grpc_tools.protoc -Iserver/nodepb=node/proto --python_out=. --pyi_out=. --grpc_python_out=. server/nodepb/node.proto
+	uv run python -m grpc_tools.protoc -Iapps/server/nodepb=node/proto --python_out=. --pyi_out=. --grpc_python_out=. apps/server/nodepb/node.proto
 
 gateway-proto:
 	protoc -I gateway/proto --go_out=gateway --go_opt=module=zoo/gateway --go-grpc_out=gateway --go-grpc_opt=module=zoo/gateway gateway/proto/gateway.proto
-	uv run python -m grpc_tools.protoc -Iserver/gatewaypb=gateway/proto --python_out=. --pyi_out=. --grpc_python_out=. server/gatewaypb/gateway.proto
+	uv run python -m grpc_tools.protoc -Iapps/server/gatewaypb=gateway/proto --python_out=. --pyi_out=. --grpc_python_out=. apps/server/gatewaypb/gateway.proto
 
 # zoo-node for Linux, macOS and Windows, with the API's version, for installers and auto-update (node/dist/)
 node-dist:

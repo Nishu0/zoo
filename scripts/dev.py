@@ -456,7 +456,7 @@ def main():
             with urllib.request.urlopen("http://127.0.0.1:8001/healthz", timeout=5):
                 pass
             command([*compose(environment_file), "up", "-d", "--no-deps", "caddy"])
-            subprocess.run(["bun", "install", "--frozen-lockfile"], cwd=ROOT / "web", check=True)
+            subprocess.run(["bun", "install", "--frozen-lockfile"], cwd=ROOT / "apps" / "web", check=True)
             children.start(["uv", "run", "python", "main.py"])
             worker_environment = {**os.environ, "ZOO_ROLE": "worker", "PORT": "8004"}
             for field in ("CERT", "KEY"):
@@ -470,7 +470,7 @@ def main():
                     "source worker needs its own ZOO_DEV_VM_CONTROL_WORKER_CERT/KEY, not the API certificate"
                 )
             children.start(["uv", "run", "python", "main.py"], environment=worker_environment)
-            children.start(["bun", "run", "dev", "--host", "0.0.0.0"], cwd=ROOT / "web")
+            children.start(["bun", "run", "dev", "--host", "0.0.0.0"], cwd=ROOT / "apps" / "web")
             print(
                 f"API: {values['ZOO_API_URL']}  Dashboard: {values['CORS_ORIGINS']}\nCtrl-C stops source processes; use the matching make down target for dependencies.",
                 flush=True,

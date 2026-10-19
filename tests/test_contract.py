@@ -11,7 +11,7 @@ from mcp import ClientSession
 from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
 from zoo_sdk import Zoo
 
-from server.registry import TOOLS
+from apps.server.registry import TOOLS
 from tests.tool_args import SAMPLE_ARGS
 
 

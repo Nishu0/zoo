@@ -15,8 +15,8 @@ from datetime import UTC, datetime
 
 import pytest
 
+from apps.server.registry import TOOLS
 from db.connection import db_manager
-from server.registry import TOOLS
 from tests.recorded.recorder import encode, fixture_path, recording, ssh_tools
 from tests.tool_args import SAMPLE_ARGS
 

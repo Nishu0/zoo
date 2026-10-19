@@ -11,8 +11,8 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
+from apps.server import nodes
 from db.connection import db_manager
-from server import nodes
 from tests.conftest import V1Client, sql
 from tests.test_nodes import join, new_token
 

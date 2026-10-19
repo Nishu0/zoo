@@ -133,7 +133,7 @@ externalSecrets:
     JWT_SECRET: {key: zoo/jwt-secret}
     ZOO_SECRETS_KEY: {key: zoo/secrets-key}
 
-# what one sandbox may ask for (server/sizes.py), and the quota each new workspace starts with (server/quotas.py);
+# what one sandbox may ask for (apps/server/sizes.py), and the quota each new workspace starts with (apps/server/quotas.py);
 # an empty quota is no limit
 limits:
   maxSandboxCpus: 8
@@ -145,12 +145,12 @@ limits:
     memoryMb: ""
     storageGb: ""
 
-# scheduled backups of the database and sandbox homes to object storage (server/backups.py); 0 hours turns them off
+# scheduled backups of the database and sandbox homes to object storage (apps/server/backups.py); 0 hours turns them off
 backups:
   intervalHours: 24
   keep: 7
 
-# viewer links to embed or share a sandbox's screen (server/viewer_api.py); embedOrigins may frame them (none when
+# viewer links to embed or share a sandbox's screen (apps/server/viewer_api.py); embedOrigins may frame them (none when
 # empty), space-separated
 viewer:
   embedOrigins: ""

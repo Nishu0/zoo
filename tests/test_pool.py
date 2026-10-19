@@ -5,9 +5,9 @@ from unittest.mock import Mock
 
 import pytest
 
+from apps.server import kube, pool, runtime
 from db.connection import db_manager
 from db.generated.query import CreatePoolSandboxParams
-from server import kube, pool, runtime
 from tests.conftest import present, sql
 
 

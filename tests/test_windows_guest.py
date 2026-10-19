@@ -1,7 +1,7 @@
 import pytest
 
-from server import windows, windows_tools
-from server.errors import ZooError
+from apps.server import windows, windows_tools
+from apps.server.errors import ZooError
 
 
 class Agent:

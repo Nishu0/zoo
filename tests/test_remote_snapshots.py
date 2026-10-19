@@ -9,8 +9,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from server import docker, remote_snapshots
-from server.errors import ZooError
+from apps.server import docker, remote_snapshots
+from apps.server.errors import ZooError
 
 
 @pytest.fixture

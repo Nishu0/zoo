@@ -235,7 +235,7 @@ services:
       - zoo
   web:
     image: ${ZOO_REGISTRY:-docker.io/chann44}/zoo-web:${ZOO_VERSION:-latest}
-    build: ./web
+    build: ./apps/web
     environment:
       ZOO_API_URL: ${ZOO_API_URL:-http://localhost:8000}
     depends_on:

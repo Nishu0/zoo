@@ -1,7 +1,7 @@
 import pytest
 
-from server import a11y
-from server.errors import ZooError
+from apps.server import a11y
+from apps.server.errors import ZooError
 
 TREE = {
     "app": "Firefox",

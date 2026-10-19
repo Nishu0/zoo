@@ -6,10 +6,10 @@ import pytest
 from PIL import Image
 from starlette.websockets import WebSocketDisconnect
 
-from server import guest
-from server.guest import hub, pack, token, unpack
-from server.monitor import guest_usage
-from server.tools import FileSystem
+from apps.server import guest
+from apps.server.guest import hub, pack, token, unpack
+from apps.server.monitor import guest_usage
+from apps.server.tools import FileSystem
 from tests.conftest import GATEWAY, runtime_of
 from tests.fake_gateway import fake_guest
 

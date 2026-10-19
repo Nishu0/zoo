@@ -3,8 +3,8 @@ import os
 import pytest
 from starlette.websockets import WebSocketDisconnect
 
+from apps.server import limits, security
 from db.connection import db_manager
-from server import limits, security
 from tests.conftest import PASSWORD, runtime_of, signup, sql
 
 

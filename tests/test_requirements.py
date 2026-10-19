@@ -5,9 +5,9 @@ from unittest.mock import Mock
 
 import pytest
 
+from apps.server import docker, nodes, remote_docker, requirements, runtime
+from apps.server.errors import ZooError
 from db.connection import db_manager
-from server import docker, nodes, remote_docker, requirements, runtime
-from server.errors import ZooError
 
 
 @pytest.mark.parametrize(

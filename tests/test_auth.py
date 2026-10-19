@@ -1,4 +1,4 @@
-from server.writer import writer
+from apps.server.writer import writer
 from tests.conftest import PASSWORD, signup
 
 

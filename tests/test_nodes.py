@@ -12,9 +12,9 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 from fastapi import HTTPException
 
+from apps.server import docker, nodes
+from apps.server.errors import ZooError
 from db.connection import db_manager
-from server import docker, nodes
-from server.errors import ZooError
 from tests.conftest import GATEWAY, STORE, member, present, sql
 from tests.test_sandboxes import add_server
 
@@ -178,8 +178,8 @@ def fake_session(server_id: str, memory_available: int):
 
 
 def test_vm_placement_obeys_caps_without_ranking_free_memory(alice, monkeypatch, zoo):
-    from server import windows
-    from server.sandbox_api import CreateSandboxRequest
+    from apps.server import windows
+    from apps.server.sandbox_api import CreateSandboxRequest
 
     monkeypatch.setattr(windows, "MAX_VMS", 1)
     roomy = add_server("alice@example.com", "windows", name="roomy")
@@ -280,7 +280,7 @@ def test_public_installers_match_the_running_api_image(client, name, relative):
     "platform,name", [("linux", "install.sh"), ("macos", "install.sh"), ("windows", "install-node.ps1")]
 )
 def test_enrollment_commands_download_installers_from_the_control_plane(client, alice, monkeypatch, platform, name):
-    from server import platforms
+    from apps.server import platforms
 
     monkeypatch.setattr(platforms, "INSTALL_URL", None)
     made = new_token(client, alice, platform=platform)
@@ -289,7 +289,7 @@ def test_enrollment_commands_download_installers_from_the_control_plane(client, 
 
 
 def test_public_bootstrap_ssh_key_is_the_control_plane_public_identity_without_cache(client):
-    from server import ssh
+    from apps.server import ssh
 
     first = client.get("/v1/nodes/bootstrap/ssh-key")
     assert first.status_code == 200, first.text

@@ -12,8 +12,8 @@ import tarfile
 from dataclasses import dataclass, field
 from typing import Any
 
-from server import docker, guest, sandbox_api
-from server.registry import Tool
+from apps.server import docker, guest, sandbox_api
+from apps.server.registry import Tool
 
 # a 1x1 PNG, enough for anything that decodes the screenshot
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=")

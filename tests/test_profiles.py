@@ -1,7 +1,7 @@
+from apps.server.sandbox_api import profile_key
+from apps.server.security import decrypt_bytes
+from apps.server.servers_api import MAX_PROFILE_VERSIONS
 from db.connection import db_manager
-from server.sandbox_api import profile_key
-from server.security import decrypt_bytes
-from server.servers_api import MAX_PROFILE_VERSIONS
 from tests.conftest import STORE, runtime_of
 
 

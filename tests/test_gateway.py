@@ -5,9 +5,9 @@ import json
 
 import pytest
 
-from server import guest, nodes
-from server.errors import ZooError
-from server.guest import Terminal, Tunnel
+from apps.server import guest, nodes
+from apps.server.errors import ZooError
+from apps.server.guest import Terminal, Tunnel
 from tests.conftest import GATEWAY
 from tests.fake_gateway import fake_guest
 

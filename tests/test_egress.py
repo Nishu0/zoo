@@ -7,7 +7,7 @@ import tarfile
 import httpx
 import pytest
 
-from server import docker, egress, kms, macos, windows
+from apps.server import docker, egress, kms, macos, windows
 from tests.conftest import runtime_of
 
 

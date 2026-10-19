@@ -566,7 +566,7 @@ EOF
     docker compose --env-file "$ZOO_HOME/.env" "${compose_files[@]}" -p zoo up -d --no-build --pull never --wait --wait-timeout 600
 }
 
-# Kata runs each Linux sandbox in a micro-VM; without KVM, Docker runs them as plain containers (server/docker.py)
+# Kata runs each Linux sandbox in a micro-VM; without KVM, Docker runs them as plain containers (apps/server/docker.py)
 install_kata() {
     local artifacts="$PAYLOAD/artifacts/$ARCH"
     tar --zstd -xf "$artifacts/kata.tar.zst" -C /
@@ -973,7 +973,7 @@ install_desktop() {
         note "no --admin-email, so this Mac isn't added for macOS sandboxes; sign up, then use Servers > Add server > Mac"
         return
     fi
-    # join this Mac for macOS sandboxes, as Servers > Add server > Mac would (server/bootstrap.py)
+    # join this Mac for macOS sandboxes, as Servers > Add server > Mac would (apps/server/bootstrap.py)
     local joined
     joined=$(as_user "${compose[@]}" exec -T api uv run --no-sync python -m server.bootstrap \
         --email "${ADMIN_EMAILS%%,*}" --name "$(scutil --get ComputerName 2>/dev/null || hostname -s)") \

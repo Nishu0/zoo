@@ -10,9 +10,9 @@ from unittest.mock import AsyncMock, Mock
 import grpc
 import pytest
 
-from server import gateway_client
-from server.errors import ZooError
-from server.gatewaypb import gateway_pb2 as protocol
+from apps.server import gateway_client
+from apps.server.errors import ZooError
+from apps.server.gatewaypb import gateway_pb2 as protocol
 
 
 def addresses(*peers):

@@ -2,9 +2,9 @@ from unittest.mock import Mock
 
 import pytest
 
-from server import runtime, tools
-from server.errors import ZooError
-from server.registry import TOOLS
+from apps.server import runtime, tools
+from apps.server.errors import ZooError
+from apps.server.registry import TOOLS
 from tests.tool_args import SAMPLE_ARGS
 
 

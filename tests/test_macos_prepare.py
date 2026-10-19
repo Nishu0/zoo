@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from server import macos
+from apps.server import macos
 from tests.test_sandboxes import add_server
 
 

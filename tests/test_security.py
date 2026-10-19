@@ -3,9 +3,9 @@ import os
 import pytest
 from cryptography.fernet import InvalidToken
 
+from apps.server import security
+from apps.server.security import REDACTED, decrypt, encrypt, redact
 from db.connection import db_manager
-from server import security
-from server.security import REDACTED, decrypt, encrypt, redact
 from tests.conftest import present
 
 

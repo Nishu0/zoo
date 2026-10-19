@@ -1,4 +1,4 @@
-# zoo-guest for macOS and Windows VMs, which the API copies into each VM at boot (server/macos.py, server/windows.py)
+# zoo-guest for macOS and Windows VMs, which the API copies into each VM at boot (apps/server/macos.py, apps/server/windows.py)
 FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS guest
 WORKDIR /src
 COPY guest/go.mod guest/go.sum ./

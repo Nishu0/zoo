@@ -12,8 +12,8 @@ from urllib.parse import urlparse
 
 import pytest
 
-from server import a11y, windows, windows_tools
-from server import guest as guest_module
+from apps.server import a11y, windows, windows_tools
+from apps.server import guest as guest_module
 
 pytestmark = pytest.mark.skipif(
     os.name != "nt" or not os.environ.get("ZOO_GUEST_EXE"), reason="needs Windows and ZOO_GUEST_EXE"

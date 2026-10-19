@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import paramiko
 import pytest
 
-from server import macos
+from apps.server import macos
 
 
 @pytest.fixture

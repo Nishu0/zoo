@@ -42,7 +42,7 @@ jobs:
         arch: [amd64, arm64]
         include:
           - { image: api, context: ., file: Dockerfile.api }
-          - { image: web, context: web, file: web/Dockerfile }
+          - { image: web, context: apps/web, file: apps/web/Dockerfile }
           - { image: sandbox-desktop, context: ., file: Dockerfile }
           - { image: sandbox-browser, context: ., file: Dockerfile.browser }
           - { image: sandbox-code, context: ., file: Dockerfile.code }

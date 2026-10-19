@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from server import macos
+from apps.server import macos
 
 
 @pytest.mark.parametrize("failure", ["body", "read", "exec", "none"])

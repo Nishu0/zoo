@@ -3,7 +3,7 @@ cursor pagination."""
 
 from fastapi.testclient import TestClient
 
-from server import errors
+from apps.server import errors
 
 
 def test_errors_have_one_shape(client, alice):
@@ -26,7 +26,7 @@ def test_errors_have_one_shape(client, alice):
 
 
 def test_a_500_hides_the_exception(zoo, alice, sandbox, monkeypatch):
-    from server import sandbox_api
+    from apps.server import sandbox_api
 
     def boom(*_, **__):
         raise RuntimeError("secret detail from deep inside")

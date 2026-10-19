@@ -36,7 +36,7 @@ flowchart TB
 
 The API and worker share Python code but run as separate services in Compose. Postgres is also the durable job store; there is no separate Redis or message broker in this deployment. API requests can perform runtime work too, including claiming a warm sandbox and applying configuration; cold lifecycle work runs in the worker.
 
-Optional Caddy terminates HTTPS on ports 80/443: `/api/*` goes to the Python API with `/api` removed, `/api/guest/connect` goes directly to gateway port 8001, and other traffic goes to the web service. Node mTLS uses its separate port 7443. Optional OpenTelemetry export feeds Grafana/LGTM. The `site/` Astro application serves the marketing site and documentation, separately from the dashboard.
+Optional Caddy terminates HTTPS on ports 80/443: `/api/*` goes to the Python API with `/api` removed, `/api/guest/connect` goes directly to gateway port 8001, and other traffic goes to the web service. Node mTLS uses its separate port 7443. Optional OpenTelemetry export feeds Grafana/LGTM. The `apps/site/` Astro application serves the marketing site and documentation, separately from the dashboard.
 
 ## 2. What happens when an agent calls a tool
 
@@ -169,11 +169,11 @@ Paths below are relative to the Python API. With the domain/Caddy setup, prepend
 | Area | Source |
 | --- | --- |
 | Deployment and ingress | [`compose.yml`](../compose.yml), [`Caddyfile`](../Caddyfile) |
-| API assembly and background tasks | [`server/server.py`](../server/server.py) |
-| MCP and shared registry | [`server/mcp.py`](../server/mcp.py), [`server/registry.py`](../server/registry.py) |
-| Sandbox lifecycle and tool authorization | [`server/sandbox_api.py`](../server/sandbox_api.py), [`server/jobs.py`](../server/jobs.py) |
-| Runtime routing | [`server/runtime.py`](../server/runtime.py), [`server/remote_docker.py`](../server/remote_docker.py) |
+| API assembly and background tasks | [`server/server.py`](../apps/server/server.py) |
+| MCP and shared registry | [`server/mcp.py`](../apps/server/mcp.py), [`server/registry.py`](../apps/server/registry.py) |
+| Sandbox lifecycle and tool authorization | [`server/sandbox_api.py`](../apps/server/sandbox_api.py), [`server/jobs.py`](../apps/server/jobs.py) |
+| Runtime routing | [`server/runtime.py`](../apps/server/runtime.py), [`server/remote_docker.py`](../apps/server/remote_docker.py) |
 | Gateway protocols and VNC transport | [`gateway/proto/gateway.proto`](../gateway/proto/gateway.proto), [`gateway/vnc_target.go`](../gateway/vnc_target.go), [`node/proto/node.proto`](../node/proto/node.proto) |
 | Guest services | [`guest/main.go`](../guest/main.go) |
-| Dashboard API client | [`web/src/lib/api_client.ts`](../web/src/lib/api_client.ts) |
-| Existing architecture and security model | [`Architecture`](../site/src/content/docs/docs/concepts/architecture.md), [`Security model`](../site/src/content/docs/docs/concepts/security-model.md), [`VM-control`](../vm-control/README.md) |
+| Dashboard API client | [`web/src/lib/api_client.ts`](../apps/web/src/lib/api_client.ts) |
+| Existing architecture and security model | [`Architecture`](../apps/site/src/content/docs/docs/concepts/architecture.md), [`Security model`](../apps/site/src/content/docs/docs/concepts/security-model.md), [`VM-control`](../vm-control/README.md) |

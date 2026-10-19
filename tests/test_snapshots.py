@@ -1,8 +1,8 @@
 """Home disk snapshots: taken and restored on the sandbox's host through the job queue, in place of tar backups
 (which stay, as an export)."""
 
+from apps.server import runtime, sandbox_api
 from db.connection import db_manager
-from server import runtime, sandbox_api
 from tests.conftest import sql
 from tests.test_sandboxes import add_server
 

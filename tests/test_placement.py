@@ -1,10 +1,10 @@
 import pytest
 from fastapi import HTTPException
 
+from apps.server.errors import ZooError
+from apps.server.sandbox_api import AUTO, CreateSandboxRequest
 from db.connection import db_manager
 from db.generated.query import CreateProfileParams
-from server.errors import ZooError
-from server.sandbox_api import AUTO, CreateSandboxRequest
 from tests.conftest import member
 from tests.test_sandboxes import add_server
 

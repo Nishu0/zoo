@@ -1,4 +1,4 @@
-from server.platforms import capabilities_of, os_of
+from apps.server.platforms import capabilities_of, os_of
 from tests.test_sandboxes import add_server
 
 

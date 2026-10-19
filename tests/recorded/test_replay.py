@@ -2,7 +2,7 @@
 
 import pytest
 
-from server.registry import TOOLS
+from apps.server.registry import TOOLS
 from tests.recorded.recorder import decode, load, replaying, ssh_tools
 
 

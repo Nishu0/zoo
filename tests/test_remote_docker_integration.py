@@ -15,8 +15,8 @@ import paramiko
 import pytest
 from paramiko.common import AUTH_FAILED, AUTH_SUCCESSFUL, OPEN_FAILED_ADMINISTRATIVELY_PROHIBITED, OPEN_SUCCEEDED
 
+from apps.server import nodes, remote_docker, ssh
 from db.connection import db_manager
-from server import nodes, remote_docker, ssh
 from tests.conftest import present, sql
 from tests.test_nodes import fake_session
 from tests.test_sandboxes import add_server

@@ -15,9 +15,9 @@ import uuid
 
 import pytest
 
+from apps.server import docker, kube, objects, runtime
+from apps.server.sandbox_api import CreateSandboxRequest
 from db.connection import db_manager
-from server import docker, kube, objects, runtime
-from server.sandbox_api import CreateSandboxRequest
 from tests.conftest import member
 
 NAMESPACE = os.environ.get("ZOO_TEST_KUBERNETES", "")

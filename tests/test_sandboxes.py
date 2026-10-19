@@ -1,10 +1,10 @@
 import base64
 import json
 
+from apps.server.auth_api import personal_workspace
+from apps.server.platforms import capabilities_of
 from db.connection import db_manager
 from db.generated.query import CreateServerParams
-from server.auth_api import personal_workspace
-from server.platforms import capabilities_of
 from tests.conftest import present, runtime_of, sql
 from tests.fake_runtime import PNG
 

@@ -6,10 +6,10 @@ from unittest.mock import Mock
 
 import pytest
 
+from apps.server import kube, pool, runtime
+from apps.server.errors import ZooError
+from apps.server.sizes import Size
 from db.connection import db_manager
-from server import kube, pool, runtime
-from server.errors import ZooError
-from server.sizes import Size
 
 
 def spare_claim(name="zoo-spare-home-a", node="node-a") -> dict:

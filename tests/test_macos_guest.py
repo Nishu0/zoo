@@ -3,8 +3,8 @@ from unittest.mock import Mock, call
 
 import pytest
 
-from server import macos
-from server.errors import ZooError
+from apps.server import macos
+from apps.server.errors import ZooError
 
 CONNECTED = macos.connected
 

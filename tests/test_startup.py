@@ -21,7 +21,7 @@ def test_main_imports_without_docker():
         # `python main.py` builds the app twice (uvicorn imports main again): the metrics port is bound once
         "ZOO_METRICS_PORT": str(port),
     }
-    script = "import main; from server.server import Server; Server()"
+    script = "import main; from apps.server.server import Server; Server()"
     result = subprocess.run(
         [sys.executable, "-c", script],
         cwd=ROOT,

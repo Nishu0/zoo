@@ -184,14 +184,15 @@ the development targets do not run tests. CI/release workflows are under `.githu
 ## Project layout
 
 ```text
-server/            Python API, worker, requirements and runtime backends
+apps/server/       Python API, worker, requirements and runtime backends
 gateway/           native Go guest/node connection gateway
 node/              Linux/macOS/Windows host daemon
 guest/             in-sandbox agent
 egress/            standalone cross-platform egress policy daemon
 db/                Postgres migrations, queries and generated client
+apps/web/          Bun/TanStack dashboard
+apps/site/         docs site
 sdk/python/        Python SDK and sandbox CLI
-web/               Bun/TanStack dashboard
 macos/, windows/   platform VM helpers and guest setup
 scripts/dev.py     source development supervisor and infrastructure commands
 deploy/helm/zoo/   Kubernetes chart and values-dev.yaml

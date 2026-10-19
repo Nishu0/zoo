@@ -1,6 +1,6 @@
 import pytest
 
-from server import admin_api, backups
+from apps.server import admin_api, backups
 from tests.conftest import STORE
 
 

@@ -4,7 +4,7 @@ import socket
 
 import pytest
 
-from server import admin_api
+from apps.server import admin_api
 
 
 @pytest.fixture

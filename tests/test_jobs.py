@@ -3,8 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from apps.server import docker, health, runtime
 from db.connection import db_manager
-from server import docker, health, runtime
 from tests.conftest import sql
 
 
@@ -68,7 +68,7 @@ def test_boot_deadlines(client, alice, queued):
     boot = job(sandbox_id, "boot")
     span = boot.deadline - boot.created_at
     assert 179 <= span.total_seconds() <= 181
-    from server.sandbox_api import boot_deadline
+    from apps.server.sandbox_api import boot_deadline
 
     assert boot_deadline("macos") == boot_deadline("windows") == 600
 

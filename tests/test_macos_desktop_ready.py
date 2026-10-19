@@ -5,7 +5,7 @@ import subprocess
 
 import pytest
 
-from server import macos
+from apps.server import macos
 
 
 @pytest.mark.parametrize(

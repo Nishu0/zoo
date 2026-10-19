@@ -94,7 +94,7 @@ _fake = FakeRuntime()
 _patches = pytest.MonkeyPatch()
 _fake.install(_patches)
 
-from server import objects
+from apps.server import objects
 
 OBJECT_STORE_FUNCTIONS = {name: getattr(objects, name) for name in ("put", "get", "delete", "keys", "listing")}
 
@@ -114,12 +114,12 @@ _patches.setattr(objects, "delete", lambda key: STORE.pop(key, None))
 _patches.setattr(objects, "keys", lambda prefix: [k for k in STORE if k.startswith(prefix)])
 _patches.setattr(objects, "listing", lambda prefix: [(k, len(v)) for k, v in STORE.items() if k.startswith(prefix)])
 
+from apps.server import gateway_client, guest, nodes, registry, sandbox_api, vault_sync
+from apps.server import server as server_module
+from apps.server.limits import LIMITS
+from apps.server.server import Server
+from apps.server.writer import writer
 from db.async_connection import async_db
-from server import gateway_client, guest, nodes, registry, sandbox_api, vault_sync
-from server import server as server_module
-from server.limits import LIMITS
-from server.server import Server
-from server.writer import writer
 from tests.fake_gateway import FakeGateway
 
 GATEWAY = FakeGateway()
@@ -211,7 +211,7 @@ def real_object_store(monkeypatch):
 
 @pytest.fixture
 def runtime_requirements(monkeypatch) -> set[str]:
-    from server import requirements
+    from apps.server import requirements
 
     names = {"docker", "isolation", "sandbox_images"}
     for name in names:
@@ -286,7 +286,7 @@ def sandbox(make_sandbox) -> dict:
 def member(email: str = "alice@example.com", workspace_id: str | None = None):
     """The signed-up user as a request would see them: in their personal workspace (or `workspace_id`), with their
     role there."""
-    from server.auth_api import Member, personal_workspace
+    from apps.server.auth_api import Member, personal_workspace
 
     with db_manager.session() as db:
         user = present(db.get_user_by_email(email=email))

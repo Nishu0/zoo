@@ -20,7 +20,7 @@ import pytest
 import websockets
 from zoo_sdk import Zoo, ZooError
 
-from server.registry import KINDS, TOOLS
+from apps.server.registry import KINDS, TOOLS
 from tests.tool_args import SAMPLE_ARGS
 
 pytestmark = [

@@ -4,10 +4,10 @@ from unittest.mock import Mock
 import paramiko
 import pytest
 
+from apps.server import macos, nodes, ssh
+from apps.server.errors import ZooError
+from apps.server.security import decrypt
 from db.connection import db_manager
-from server import macos, nodes, ssh
-from server.errors import ZooError
-from server.security import decrypt
 from tests.conftest import present
 from tests.test_nodes import HOST_KEY, csr
 from tests.test_sandboxes import add_server

@@ -2,7 +2,7 @@ import inspect
 
 import pytest
 
-from server.registry import TOOLS
+from apps.server.registry import TOOLS
 from tests.tool_args import SAMPLE_ARGS
 
 

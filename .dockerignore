@@ -1,15 +1,15 @@
 .venv
 .git
 **/node_modules
-site/dist
 .pytest_cache
 .ruff_cache
 __pycache__
 *.db
 *.db-*
-web
+apps/web
 backups
 .env
 sdk
+apps/site
 node/dist
 egress/dist
