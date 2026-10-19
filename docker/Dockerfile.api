@@ -1,26 +1,26 @@
 # zoo-guest for macOS and Windows VMs, which the API copies into each VM at boot (apps/server/macos.py, apps/server/windows.py)
 FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS guest
 WORKDIR /src
-COPY guest/go.mod guest/go.sum ./
+COPY go/guest/go.mod go/guest/go.sum ./
 RUN go mod download
-COPY guest/ ./
+COPY go/guest/ ./
 RUN CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o /zoo-guest-darwin-arm64 . \
  && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -H windowsgui" -o /zoo-guest-windows-amd64.exe .
 
 FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS egress
 WORKDIR /src
-COPY egress/go.mod egress/go.sum ./
+COPY go/egress/go.mod go/egress/go.sum ./
 RUN go mod download
-COPY egress/ ./
+COPY go/egress/ ./
 RUN CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o /zoo-egress-darwin-arm64 . \
  && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -H windowsgui" -o /zoo-egress-windows-amd64.exe .
 
 # zoo-node for macOS and Windows, which the API serves to installers and pushes to nodes on another version
 FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS node
 WORKDIR /src
-COPY node/go.mod node/go.sum ./
+COPY go/node/go.mod go/node/go.sum ./
 RUN go mod download
-COPY node/ ./
+COPY go/node/ ./
 COPY pyproject.toml /pyproject.toml
 RUN version=$(sed -n 's/^version = "\(.*\)"/\1/p' /pyproject.toml) && mkdir -p /dist \
  && for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do \
@@ -41,9 +41,9 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project
 COPY . .
-COPY --from=guest /zoo-guest-darwin-arm64 /zoo-guest-windows-amd64.exe guest/dist/
-COPY --from=egress /zoo-egress-darwin-arm64 /zoo-egress-windows-amd64.exe egress/dist/
-COPY --from=node /dist/ node/dist/
+COPY --from=guest /zoo-guest-darwin-arm64 /zoo-guest-windows-amd64.exe go/guest/dist/
+COPY --from=egress /zoo-egress-darwin-arm64 /zoo-egress-windows-amd64.exe go/egress/dist/
+COPY --from=node /dist/ go/node/dist/
 
 ENV HOST=0.0.0.0 PORT=8000 RELOAD=0 ZOO_NETWORK=zoo
 EXPOSE 8000

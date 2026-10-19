@@ -302,7 +302,7 @@ These are implementation hooks, not commands executed during validation:
    `-node-uid`, `-enroll-url`, `-enroll-ca`, `-enroll-token` (unique host
    credential), `-node-ca`, and `-server-name`, just as Kubernetes uses the
    projected token. This path does not depend on Docker task pause.
-4. Build/publish `Dockerfile.vm-control` as `zoo-vm-control:<release>` and include
+4. Build/publish `docker/Dockerfile.vm-control` as `zoo-vm-control:<release>` and include
    the service binary plus patched shim archive in the release bundle. Parent
    must wire the new Docker image into compose and the build/release workflow,
    mount role-specific API/worker credentials, mount issuer signing material

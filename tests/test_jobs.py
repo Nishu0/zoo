@@ -50,13 +50,13 @@ def test_boot_retries_a_transient_failure(client, alice, fake):
 
 
 def test_boot_gives_up_with_the_reason_and_can_be_retried(client, alice, fake):
-    fake.fail_boot = "image zoo-sandbox:latest not found"
+    fake.fail_boot = "image docker.io/chann44/zoo-sandbox-desktop:latest not found"
     sandbox_id = client.post("/sandboxes", json={}, headers=alice).json()["id"]
     sandbox = client.get(f"/sandboxes/{sandbox_id}", headers=alice).json()
     assert sandbox["status"] == "failed"
-    assert sandbox["error_message"] == "image zoo-sandbox:latest not found"
+    assert sandbox["error_message"] == "image docker.io/chann44/zoo-sandbox-desktop:latest not found"
     boot = job(sandbox_id, "boot")
-    assert (boot.state, boot.attempts, boot.last_error) == ("failed", 3, "image zoo-sandbox:latest not found")
+    assert (boot.state, boot.attempts, boot.last_error) == ("failed", 3, "image docker.io/chann44/zoo-sandbox-desktop:latest not found")
 
     fake.fail_boot = None
     assert client.post(f"/sandboxes/{sandbox_id}/start", headers=alice).status_code == 200
@@ -183,15 +183,15 @@ def test_boot_adopts_the_container_an_earlier_attempt_started(monkeypatch):
     def client(found):
         return SimpleNamespace(containers=SimpleNamespace(get=lambda name: found))
 
-    mine = Container("running", "sb1", "zoo-sandbox:latest")
-    assert docker.adoptable(client(mine), "zoo-sandbox-sb1", "zoo-sandbox:latest", "sb1") is mine
+    mine = Container("running", "sb1", "docker.io/chann44/zoo-sandbox-desktop:latest")
+    assert docker.adoptable(client(mine), "zoo-sandbox-sb1", "docker.io/chann44/zoo-sandbox-desktop:latest", "sb1") is mine
     for stale in (
-        Container("exited", "sb1", "zoo-sandbox:latest"),
+        Container("exited", "sb1", "docker.io/chann44/zoo-sandbox-desktop:latest"),
         Container("running", "sb1", "zoo-sandbox:old"),
-        Container("running", "other", "zoo-sandbox:latest"),
-        Container("running", "sb1", "zoo-sandbox:latest", runtime="runc"),
+        Container("running", "other", "docker.io/chann44/zoo-sandbox-desktop:latest"),
+        Container("running", "sb1", "docker.io/chann44/zoo-sandbox-desktop:latest", runtime="runc"),
     ):
-        assert docker.adoptable(client(stale), "zoo-sandbox-sb1", "zoo-sandbox:latest", "sb1") is None
+        assert docker.adoptable(client(stale), "zoo-sandbox-sb1", "docker.io/chann44/zoo-sandbox-desktop:latest", "sb1") is None
         assert stale.removed
 
 

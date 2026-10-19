@@ -48,8 +48,15 @@ app.kubernetes.io/component: {{ index . 1 }}
 {{- printf "%s/zoo-%s:%s" $root.Values.image.registry (index . 1) (include "zoo.tag" $root) -}}
 {{- end -}}
 
+{{/* sandbox images (zoo-sandbox-*) live in their own registry when sandboxes.imageRegistry is set */}}
+{{- define "zoo.sandboxImage" -}}
+{{- $root := index . 0 -}}
+{{- $registry := $root.Values.sandboxes.imageRegistry | default $root.Values.image.registry -}}
+{{- printf "%s/zoo-%s:%s" $registry (index . 1) (include "zoo.tag" $root) -}}
+{{- end -}}
+
 {{- define "zoo.desktopImage" -}}
-{{- default (include "zoo.image" (list . "sandbox-desktop")) .Values.sandboxes.images.desktop -}}
+{{- default (include "zoo.sandboxImage" (list . "sandbox-desktop")) .Values.sandboxes.images.desktop -}}
 {{- end -}}
 
 {{- define "zoo.publicUrl" -}}
@@ -79,9 +86,9 @@ app.kubernetes.io/component: {{ index . 1 }}
 - name: ZOO_SANDBOX_IMAGE
   value: {{ include "zoo.desktopImage" . | quote }}
 - name: ZOO_BROWSER_IMAGE
-  value: {{ default (include "zoo.image" (list . "sandbox-browser")) .Values.sandboxes.images.browser | quote }}
+  value: {{ default (include "zoo.sandboxImage" (list . "sandbox-browser")) .Values.sandboxes.images.browser | quote }}
 - name: ZOO_CODE_IMAGE
-  value: {{ default (include "zoo.image" (list . "sandbox-code")) .Values.sandboxes.images.code | quote }}
+  value: {{ default (include "zoo.sandboxImage" (list . "sandbox-code")) .Values.sandboxes.images.code | quote }}
 - name: ZOO_EGRESS_IMAGE
   value: {{ include "zoo.image" (list . "egress") | quote }}
 - name: ZOO_GATEWAY_PEERS

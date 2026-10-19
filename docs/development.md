@@ -185,10 +185,11 @@ the development targets do not run tests. CI/release workflows are under `.githu
 
 ```text
 apps/server/       Python API, worker, requirements and runtime backends
-gateway/           native Go guest/node connection gateway
-node/              Linux/macOS/Windows host daemon
-guest/             in-sandbox agent
-egress/            standalone cross-platform egress policy daemon
+go/gateway/        native Go guest/node connection gateway
+go/node/           Linux/macOS/Windows host daemon
+go/guest/          in-sandbox agent
+go/egress/         standalone cross-platform egress policy daemon
+go/vm-control/     Kata vm-control frontend
 db/                Postgres migrations, queries and generated client
 apps/web/          Bun/TanStack dashboard
 apps/site/         docs site

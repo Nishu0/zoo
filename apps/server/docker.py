@@ -19,9 +19,13 @@ from apps.server import egress, objects, sizes
 from apps.server.errors import ZooError
 from apps.server.logger import logger
 
-IMAGE = os.environ.get("ZOO_SANDBOX_IMAGE", "zoo-sandbox:latest")
-BROWSER_IMAGE = os.environ.get("ZOO_BROWSER_IMAGE", "zoo-browser:latest")
-CODE_IMAGE = os.environ.get("ZOO_CODE_IMAGE", "zoo-code:latest")
+# two image buckets: the platform's own images (api, gateway, egress, web) come from ZOO_REGISTRY, the sandbox
+# images (zoo-sandbox-*) from ZOO_SANDBOX_REGISTRY; both default to the same registry
+REGISTRY = os.environ.get("ZOO_REGISTRY", "docker.io/chann44")
+SANDBOX_REGISTRY = os.environ.get("ZOO_SANDBOX_REGISTRY", REGISTRY)
+IMAGE = os.environ.get("ZOO_SANDBOX_IMAGE", f"{SANDBOX_REGISTRY}/zoo-sandbox-desktop:latest")
+BROWSER_IMAGE = os.environ.get("ZOO_BROWSER_IMAGE", f"{SANDBOX_REGISTRY}/zoo-sandbox-browser:latest")
+CODE_IMAGE = os.environ.get("ZOO_CODE_IMAGE", f"{SANDBOX_REGISTRY}/zoo-sandbox-code:latest")
 HOME = "/home/zoo"
 # where a pooled sandbox's secrets go once it is claimed (guest/sys_unix.go)
 SECRETS_DIR = "/run/zoo"

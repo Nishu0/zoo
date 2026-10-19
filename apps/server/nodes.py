@@ -36,8 +36,8 @@ from db.generated.query import (
 
 logger = logging.getLogger(__name__)
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DIST = os.environ.get("ZOO_NODE_DIST") or os.path.join(ROOT, "node", "dist")
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+DIST = os.environ.get("ZOO_NODE_DIST") or os.path.join(ROOT, "go", "node", "dist")
 PORT = int(os.environ.get("ZOO_NODE_PORT", "7443"))
 TOKEN_PREFIX = "zn1."
 TOKEN_TTL = 3600
@@ -313,7 +313,7 @@ def register(server_id: str, cert: x509.Certificate, os_name: str, arch: str, ho
 
 
 def build(os_name: str, arch: str) -> str | None:
-    """This API version's zoo-node build for a platform, if node/dist has it."""
+    """This API version's zoo-node build for a platform, if go/node/dist has it."""
     path = os.path.join(DIST, f"zoo-node-{os_name}-{arch}" + (".exe" if os_name == "windows" else ""))
     try:
         with open(os.path.join(DIST, "VERSION")) as f:

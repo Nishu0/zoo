@@ -1,4 +1,5 @@
-# Images come from ZOO_REGISTRY at ZOO_VERSION. `docker compose up --build` builds them from this checkout instead.
+# Images come from ZOO_REGISTRY at ZOO_VERSION; the sandbox images (zoo-sandbox-*) come from
+# ZOO_SANDBOX_REGISTRY (ZOO_REGISTRY when unset). `docker compose up --build` builds them from this checkout instead.
 
 x-zoo: &zoo
   image: ${ZOO_REGISTRY:-docker.io/chann44}/zoo-api:${ZOO_VERSION:-latest}
@@ -56,9 +57,9 @@ x-zoo: &zoo
     ZOO_NAMESPACE: ${ZOO_NAMESPACE:-zoo}
     ZOO_STORAGE_CLASS: ${ZOO_STORAGE_CLASS:-zoo-local}
     ZOO_SNAPSHOT_CLASS: ${ZOO_SNAPSHOT_CLASS:-zoo-snapshots}
-    ZOO_SANDBOX_IMAGE: ${ZOO_SANDBOX_IMAGE:-${ZOO_REGISTRY:-docker.io/chann44}/zoo-sandbox-desktop:${ZOO_VERSION:-latest}}
-    ZOO_BROWSER_IMAGE: ${ZOO_BROWSER_IMAGE:-${ZOO_REGISTRY:-docker.io/chann44}/zoo-sandbox-browser:${ZOO_VERSION:-latest}}
-    ZOO_CODE_IMAGE: ${ZOO_CODE_IMAGE:-${ZOO_REGISTRY:-docker.io/chann44}/zoo-sandbox-code:${ZOO_VERSION:-latest}}
+    ZOO_SANDBOX_IMAGE: ${ZOO_SANDBOX_IMAGE:-${ZOO_SANDBOX_REGISTRY:-${ZOO_REGISTRY:-docker.io/chann44}}/zoo-sandbox-desktop:${ZOO_VERSION:-latest}}
+    ZOO_BROWSER_IMAGE: ${ZOO_BROWSER_IMAGE:-${ZOO_SANDBOX_REGISTRY:-${ZOO_REGISTRY:-docker.io/chann44}}/zoo-sandbox-browser:${ZOO_VERSION:-latest}}
+    ZOO_CODE_IMAGE: ${ZOO_CODE_IMAGE:-${ZOO_SANDBOX_REGISTRY:-${ZOO_REGISTRY:-docker.io/chann44}}/zoo-sandbox-code:${ZOO_VERSION:-latest}}
     ZOO_EGRESS_IMAGE: ${ZOO_EGRESS_IMAGE:-${ZOO_REGISTRY:-docker.io/chann44}/zoo-egress:${ZOO_VERSION:-latest}}
     ZOO_PAUSE_MINUTES: ${ZOO_PAUSE_MINUTES:-30}
     ZOO_MACOS_BASE: ${ZOO_MACOS_BASE:-zoo-macos-base}
@@ -87,7 +88,7 @@ services:
     image: ${ZOO_REGISTRY:-docker.io/chann44}/zoo-api:${ZOO_VERSION:-latest}
     build:
       context: .
-      dockerfile: Dockerfile.api
+      dockerfile: docker/Dockerfile.api
     command: ["sh", "scripts/start.sh", "migrate"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://zoo:zoo@postgres:5432/zoo}
@@ -98,29 +99,31 @@ services:
       - zoo
 
   sandbox-image:
-    build: .
-    image: ${ZOO_SANDBOX_IMAGE:-${ZOO_REGISTRY:-docker.io/chann44}/zoo-sandbox-desktop:${ZOO_VERSION:-latest}}
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: ${ZOO_SANDBOX_IMAGE:-${ZOO_SANDBOX_REGISTRY:-${ZOO_REGISTRY:-docker.io/chann44}}/zoo-sandbox-desktop:${ZOO_VERSION:-latest}}
     entrypoint: ["true"]
 
   browser-image:
     build:
       context: .
-      dockerfile: Dockerfile.browser
-    image: ${ZOO_BROWSER_IMAGE:-${ZOO_REGISTRY:-docker.io/chann44}/zoo-sandbox-browser:${ZOO_VERSION:-latest}}
+      dockerfile: docker/Dockerfile.browser
+    image: ${ZOO_BROWSER_IMAGE:-${ZOO_SANDBOX_REGISTRY:-${ZOO_REGISTRY:-docker.io/chann44}}/zoo-sandbox-browser:${ZOO_VERSION:-latest}}
     entrypoint: ["true"]
 
   code-image:
     build:
       context: .
-      dockerfile: Dockerfile.code
-    image: ${ZOO_CODE_IMAGE:-${ZOO_REGISTRY:-docker.io/chann44}/zoo-sandbox-code:${ZOO_VERSION:-latest}}
+      dockerfile: docker/Dockerfile.code
+    image: ${ZOO_CODE_IMAGE:-${ZOO_SANDBOX_REGISTRY:-${ZOO_REGISTRY:-docker.io/chann44}}/zoo-sandbox-code:${ZOO_VERSION:-latest}}
     entrypoint: ["true"]
 
   egress:
     image: ${ZOO_REGISTRY:-docker.io/chann44}/zoo-egress:${ZOO_VERSION:-latest}
     build:
       context: .
-      dockerfile: Dockerfile.egress
+      dockerfile: docker/Dockerfile.egress
     container_name: zoo-egress
     command: ["-dir", "/run/zoo-egress"]
     network_mode: host
@@ -195,7 +198,7 @@ services:
     <<: *zoo
     build:
       context: .
-      dockerfile: Dockerfile.api
+      dockerfile: docker/Dockerfile.api
     environment:
       <<: *zoo-env
       ZOO_ROLE: api
@@ -214,7 +217,7 @@ services:
     image: ${ZOO_REGISTRY:-docker.io/chann44}/zoo-gateway:${ZOO_VERSION:-latest}
     build:
       context: .
-      dockerfile: Dockerfile.gateway
+      dockerfile: docker/Dockerfile.gateway
     environment:
       <<: *zoo-env
       ZOO_GATEWAY_IP: ""

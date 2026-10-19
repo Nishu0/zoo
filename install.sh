@@ -21,6 +21,7 @@ ZOO_VERSION="${ZOO_VERSION:-}"
 NATIVE_VERSION_REQUESTED=0
 if [ -n "$ZOO_VERSION" ]; then NATIVE_VERSION_REQUESTED=1; fi
 ZOO_REGISTRY="${ZOO_REGISTRY:-docker.io/chann44}"
+ZOO_SANDBOX_REGISTRY="${ZOO_SANDBOX_REGISTRY:-$ZOO_REGISTRY}"
 ADMIN_EMAILS="${ADMIN_EMAILS:-}"
 ZOO_DOMAIN="${ZOO_DOMAIN:-}"
 RUNTIME=docker
@@ -430,13 +431,13 @@ write_config() {
     umask 077
     JWT_SECRET="$(openssl rand -hex 48)" ZOO_SECRETS_KEY="$(openssl rand -hex 48)" POSTGRES_PASSWORD="$(openssl rand -hex 24)" \
     AWS_ACCESS_KEY_ID="$(openssl rand -hex 12)" AWS_SECRET_ACCESS_KEY="$(openssl rand -hex 32)" \
-    ZOO_VERSION="$ZOO_VERSION" ZOO_REGISTRY="$ZOO_REGISTRY" ZOO_RUNTIME="$RUNTIME" \
+    ZOO_VERSION="$ZOO_VERSION" ZOO_REGISTRY="$ZOO_REGISTRY" ZOO_SANDBOX_REGISTRY="$ZOO_SANDBOX_REGISTRY" ZOO_RUNTIME="$RUNTIME" \
     ADMIN_EMAILS="$ADMIN_EMAILS" ZOO_DOMAIN="$ZOO_DOMAIN" ZOO_API_URL="$api" CORS_ORIGINS="$cors" \
     ZOO_PUBLIC_IP="$host" ZOO_NAMESPACE="$NAMESPACE-sandboxes" ZOO_STORAGE_CLASS=zoo-local ZOO_SNAPSHOT_CLASS=zoo-snapshots \
     ZOO_GATEWAY_PEERS="$gateway_peers" ZOO_S3_ENDPOINT="$object_endpoint" DATABASE_HOST="$database_host" \
     python3 - "$PAYLOAD/.env.example" "$ZOO_HOME/.env" <<'PY'
 import os, re, sys
-keys = ["JWT_SECRET", "ZOO_SECRETS_KEY", "POSTGRES_PASSWORD", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "ZOO_VERSION", "ZOO_REGISTRY", "ZOO_RUNTIME", "ADMIN_EMAILS", "ZOO_DOMAIN", "ZOO_API_URL", "CORS_ORIGINS", "ZOO_PUBLIC_IP", "ZOO_NAMESPACE", "ZOO_STORAGE_CLASS", "ZOO_SNAPSHOT_CLASS", "ZOO_GATEWAY_PEERS", "ZOO_S3_ENDPOINT"]
+keys = ["JWT_SECRET", "ZOO_SECRETS_KEY", "POSTGRES_PASSWORD", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "ZOO_VERSION", "ZOO_REGISTRY", "ZOO_SANDBOX_REGISTRY", "ZOO_RUNTIME", "ADMIN_EMAILS", "ZOO_DOMAIN", "ZOO_API_URL", "CORS_ORIGINS", "ZOO_PUBLIC_IP", "ZOO_NAMESPACE", "ZOO_STORAGE_CLASS", "ZOO_SNAPSHOT_CLASS", "ZOO_GATEWAY_PEERS", "ZOO_S3_ENDPOINT"]
 values = {key: os.environ[key] for key in keys}
 values["DATABASE_URL"] = f'postgresql://zoo:{values["POSTGRES_PASSWORD"]}@{os.environ["DATABASE_HOST"]}:5432/zoo'
 values["ZOO_OBJECT_STORE"] = "s3://zoo"
@@ -729,12 +730,14 @@ EOF
 
 write_zoo_values() {
     ZOO_INSTALL_NAMESPACE="$NAMESPACE" ZOO_INSTALL_VERSION="$ZOO_VERSION" ZOO_INSTALL_REGISTRY="$ZOO_REGISTRY" \
+    ZOO_INSTALL_SANDBOX_REGISTRY="$ZOO_SANDBOX_REGISTRY" \
     ZOO_INSTALL_WEB_HOST="$WEB_HOST" ZOO_INSTALL_API_HOST="$API_HOST" ZOO_INSTALL_TLS="$ZOO_DOMAIN" \
     ZOO_INSTALL_ADMIN="$ADMIN_EMAILS" python3 - "$1" <<'PY'
 import json, os, sys
 tls = bool(os.environ["ZOO_INSTALL_TLS"])
 values = {
     "image": {"registry": os.environ["ZOO_INSTALL_REGISTRY"], "tag": os.environ["ZOO_INSTALL_VERSION"], "pullPolicy": "IfNotPresent"},
+    "sandboxes": {"imageRegistry": os.environ["ZOO_INSTALL_SANDBOX_REGISTRY"]},
     "database": {"mode": "external", "external": {"existingSecret": "zoo-database", "key": "url"}},
     "secrets": {"existingSecret": "zoo-config", "create": False},
     "objectStorage": {"url": "s3://zoo", "endpoint": "http://zoo-object-store:8333", "existingSecret": "zoo-config"},

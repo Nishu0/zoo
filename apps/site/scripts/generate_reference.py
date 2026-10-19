@@ -408,7 +408,7 @@ def gen_sdk() -> None:
 # Configuration reference — from environment reads in the code
 # ---------------------------------------------------------------------------
 
-ENV_SCAN_DIRS = ["apps/server", "gateway", "node", "egress", "vm-control"]
+ENV_SCAN_DIRS = ["apps/server", "go/gateway", "go/node", "go/egress", "go/vm-control"]
 REMOVED_SETTINGS = {"ZOO_GATEWAY", "ZOO_GUEST_URL", "ZOO_GUEST_REMOTE_URL", "ZOO_NODE_ENDPOINTS", "ZOO_SSH_DIR"}
 DESCRIPTIONS = {
     "JWT_SECRET": "Signs sessions.",
@@ -490,7 +490,8 @@ DESCRIPTIONS = {
     "ZOO_WINDOWS_MAX_VMS": "Windows sandboxes running at once on each server.",
     "ZOO_WINDOWS_SWITCH": "Hyper-V switch for sandboxes on Windows Server hosts (no Default Switch there).",
     "ZOO_VERSION": "Release whose images compose runs. `install.sh` pins it; Compose or Helm upgrades it.",
-    "ZOO_REGISTRY": "Where compose pulls images from.",
+    "ZOO_REGISTRY": "Where compose pulls the platform images (api, gateway, egress, web) from.",
+    "ZOO_SANDBOX_REGISTRY": "Registry the sandbox images (zoo-sandbox-*) come from; ZOO_REGISTRY when empty.",
     "ZOO_SANDBOX_IMAGE": "Image for Linux `desktop` sandboxes.",
     "ZOO_BROWSER_IMAGE": "Firefox-only image for Linux `browser` sandboxes.",
     "ZOO_CODE_IMAGE": "Image for `code` sandboxes.",

@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from apps.server.gatewaypb import gateway_pb2 as server_dot_gatewaypb_dot_gateway__pb2
+from apps.server.gatewaypb import gateway_pb2 as apps_dot_server_dot_gatewaypb_dot_gateway__pb2
 
 GRPC_GENERATED_VERSION = '1.84.0'
 GRPC_VERSION = grpc.__version__
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in server/gatewaypb/gateway_pb2_grpc.py depends on'
+        + ' but the generated code in apps/server/gatewaypb/gateway_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -36,73 +36,73 @@ class GatewayStub:
         """
         self.GuestCall = channel.unary_unary(
                 '/zoo.gateway.v1.Gateway/GuestCall',
-                request_serializer=server_dot_gatewaypb_dot_gateway__pb2.GuestCallRequest.SerializeToString,
-                response_deserializer=server_dot_gatewaypb_dot_gateway__pb2.GuestCallReply.FromString,
+                request_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.GuestCallRequest.SerializeToString,
+                response_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.GuestCallReply.FromString,
                 _registered_method=True)
         self.GuestStream = channel.stream_stream(
                 '/zoo.gateway.v1.Gateway/GuestStream',
-                request_serializer=server_dot_gatewaypb_dot_gateway__pb2.Frame.SerializeToString,
-                response_deserializer=server_dot_gatewaypb_dot_gateway__pb2.Frame.FromString,
+                request_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.Frame.SerializeToString,
+                response_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.Frame.FromString,
                 _registered_method=True)
         self.GuestStatus = channel.unary_unary(
                 '/zoo.gateway.v1.Gateway/GuestStatus',
-                request_serializer=server_dot_gatewaypb_dot_gateway__pb2.GuestStatusRequest.SerializeToString,
-                response_deserializer=server_dot_gatewaypb_dot_gateway__pb2.GuestStatusReply.FromString,
+                request_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.GuestStatusRequest.SerializeToString,
+                response_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.GuestStatusReply.FromString,
                 _registered_method=True)
         self.NodeTunnel = channel.stream_stream(
                 '/zoo.gateway.v1.Gateway/NodeTunnel',
-                request_serializer=server_dot_gatewaypb_dot_gateway__pb2.Bytes.SerializeToString,
-                response_deserializer=server_dot_gatewaypb_dot_gateway__pb2.Bytes.FromString,
+                request_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.Bytes.SerializeToString,
+                response_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.Bytes.FromString,
                 _registered_method=True)
         self.NodeStatus = channel.unary_unary(
                 '/zoo.gateway.v1.Gateway/NodeStatus',
-                request_serializer=server_dot_gatewaypb_dot_gateway__pb2.NodeStatusRequest.SerializeToString,
-                response_deserializer=server_dot_gatewaypb_dot_gateway__pb2.NodeStatusReply.FromString,
+                request_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.NodeStatusRequest.SerializeToString,
+                response_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.NodeStatusReply.FromString,
                 _registered_method=True)
         self.RelayNode = channel.stream_stream(
                 '/zoo.gateway.v1.Gateway/RelayNode',
-                request_serializer=server_dot_gatewaypb_dot_gateway__pb2.NodeRelayFrame.SerializeToString,
-                response_deserializer=server_dot_gatewaypb_dot_gateway__pb2.Bytes.FromString,
+                request_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.NodeRelayFrame.SerializeToString,
+                response_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.Bytes.FromString,
                 _registered_method=True)
         self.ScreenShot = channel.unary_unary(
                 '/zoo.gateway.v1.Gateway/ScreenShot',
-                request_serializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
-                response_deserializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
+                request_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
+                response_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
                 _registered_method=True)
         self.ScreenDiff = channel.unary_unary(
                 '/zoo.gateway.v1.Gateway/ScreenDiff',
-                request_serializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
-                response_deserializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
+                request_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
+                response_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
                 _registered_method=True)
         self.WaitStable = channel.unary_unary(
                 '/zoo.gateway.v1.Gateway/WaitStable',
-                request_serializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
-                response_deserializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
+                request_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
+                response_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
                 _registered_method=True)
         self.Pointer = channel.unary_unary(
                 '/zoo.gateway.v1.Gateway/Pointer',
-                request_serializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
-                response_deserializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
+                request_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
+                response_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
                 _registered_method=True)
         self.Key = channel.unary_unary(
                 '/zoo.gateway.v1.Gateway/Key',
-                request_serializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
-                response_deserializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
+                request_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
+                response_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
                 _registered_method=True)
         self.Type = channel.unary_unary(
                 '/zoo.gateway.v1.Gateway/Type',
-                request_serializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
-                response_deserializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
+                request_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
+                response_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
                 _registered_method=True)
         self.CloseScreen = channel.unary_unary(
                 '/zoo.gateway.v1.Gateway/CloseScreen',
-                request_serializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
-                response_deserializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
+                request_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
+                response_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
                 _registered_method=True)
         self.ViewerStream = channel.stream_stream(
                 '/zoo.gateway.v1.Gateway/ViewerStream',
-                request_serializer=server_dot_gatewaypb_dot_gateway__pb2.ViewerFrame.SerializeToString,
-                response_deserializer=server_dot_gatewaypb_dot_gateway__pb2.Bytes.FromString,
+                request_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ViewerFrame.SerializeToString,
+                response_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.Bytes.FromString,
                 _registered_method=True)
 
 
@@ -198,73 +198,73 @@ def add_GatewayServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'GuestCall': grpc.unary_unary_rpc_method_handler(
                     servicer.GuestCall,
-                    request_deserializer=server_dot_gatewaypb_dot_gateway__pb2.GuestCallRequest.FromString,
-                    response_serializer=server_dot_gatewaypb_dot_gateway__pb2.GuestCallReply.SerializeToString,
+                    request_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.GuestCallRequest.FromString,
+                    response_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.GuestCallReply.SerializeToString,
             ),
             'GuestStream': grpc.stream_stream_rpc_method_handler(
                     servicer.GuestStream,
-                    request_deserializer=server_dot_gatewaypb_dot_gateway__pb2.Frame.FromString,
-                    response_serializer=server_dot_gatewaypb_dot_gateway__pb2.Frame.SerializeToString,
+                    request_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.Frame.FromString,
+                    response_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.Frame.SerializeToString,
             ),
             'GuestStatus': grpc.unary_unary_rpc_method_handler(
                     servicer.GuestStatus,
-                    request_deserializer=server_dot_gatewaypb_dot_gateway__pb2.GuestStatusRequest.FromString,
-                    response_serializer=server_dot_gatewaypb_dot_gateway__pb2.GuestStatusReply.SerializeToString,
+                    request_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.GuestStatusRequest.FromString,
+                    response_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.GuestStatusReply.SerializeToString,
             ),
             'NodeTunnel': grpc.stream_stream_rpc_method_handler(
                     servicer.NodeTunnel,
-                    request_deserializer=server_dot_gatewaypb_dot_gateway__pb2.Bytes.FromString,
-                    response_serializer=server_dot_gatewaypb_dot_gateway__pb2.Bytes.SerializeToString,
+                    request_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.Bytes.FromString,
+                    response_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.Bytes.SerializeToString,
             ),
             'NodeStatus': grpc.unary_unary_rpc_method_handler(
                     servicer.NodeStatus,
-                    request_deserializer=server_dot_gatewaypb_dot_gateway__pb2.NodeStatusRequest.FromString,
-                    response_serializer=server_dot_gatewaypb_dot_gateway__pb2.NodeStatusReply.SerializeToString,
+                    request_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.NodeStatusRequest.FromString,
+                    response_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.NodeStatusReply.SerializeToString,
             ),
             'RelayNode': grpc.stream_stream_rpc_method_handler(
                     servicer.RelayNode,
-                    request_deserializer=server_dot_gatewaypb_dot_gateway__pb2.NodeRelayFrame.FromString,
-                    response_serializer=server_dot_gatewaypb_dot_gateway__pb2.Bytes.SerializeToString,
+                    request_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.NodeRelayFrame.FromString,
+                    response_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.Bytes.SerializeToString,
             ),
             'ScreenShot': grpc.unary_unary_rpc_method_handler(
                     servicer.ScreenShot,
-                    request_deserializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.FromString,
-                    response_serializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.SerializeToString,
+                    request_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.FromString,
+                    response_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.SerializeToString,
             ),
             'ScreenDiff': grpc.unary_unary_rpc_method_handler(
                     servicer.ScreenDiff,
-                    request_deserializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.FromString,
-                    response_serializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.SerializeToString,
+                    request_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.FromString,
+                    response_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.SerializeToString,
             ),
             'WaitStable': grpc.unary_unary_rpc_method_handler(
                     servicer.WaitStable,
-                    request_deserializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.FromString,
-                    response_serializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.SerializeToString,
+                    request_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.FromString,
+                    response_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.SerializeToString,
             ),
             'Pointer': grpc.unary_unary_rpc_method_handler(
                     servicer.Pointer,
-                    request_deserializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.FromString,
-                    response_serializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.SerializeToString,
+                    request_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.FromString,
+                    response_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.SerializeToString,
             ),
             'Key': grpc.unary_unary_rpc_method_handler(
                     servicer.Key,
-                    request_deserializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.FromString,
-                    response_serializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.SerializeToString,
+                    request_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.FromString,
+                    response_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.SerializeToString,
             ),
             'Type': grpc.unary_unary_rpc_method_handler(
                     servicer.Type,
-                    request_deserializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.FromString,
-                    response_serializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.SerializeToString,
+                    request_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.FromString,
+                    response_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.SerializeToString,
             ),
             'CloseScreen': grpc.unary_unary_rpc_method_handler(
                     servicer.CloseScreen,
-                    request_deserializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.FromString,
-                    response_serializer=server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.SerializeToString,
+                    request_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.FromString,
+                    response_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.SerializeToString,
             ),
             'ViewerStream': grpc.stream_stream_rpc_method_handler(
                     servicer.ViewerStream,
-                    request_deserializer=server_dot_gatewaypb_dot_gateway__pb2.ViewerFrame.FromString,
-                    response_serializer=server_dot_gatewaypb_dot_gateway__pb2.Bytes.SerializeToString,
+                    request_deserializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ViewerFrame.FromString,
+                    response_serializer=apps_dot_server_dot_gatewaypb_dot_gateway__pb2.Bytes.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -292,8 +292,8 @@ class Gateway:
             request,
             target,
             '/zoo.gateway.v1.Gateway/GuestCall',
-            server_dot_gatewaypb_dot_gateway__pb2.GuestCallRequest.SerializeToString,
-            server_dot_gatewaypb_dot_gateway__pb2.GuestCallReply.FromString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.GuestCallRequest.SerializeToString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.GuestCallReply.FromString,
             options,
             channel_credentials,
             insecure,
@@ -319,8 +319,8 @@ class Gateway:
             request_iterator,
             target,
             '/zoo.gateway.v1.Gateway/GuestStream',
-            server_dot_gatewaypb_dot_gateway__pb2.Frame.SerializeToString,
-            server_dot_gatewaypb_dot_gateway__pb2.Frame.FromString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.Frame.SerializeToString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.Frame.FromString,
             options,
             channel_credentials,
             insecure,
@@ -346,8 +346,8 @@ class Gateway:
             request,
             target,
             '/zoo.gateway.v1.Gateway/GuestStatus',
-            server_dot_gatewaypb_dot_gateway__pb2.GuestStatusRequest.SerializeToString,
-            server_dot_gatewaypb_dot_gateway__pb2.GuestStatusReply.FromString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.GuestStatusRequest.SerializeToString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.GuestStatusReply.FromString,
             options,
             channel_credentials,
             insecure,
@@ -373,8 +373,8 @@ class Gateway:
             request_iterator,
             target,
             '/zoo.gateway.v1.Gateway/NodeTunnel',
-            server_dot_gatewaypb_dot_gateway__pb2.Bytes.SerializeToString,
-            server_dot_gatewaypb_dot_gateway__pb2.Bytes.FromString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.Bytes.SerializeToString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.Bytes.FromString,
             options,
             channel_credentials,
             insecure,
@@ -400,8 +400,8 @@ class Gateway:
             request,
             target,
             '/zoo.gateway.v1.Gateway/NodeStatus',
-            server_dot_gatewaypb_dot_gateway__pb2.NodeStatusRequest.SerializeToString,
-            server_dot_gatewaypb_dot_gateway__pb2.NodeStatusReply.FromString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.NodeStatusRequest.SerializeToString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.NodeStatusReply.FromString,
             options,
             channel_credentials,
             insecure,
@@ -427,8 +427,8 @@ class Gateway:
             request_iterator,
             target,
             '/zoo.gateway.v1.Gateway/RelayNode',
-            server_dot_gatewaypb_dot_gateway__pb2.NodeRelayFrame.SerializeToString,
-            server_dot_gatewaypb_dot_gateway__pb2.Bytes.FromString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.NodeRelayFrame.SerializeToString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.Bytes.FromString,
             options,
             channel_credentials,
             insecure,
@@ -454,8 +454,8 @@ class Gateway:
             request,
             target,
             '/zoo.gateway.v1.Gateway/ScreenShot',
-            server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
-            server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
             options,
             channel_credentials,
             insecure,
@@ -481,8 +481,8 @@ class Gateway:
             request,
             target,
             '/zoo.gateway.v1.Gateway/ScreenDiff',
-            server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
-            server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
             options,
             channel_credentials,
             insecure,
@@ -508,8 +508,8 @@ class Gateway:
             request,
             target,
             '/zoo.gateway.v1.Gateway/WaitStable',
-            server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
-            server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
             options,
             channel_credentials,
             insecure,
@@ -535,8 +535,8 @@ class Gateway:
             request,
             target,
             '/zoo.gateway.v1.Gateway/Pointer',
-            server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
-            server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
             options,
             channel_credentials,
             insecure,
@@ -562,8 +562,8 @@ class Gateway:
             request,
             target,
             '/zoo.gateway.v1.Gateway/Key',
-            server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
-            server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
             options,
             channel_credentials,
             insecure,
@@ -589,8 +589,8 @@ class Gateway:
             request,
             target,
             '/zoo.gateway.v1.Gateway/Type',
-            server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
-            server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
             options,
             channel_credentials,
             insecure,
@@ -616,8 +616,8 @@ class Gateway:
             request,
             target,
             '/zoo.gateway.v1.Gateway/CloseScreen',
-            server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
-            server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenRequest.SerializeToString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ScreenReply.FromString,
             options,
             channel_credentials,
             insecure,
@@ -643,8 +643,8 @@ class Gateway:
             request_iterator,
             target,
             '/zoo.gateway.v1.Gateway/ViewerStream',
-            server_dot_gatewaypb_dot_gateway__pb2.ViewerFrame.SerializeToString,
-            server_dot_gatewaypb_dot_gateway__pb2.Bytes.FromString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.ViewerFrame.SerializeToString,
+            apps_dot_server_dot_gatewaypb_dot_gateway__pb2.Bytes.FromString,
             options,
             channel_credentials,
             insecure,

@@ -11,5 +11,5 @@ backups
 .env
 sdk
 apps/site
-node/dist
-egress/dist
+go/node/dist
+go/egress/dist

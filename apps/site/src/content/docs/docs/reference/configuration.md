@@ -50,8 +50,8 @@ TLS on 8002; guest websockets use 8001; native node enrollment uses mTLS on 7443
 | `ZOO_BACKUP_INTERVAL_HOURS` | `24` | Internal setting. |
 | `ZOO_BACKUP_KEEP` | `7` | Internal setting. |
 | `ZOO_BROWSER_HOME` | `https://duckduckgo.com` | Start page for `browser` sandboxes. |
-| `ZOO_BROWSER_IMAGE` | `zoo-browser:latest` | Firefox-only image for Linux `browser` sandboxes. |
-| `ZOO_CODE_IMAGE` | `zoo-code:latest` | Image for `code` sandboxes. |
+| `ZOO_BROWSER_IMAGE` | `f'{SANDBOX_REGISTRY}/zoo-sandbox-browser:latest` | Firefox-only image for Linux `browser` sandboxes. |
+| `ZOO_CODE_IMAGE` | `f'{SANDBOX_REGISTRY}/zoo-sandbox-code:latest` | Image for `code` sandboxes. |
 | `ZOO_DOCS_URL` | `https://github.com/chann44/zoo/blob/main/site/src/content/docs/docs/reference/errors.md` | Base of the errors page that error responses link to as `docs_url` (`<url>#<code>`). |
 | `ZOO_DOMAIN` | `—` | Always-allowed domain for Caddy. |
 | `ZOO_EGRESS_IMAGE` | `docker.io/chann44/zoo-egress:latest` | Egress controller image deployed on enrolled Linux Docker engines. |
@@ -98,12 +98,14 @@ TLS on 8002; guest websockets use 8001; native node enrollment uses mTLS on 7443
 | `ZOO_OBJECT_STORE` | `—` | Required. `s3://<bucket>[/<prefix>]`: profiles, portable home snapshots and database backups. |
 | `ZOO_PAUSE_MINUTES` | `30` | How long a stopped Linux sandbox stays paused (resumable) before it is deleted to its volume; defaults to 30. |
 | `ZOO_PUBLIC_IP` | `—` | This server's public address(es), used to check that a domain's DNS points here. |
+| `ZOO_REGISTRY` | `docker.io/chann44` | Where compose pulls the platform images (api, gateway, egress, web) from. |
 | `ZOO_ROLE` | `—` | Python process role: all, api or worker. The gateway is a separate native Go process. |
 | `ZOO_RUNTIME` | `docker` | Default Linux backend: `docker` or `kube`. Kubernetes requires Kata; Docker follows `ZOO_ISOLATION`. |
 | `ZOO_S3_ENDPOINT` | `—` | S3-compatible endpoint for `ZOO_OBJECT_STORE` (MinIO, R2). |
 | `ZOO_S3_REGION` | `—` | Region for `ZOO_OBJECT_STORE`. |
 | `ZOO_SANDBOX_DISK_GB` | `20` | Internal setting. |
-| `ZOO_SANDBOX_IMAGE` | `zoo-sandbox:latest` | Image for Linux `desktop` sandboxes. |
+| `ZOO_SANDBOX_IMAGE` | `f'{SANDBOX_REGISTRY}/zoo-sandbox-desktop:latest` | Image for Linux `desktop` sandboxes. |
+| `ZOO_SANDBOX_REGISTRY` | `REGISTRY` | Registry the sandbox images (zoo-sandbox-*) come from; ZOO_REGISTRY when empty. |
 | `ZOO_SECRETS_KEY` | `—` | Wraps workspace keys that encrypt secrets, app profiles and VNC passwords. Back it up. |
 | `ZOO_SECRETS_KEY_PREVIOUS` | `—` | Old keys, comma-separated, kept only until `make rotate-secrets` has run. |
 | `ZOO_SNAPSHOT_CLASS` | `zoo-snapshots` | CSI snapshot class used before home archives are uploaded; defaults to `zoo-snapshots`. |

@@ -65,7 +65,7 @@ def test_vms_need_a_server(zoo, user):
 
 
 def test_vm_placement_balances_and_caps(zoo, user, monkeypatch):
-    monkeypatch.setattr("server.windows.MAX_VMS", 1)
+    monkeypatch.setattr("apps.server.windows.MAX_VMS", 1)
     a = add_server("alice@example.com", "windows", "a")
     b = add_server("alice@example.com", "windows", "b")
     first = place(zoo, user, AUTO, "windows")

@@ -91,7 +91,7 @@ def configuration(mode: str) -> tuple[dict[str, str], Path]:
             "CORS_ORIGINS": f"http://{web_host}:3000",
             "ZOO_NODE_HOST": os.environ.get("ZOO_DEV_NODE_HOST", ""),
             "ZOO_NODE_PORT": "7443",
-            "ZOO_NODE_DIST": str(ROOT / "node" / "dist"),
+            "ZOO_NODE_DIST": str(ROOT / "go" / "node" / "dist"),
             "ZOO_GATEWAY_PEERS": "localhost",
             "ZOO_GATEWAY_IP": "127.0.0.1",
             "ZOO_GATEWAY_GRPC_PORT": "7444",
@@ -237,15 +237,15 @@ def prepare_kube(values: dict[str, str], children: Processes):
     }:
         raise RuntimeError("the gateway peer service must be headless and expose TLS peer HTTP port 8002")
     for image, dockerfile in (
-        ("api", "Dockerfile.api"),
-        ("gateway", "Dockerfile.gateway"),
-        ("egress", "Dockerfile.egress"),
-        ("sandbox-desktop", "Dockerfile"),
-        ("sandbox-code", "Dockerfile.code"),
+        ("api", "docker/Dockerfile.api"),
+        ("gateway", "docker/Dockerfile.gateway"),
+        ("egress", "docker/Dockerfile.egress"),
+        ("sandbox-desktop", "docker/Dockerfile"),
+        ("sandbox-code", "docker/Dockerfile.code"),
     ):
         command(["docker", "build", "-f", dockerfile, "-t", f"zoo-dev/zoo-{image}:{values['ZOO_VERSION']}", "."])
     context = STATE / "gateway-context"
-    shutil.copytree(ROOT / "node" / "dist", context / "node-dist", dirs_exist_ok=True)
+    shutil.copytree(ROOT / "go" / "node" / "dist", context / "node-dist", dirs_exist_ok=True)
     (context / "Dockerfile").write_text(
         f"FROM zoo-dev/zoo-gateway:{values['ZOO_VERSION']}\nCOPY node-dist/ /app/node/dist/\n"
     )

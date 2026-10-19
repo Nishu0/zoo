@@ -71,32 +71,32 @@ rotate-secrets:
 	uv run python -m server.rotate_secrets
 
 guest-darwin:
-	cd guest && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o dist/zoo-guest-darwin-arm64 .
+	cd go/guest && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o dist/zoo-guest-darwin-arm64 .
 
 # windowsgui: the guest runs in the desktop session, where a console program would open a window
 guest-windows:
-	cd guest && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -H windowsgui" -o dist/zoo-guest-windows-amd64.exe .
+	cd go/guest && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -H windowsgui" -o dist/zoo-guest-windows-amd64.exe .
 
 egress-darwin:
-	cd egress && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o dist/zoo-egress-darwin-arm64 .
+	cd go/egress && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o dist/zoo-egress-darwin-arm64 .
 
 egress-windows:
-	cd egress && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -H windowsgui" -o dist/zoo-egress-windows-amd64.exe .
+	cd go/egress && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -H windowsgui" -o dist/zoo-egress-windows-amd64.exe .
 
 egress-dist: egress-darwin egress-windows
 
-# after changing node/proto/node.proto (needs protoc, protoc-gen-go and protoc-gen-go-grpc)
+# after changing go/node/proto/node.proto (needs protoc, protoc-gen-go and protoc-gen-go-grpc)
 proto:
-	cd node && protoc -I proto --go_out=nodepb --go_opt=paths=source_relative --go-grpc_out=nodepb --go-grpc_opt=paths=source_relative proto/node.proto
-	uv run python -m grpc_tools.protoc -Iapps/server/nodepb=node/proto --python_out=. --pyi_out=. --grpc_python_out=. apps/server/nodepb/node.proto
+	cd go/node && protoc -I proto --go_out=nodepb --go_opt=paths=source_relative --go-grpc_out=nodepb --go-grpc_opt=paths=source_relative proto/node.proto
+	uv run python -m grpc_tools.protoc -Iapps/server/nodepb=go/node/proto --python_out=. --pyi_out=. --grpc_python_out=. apps/server/nodepb/node.proto
 
 gateway-proto:
-	protoc -I gateway/proto --go_out=gateway --go_opt=module=zoo/gateway --go-grpc_out=gateway --go-grpc_opt=module=zoo/gateway gateway/proto/gateway.proto
-	uv run python -m grpc_tools.protoc -Iapps/server/gatewaypb=gateway/proto --python_out=. --pyi_out=. --grpc_python_out=. apps/server/gatewaypb/gateway.proto
+	protoc -I go/gateway/proto --go_out=go/gateway --go_opt=module=zoo/gateway --go-grpc_out=go/gateway --go-grpc_opt=module=zoo/gateway go/gateway/proto/gateway.proto
+	uv run python -m grpc_tools.protoc -Iapps/server/gatewaypb=go/gateway/proto --python_out=. --pyi_out=. --grpc_python_out=. apps/server/gatewaypb/gateway.proto
 
-# zoo-node for Linux, macOS and Windows, with the API's version, for installers and auto-update (node/dist/)
+# zoo-node for Linux, macOS and Windows, with the API's version, for installers and auto-update (go/node/dist/)
 node-dist:
-	cd node && for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do \
+	cd go/node && for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do \
 		os=$${t%/*}; arch=$${t#*/}; ext=$$( [ $$os = windows ] && echo .exe ); \
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags="-s -w -X main.version=$(VERSION)" -o dist/zoo-node-$$os-$$arch$$ext . || exit 1; \
 	done && echo $(VERSION) > dist/VERSION

@@ -32,13 +32,13 @@ MAX_VMS = 2
 HOST_PATH = 'export PATH="/usr/local/bin:/opt/homebrew/bin:$HOME/.local/bin:$PATH"; '
 SAFE_RULE = re.compile(r"^[A-Za-z0-9.:/_-]+$")
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-GUEST_BINARY = os.environ.get("ZOO_GUEST_DARWIN_BINARY", os.path.join(ROOT, "guest", "dist", "zoo-guest-darwin-arm64"))
+GUEST_BINARY = os.environ.get("ZOO_GUEST_DARWIN_BINARY", os.path.join(ROOT, "go", "guest", "dist", "zoo-guest-darwin-arm64"))
 GUEST_LABEL = "com.zoo.guest"
 GUEST_PLIST = f"{HOME}/Library/LaunchAgents/{GUEST_LABEL}.plist"
 
 EGRESS_DIR = "$HOME/.zoovm/egress"
 EGRESS_BINARY = "$HOME/.zoovm/bin/zoo-egress"
-EGRESS_BUILD = os.path.join(ROOT, "egress", "dist", "zoo-egress-darwin-arm64")
+EGRESS_BUILD = os.path.join(ROOT, "go", "egress", "dist", "zoo-egress-darwin-arm64")
 
 hosts: dict[str, paramiko.SSHClient] = {}
 guests: dict[str, paramiko.SSHClient] = {}

@@ -16,6 +16,10 @@ on:
         description: Ignore the build cache and pull fresh base images
         type: boolean
         default: false
+      sandboxRegistry:
+        description: Docker Hub namespace for the sandbox images (zoo-sandbox-*); empty keeps them beside the platform images
+        type: string
+        default: ""
     secrets:
       DOCKERHUB_USERNAME:
         required: true
@@ -30,6 +34,8 @@ permissions:
 env:
   DOCKERHUB: docker.io/${{ vars.DOCKERHUB_NAMESPACE || 'chann44' }}
   GHCR: ghcr.io/${{ github.repository_owner }}
+  # the sandbox bucket's Docker Hub namespace; the platform bucket's when unset (GHCR stays shared)
+  SANDBOX_DH: docker.io/${{ inputs.sandboxRegistry || vars.DOCKERHUB_NAMESPACE || 'chann44' }}
 
 jobs:
   build:
@@ -41,13 +47,13 @@ jobs:
         image: [api, web, sandbox-desktop, sandbox-browser, sandbox-code, egress, gateway]
         arch: [amd64, arm64]
         include:
-          - { image: api, context: ., file: Dockerfile.api }
+          - { image: api, context: ., file: docker/Dockerfile.api }
           - { image: web, context: apps/web, file: apps/web/Dockerfile }
-          - { image: sandbox-desktop, context: ., file: Dockerfile }
-          - { image: sandbox-browser, context: ., file: Dockerfile.browser }
-          - { image: sandbox-code, context: ., file: Dockerfile.code }
-          - { image: egress, context: ., file: Dockerfile.egress }
-          - { image: gateway, context: ., file: Dockerfile.gateway }
+          - { image: sandbox-desktop, context: ., file: docker/Dockerfile }
+          - { image: sandbox-browser, context: ., file: docker/Dockerfile.browser }
+          - { image: sandbox-code, context: ., file: docker/Dockerfile.code }
+          - { image: egress, context: ., file: docker/Dockerfile.egress }
+          - { image: gateway, context: ., file: docker/Dockerfile.gateway }
     steps:
       - uses: actions/checkout@v5
       - uses: docker/setup-buildx-action@v3
@@ -78,7 +84,7 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
           platforms: linux/${{ matrix.arch }}
-          outputs: type=image,"name=${{ inputs.version != '' && format('{0}/zoo-{1},', env.DOCKERHUB, matrix.image) || '' }}${{ env.GHCR }}/zoo-${{ matrix.image }}",push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,"name=${{ inputs.version != '' && format('{0}/zoo-{1},', startsWith(matrix.image, 'sandbox-') && env.SANDBOX_DH || env.DOCKERHUB, matrix.image) || '' }}${{ env.GHCR }}/zoo-${{ matrix.image }}",push-by-digest=true,name-canonical=true,push=true
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -140,7 +146,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            name=${{ env.DOCKERHUB }}/zoo-${{ matrix.image }},enable=${{ inputs.version != '' }}
+            name=${{ startsWith(matrix.image, 'sandbox-') && env.SANDBOX_DH || env.DOCKERHUB }}/zoo-${{ matrix.image }},enable=${{ inputs.version != '' }}
             ${{ env.GHCR }}/zoo-${{ matrix.image }}
           flavor: latest=false
           tags: |
@@ -158,8 +164,10 @@ jobs:
           IMAGE: zoo-${{ matrix.image }}
           RELEASE: ${{ inputs.version }}
         run: |
+          dh="$DOCKERHUB"
+          case "$IMAGE" in zoo-sandbox-*) dh="$SANDBOX_DH";; esac
           repos=("$GHCR/$IMAGE")
-          if [ -n "$RELEASE" ]; then repos+=("$DOCKERHUB/$IMAGE"); fi
+          if [ -n "$RELEASE" ]; then repos+=("$dh/$IMAGE"); fi
           for repo in "${repos[@]}"; do
             args=()
             while read -r tag; do

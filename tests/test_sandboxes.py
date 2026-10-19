@@ -39,20 +39,20 @@ def test_create_boots_a_running_sandbox(client, alice, fake):
     with db_manager.session() as db:
         stored = present(db.get_sandbox(id=sandbox["id"]))
     assert json.loads(stored.config)["home_claim"] == f"zoo-home-{sandbox['id']}"
-    assert container.image == "zoo-sandbox:latest"
+    assert container.image == "docker.io/chann44/zoo-sandbox-desktop:latest"
     assert container.desktop
 
 
 def test_code_and_browser_sandboxes(make_sandbox, fake):
     code = make_sandbox("code")
     assert code["kind"] == "code"
-    assert fake.containers[runtime_of(code["id"])].image == "zoo-code:latest"
+    assert fake.containers[runtime_of(code["id"])].image == "docker.io/chann44/zoo-sandbox-code:latest"
     assert not fake.containers[runtime_of(code["id"])].desktop
 
     browser = make_sandbox("browser")
     assert browser["status"] == "running"
     browser_container = fake.containers[runtime_of(browser["id"])]
-    assert browser_container.image == "zoo-browser:latest"
+    assert browser_container.image == "docker.io/chann44/zoo-sandbox-browser:latest"
     assert browser_container.env["ZOO_BROWSER_HOME"] == "https://duckduckgo.com"
     assert browser_container.env["ZOO_BROWSER_WAIT"] == "1"
     assert ("open_url", runtime_of(browser["id"]), {"url": "https://duckduckgo.com"}) in fake.calls

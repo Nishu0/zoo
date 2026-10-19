@@ -2,9 +2,9 @@ FROM --platform=$BUILDPLATFORM golang:1.26.7-bookworm AS build
 ARG TARGETOS=linux
 ARG TARGETARCH
 WORKDIR /src/vm-control
-COPY vm-control/go.mod vm-control/go.sum ./
+COPY go/vm-control/go.mod go/vm-control/go.sum ./
 RUN go mod download
-COPY vm-control/ ./
+COPY go/vm-control/ ./
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /zoo-vm-control .
 
 FROM debian:bookworm-slim

@@ -3,7 +3,7 @@ services:
     image: ${ZOO_REGISTRY}/zoo-gateway:${ZOO_VERSION}
     build:
       context: .
-      dockerfile: Dockerfile.gateway
+      dockerfile: docker/Dockerfile.gateway
     environment: !override
       DATABASE_URL: postgresql://zoo:${POSTGRES_PASSWORD}@postgres:5432/zoo
       JWT_SECRET: ${JWT_SECRET}
@@ -11,7 +11,7 @@ services:
       ZOO_API_URL: ${ZOO_API_URL}
       ZOO_NODE_HOST: ${ZOO_NODE_HOST:-}
       ZOO_NODE_PORT: "7443"
-      ZOO_NODE_DIST: /app/node/dist
+      ZOO_NODE_DIST: /app/go/node/dist
       ZOO_GATEWAY_PEERS: localhost
       ZOO_GATEWAY_IP: 127.0.0.1
       ZOO_GATEWAY_GRPC_PORT: "7444"
@@ -21,7 +21,7 @@ services:
       postgres:
         condition: service_healthy
     ports: !override ["7443:7443", "127.0.0.1:7444:7444", "127.0.0.1:8001:8001", "127.0.0.1:8002:8002"]
-    volumes: !override ["./node/dist:/app/node/dist:ro"]
+    volumes: !override ["./go/node/dist:/app/go/node/dist:ro"]
     healthcheck: !override
       test: ["CMD", "/usr/local/bin/zoo-gateway", "-healthcheck", "http://127.0.0.1:8001/readyz"]
       interval: 5s

@@ -173,7 +173,7 @@ Paths below are relative to the Python API. With the domain/Caddy setup, prepend
 | MCP and shared registry | [`server/mcp.py`](../apps/server/mcp.py), [`server/registry.py`](../apps/server/registry.py) |
 | Sandbox lifecycle and tool authorization | [`server/sandbox_api.py`](../apps/server/sandbox_api.py), [`server/jobs.py`](../apps/server/jobs.py) |
 | Runtime routing | [`server/runtime.py`](../apps/server/runtime.py), [`server/remote_docker.py`](../apps/server/remote_docker.py) |
-| Gateway protocols and VNC transport | [`gateway/proto/gateway.proto`](../gateway/proto/gateway.proto), [`gateway/vnc_target.go`](../gateway/vnc_target.go), [`node/proto/node.proto`](../node/proto/node.proto) |
-| Guest services | [`guest/main.go`](../guest/main.go) |
+| Gateway protocols and VNC transport | [`go/gateway/proto/gateway.proto`](../go/gateway/proto/gateway.proto), [`go/gateway/vnc_target.go`](../go/gateway/vnc_target.go), [`go/node/proto/node.proto`](../go/node/proto/node.proto) |
+| Guest services | [`go/guest/main.go`](../go/guest/main.go) |
 | Dashboard API client | [`web/src/lib/api_client.ts`](../apps/web/src/lib/api_client.ts) |
-| Existing architecture and security model | [`Architecture`](../apps/site/src/content/docs/docs/concepts/architecture.md), [`Security model`](../apps/site/src/content/docs/docs/concepts/security-model.md), [`VM-control`](../vm-control/README.md) |
+| Existing architecture and security model | [`Architecture`](../apps/site/src/content/docs/docs/concepts/architecture.md), [`Security model`](../apps/site/src/content/docs/docs/concepts/security-model.md), [`VM-control`](../go/vm-control/README.md) |

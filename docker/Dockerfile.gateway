@@ -2,11 +2,11 @@ FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS build
 ARG TARGETOS=linux
 ARG TARGETARCH
 WORKDIR /src/gateway
-COPY gateway/go.mod gateway/go.sum ./
-COPY node/go.mod node/go.sum ../node/
+COPY go/gateway/go.mod go/gateway/go.sum ./
+COPY go/node/go.mod go/node/go.sum ../node/
 RUN go mod download
-COPY gateway/ ./
-COPY node/ ../node/
+COPY go/gateway/ ./
+COPY go/node/ ../node/
 COPY pyproject.toml /src/pyproject.toml
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /zoo-gateway .
 RUN cd ../node && version=$(sed -n 's/^version = "\(.*\)"/\1/p' ../pyproject.toml) && mkdir -p /node-dist \
@@ -20,8 +20,8 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /zoo-gateway /usr/local/bin/zoo-gateway
-COPY --from=build /node-dist/ /app/node/dist/
+COPY --from=build /node-dist/ /app/go/node/dist/
 WORKDIR /app
-ENV ZOO_NODE_DIST=/app/node/dist
+ENV ZOO_NODE_DIST=/app/go/node/dist
 EXPOSE 7443 7444 8001 8002
 ENTRYPOINT ["/usr/local/bin/zoo-gateway"]

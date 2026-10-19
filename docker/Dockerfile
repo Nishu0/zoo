@@ -1,10 +1,10 @@
-# zoo-guest: the in-sandbox agent the API sends tool calls to (see guest/)
+# zoo-guest: the in-sandbox agent the API sends tool calls to (see go/guest/)
 FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS guest
 ARG TARGETOS TARGETARCH
 WORKDIR /src
-COPY guest/go.mod guest/go.sum ./
+COPY go/guest/go.mod go/guest/go.sum ./
 RUN go mod download
-COPY guest/ ./
+COPY go/guest/ ./
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /zoo-guest .
 
 FROM debian:bookworm

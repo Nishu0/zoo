@@ -214,6 +214,8 @@ sandboxes:
     desktop: ""
     browser: ""
     code: ""
+  # the registry the sandbox images (zoo-sandbox-*) come from; the platform images' registry when empty
+  imageRegistry: ""
   imagePullSecret: ""
   # sandboxes reach the internet and the gateway, nothing else in the cluster
   networkPolicy:

@@ -177,7 +177,7 @@ def test_shrinking_and_stale_images_drain_the_pool(client, admin, warm, fake, mo
     client.put("/pool", json={"kind": "code", "size": 1}, headers=admin)
     warm.fill()
     assert len(rows()) == 1
-    monkeypatch.setattr("server.runtime.CODE_IMAGE", "zoo-code:next")
+    monkeypatch.setattr("apps.server.runtime.CODE_IMAGE", "zoo-code:next")
     warm.fill()
     [fresh] = rows()
     assert fresh.image == "zoo-code:next"

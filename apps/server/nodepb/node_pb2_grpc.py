@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from apps.server.nodepb import node_pb2 as server_dot_nodepb_dot_node__pb2
+from apps.server.nodepb import node_pb2 as apps_dot_server_dot_nodepb_dot_node__pb2
 
 GRPC_GENERATED_VERSION = '1.84.0'
 GRPC_VERSION = grpc.__version__
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in server/nodepb/node_pb2_grpc.py depends on'
+        + ' but the generated code in apps/server/nodepb/node_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -36,8 +36,8 @@ class NodeStub:
         """
         self.Connect = channel.stream_stream(
                 '/zoo.node.v1.Node/Connect',
-                request_serializer=server_dot_nodepb_dot_node__pb2.NodeMessage.SerializeToString,
-                response_deserializer=server_dot_nodepb_dot_node__pb2.ApiMessage.FromString,
+                request_serializer=apps_dot_server_dot_nodepb_dot_node__pb2.NodeMessage.SerializeToString,
+                response_deserializer=apps_dot_server_dot_nodepb_dot_node__pb2.ApiMessage.FromString,
                 _registered_method=True)
 
 
@@ -55,8 +55,8 @@ def add_NodeServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'Connect': grpc.stream_stream_rpc_method_handler(
                     servicer.Connect,
-                    request_deserializer=server_dot_nodepb_dot_node__pb2.NodeMessage.FromString,
-                    response_serializer=server_dot_nodepb_dot_node__pb2.ApiMessage.SerializeToString,
+                    request_deserializer=apps_dot_server_dot_nodepb_dot_node__pb2.NodeMessage.FromString,
+                    response_serializer=apps_dot_server_dot_nodepb_dot_node__pb2.ApiMessage.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -84,8 +84,8 @@ class Node:
             request_iterator,
             target,
             '/zoo.node.v1.Node/Connect',
-            server_dot_nodepb_dot_node__pb2.NodeMessage.SerializeToString,
-            server_dot_nodepb_dot_node__pb2.ApiMessage.FromString,
+            apps_dot_server_dot_nodepb_dot_node__pb2.NodeMessage.SerializeToString,
+            apps_dot_server_dot_nodepb_dot_node__pb2.ApiMessage.FromString,
             options,
             channel_credentials,
             insecure,

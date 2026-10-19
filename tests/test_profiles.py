@@ -104,7 +104,7 @@ def test_load_fails_safe_when_the_check_fails(client, alice, sandbox, make_sandb
     def broken(runtime_id, app):
         raise ConnectionError("no route to host")
 
-    monkeypatch.setattr("server.servers_api.app_running", broken)
+    monkeypatch.setattr("apps.server.servers_api.app_running", broken)
     res = client.post(f"/sandboxes/{other['id']}/profiles/{profile['id']}", headers=alice)
     assert res.status_code == 503
     assert fake.containers[runtime_of(other["id"])].dirs == {}

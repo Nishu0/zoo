@@ -1,9 +1,9 @@
 FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS build
 ARG TARGETOS TARGETARCH
 WORKDIR /src
-COPY egress/go.mod egress/go.sum ./
+COPY go/egress/go.mod go/egress/go.sum ./
 RUN go mod download
-COPY egress/ ./
+COPY go/egress/ ./
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /zoo-egress .
 
 FROM debian:bookworm-slim

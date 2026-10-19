@@ -1,4 +1,4 @@
-"""Host-side network and app policy (server/egress.py, guest/egress.go), the hardening around it, and KMS wrapping."""
+"""Host-side network and app policy (apps/server/egress.py, go/guest/egress.go), the hardening around it, and KMS wrapping."""
 
 import io
 import json

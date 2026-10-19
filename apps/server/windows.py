@@ -39,9 +39,9 @@ VNC_PORT = 5900
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 HELPER_DIR = os.path.join(ROOT, "windows")
 GUEST_BINARY = os.environ.get(
-    "ZOO_GUEST_WINDOWS_BINARY", os.path.join(ROOT, "guest", "dist", "zoo-guest-windows-amd64.exe")
+    "ZOO_GUEST_WINDOWS_BINARY", os.path.join(ROOT, "go", "guest", "dist", "zoo-guest-windows-amd64.exe")
 )
-EGRESS_BUILD = os.path.join(ROOT, "egress", "dist", "zoo-egress-windows-amd64.exe")
+EGRESS_BUILD = os.path.join(ROOT, "go", "egress", "dist", "zoo-egress-windows-amd64.exe")
 # zoo-guest in the VM: setup.ps1 installs it in the base VM, the host copies each VM its guest.env (zoovm push)
 GUEST_DIR = r"C:\ProgramData\zoo"
 GUEST_EXE = rf"{GUEST_DIR}\bin\zoo-guest.exe"
