@@ -2,10 +2,11 @@ MIGRATION_DIR=./db/migrations
 
 VERSION ?= $(shell sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
 
-.PHONY: help create up down status reset generate run rotate-secrets guest-darwin guest-windows egress-darwin egress-windows egress-dist proto gateway-proto node-dist dev devdown devkube devkubedown dev-down dev-kube dev-kube-down
+.PHONY: help setup create up down status reset generate run rotate-secrets guest-darwin guest-windows egress-darwin egress-windows egress-dist proto gateway-proto node-dist dev devdown devkube devkubedown dev-down dev-kube dev-kube-down
 
 help:
 	@echo "Available commands:        "
+	@echo "make setup                 --install Python deps (uv sync) and Go module deps (first run)"
 	@echo "make create name=<name>    --create a new migrations file"
 	@echo "make up                    --Run pending migrations"
 	@echo "make down                  --Rollback the last migrations"
@@ -18,6 +19,15 @@ help:
 	@echo "make egress-dist           --build zoo-egress for macOS and Windows hosts (egress/dist/)"
 	@echo "make dev / devdown         --source API/dashboard with local Docker/Kata dependencies"
 	@echo "make devkube / devkubedown --source API/dashboard with a local k3s/Kata development release"
+
+# Python environment (uv sync, including the dev group) and the Go dependencies of every
+# module in the repo; run once after cloning and after dependency changes
+setup:
+	uv sync
+	for module in egress gateway guest node vm-control; do \
+		echo "--> $$module: go mod download"; \
+		(cd $$module && go mod download) || exit 1; \
+	done
 
 dev: node-dist
 	VERSION="$(VERSION)" uv run python scripts/dev.py docker
