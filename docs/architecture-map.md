@@ -170,7 +170,7 @@ Paths below are relative to the Python API. With the domain/Caddy setup, prepend
 | --- | --- |
 | Deployment and ingress | [`compose.yml`](../compose.yml), [`Caddyfile`](../Caddyfile) |
 | API assembly and background tasks | [`server/server.py`](../server/server.py) |
-| MCP and shared registry | [`mcp_tools/server.py`](../mcp_tools/server.py), [`server/registry.py`](../server/registry.py) |
+| MCP and shared registry | [`server/mcp.py`](../server/mcp.py), [`server/registry.py`](../server/registry.py) |
 | Sandbox lifecycle and tool authorization | [`server/sandbox_api.py`](../server/sandbox_api.py), [`server/jobs.py`](../server/jobs.py) |
 | Runtime routing | [`server/runtime.py`](../server/runtime.py), [`server/remote_docker.py`](../server/remote_docker.py) |
 | Gateway protocols and VNC transport | [`gateway/proto/gateway.proto`](../gateway/proto/gateway.proto), [`gateway/vnc_target.go`](../gateway/vnc_target.go), [`node/proto/node.proto`](../node/proto/node.proto) |

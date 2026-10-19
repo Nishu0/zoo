@@ -1,15 +1,5 @@
 {
     "files": {
-        "./mcp_tools/server.py": [
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 80,
-                    "endColumn": 84,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./server/auth_api.py": [
             {
                 "code": "reportArgumentType",
@@ -68,6 +58,16 @@
                 "range": {
                     "startColumn": 37,
                     "endColumn": 67,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./server/mcp.py": [
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 80,
+                    "endColumn": 84,
                     "lineCount": 1
                 }
             }

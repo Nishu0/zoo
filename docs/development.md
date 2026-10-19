@@ -190,7 +190,6 @@ node/              Linux/macOS/Windows host daemon
 guest/             in-sandbox agent
 egress/            standalone cross-platform egress policy daemon
 db/                Postgres migrations, queries and generated client
-mcp_tools/         MCP server and tools
 sdk/python/        Python SDK and sandbox CLI
 web/               Bun/TanStack dashboard
 macos/, windows/   platform VM helpers and guest setup

@@ -408,7 +408,7 @@ def gen_sdk() -> None:
 # Configuration reference — from environment reads in the code
 # ---------------------------------------------------------------------------
 
-ENV_SCAN_DIRS = ["server", "mcp_tools", "gateway", "node", "egress", "vm-control"]
+ENV_SCAN_DIRS = ["server", "gateway", "node", "egress", "vm-control"]
 REMOVED_SETTINGS = {"ZOO_GATEWAY", "ZOO_GUEST_URL", "ZOO_GUEST_REMOTE_URL", "ZOO_NODE_ENDPOINTS", "ZOO_SSH_DIR"}
 DESCRIPTIONS = {
     "JWT_SECRET": "Signs sessions.",
