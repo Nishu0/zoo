@@ -66,7 +66,6 @@ suites ([methodology + numbers](benchmarks/README.md)):
   **`zoo-sandbox-code-slim`** (379 MB, tool-call-only workloads) — select per
   deployment with `ZOO_CODE_IMAGE`.
 
-The design and audit trail live in [PLAN-macos-speed.md](PLAN-macos-speed.md).
 Keep Docker disk usage lean with `make hygiene`.
 
 ## Documentation
