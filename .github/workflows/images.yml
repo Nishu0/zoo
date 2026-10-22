@@ -118,7 +118,11 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: digests-${{ matrix.image }}-*
+          # exact names, not "digests-${{ matrix.image }}-*": that glob would also match
+          # digests-sandbox-code-slim-* and pull the slim digests into this job
+          pattern: |
+            digests-${{ matrix.image }}-amd64
+            digests-${{ matrix.image }}-arm64
           path: ${{ runner.temp }}/digests
           merge-multiple: true
       - uses: docker/setup-buildx-action@v3
