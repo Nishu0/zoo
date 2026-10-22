@@ -1,0 +1,94 @@
+---
+import "@fontsource-variable/archivo/wdth.css";
+import "@fontsource/fragment-mono/400.css";
+import "@fontsource/silkscreen/400.css";
+import "../styles/zoo.css";
+
+interface Props {
+    title?: string;
+    description?: string;
+}
+
+const {
+    title = "Zoo — a home for your AI agents",
+    description = "Self-hosted Linux, macOS and Windows sandboxes for AI agents. Every agent gets its own computer in its own microVM. Drive them over MCP, REST or an SDK; watch and take over from your browser.",
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="generator" content={Astro.generator} />
+        <meta name="theme-color" content="#cfe7f7" />
+        <title>{title}</title>
+        <meta name="description" content={description} />
+        <meta property="og:title" content={title} />
+        <meta property="og:description" content={description} />
+        <meta property="og:type" content="website" />
+        <link rel="icon" type="image/png" href="/favicon.png" />
+        <script is:inline>
+            document.documentElement.classList.add("js");
+        </script>
+    </head>
+    <body>
+        <slot />
+        <script>
+            // sky → meadow as you walk deeper into the park
+            const root = document.documentElement;
+            let ticking = false;
+            const update = () => {
+                const max = root.scrollHeight - innerHeight;
+                const p = max > 0 ? Math.min(1, scrollY / (max * 0.55)) : 0;
+                root.style.setProperty("--p", p.toFixed(3));
+                ticking = false;
+            };
+            addEventListener(
+                "scroll",
+                () => {
+                    if (!ticking) {
+                        ticking = true;
+                        requestAnimationFrame(update);
+                    }
+                },
+                { passive: true },
+            );
+            update();
+
+            // scroll reveal
+            const io = new IntersectionObserver(
+                (entries) => {
+                    for (const e of entries) {
+                        if (e.isIntersecting) {
+                            e.target.classList.add("in");
+                            io.unobserve(e.target);
+                        }
+                    }
+                },
+                { threshold: 0.12, rootMargin: "0px 0px -6% 0px" },
+            );
+            document.querySelectorAll("[data-reveal]").forEach((el) => io.observe(el));
+
+            // copy buttons
+            for (const btn of document.querySelectorAll<HTMLButtonElement>("[data-copy]")) {
+                const label = btn.querySelector(".copy-label");
+                btn.addEventListener("click", async () => {
+                    try {
+                        await navigator.clipboard.writeText(btn.dataset.copy ?? "");
+                    } catch {
+                        /* clipboard unavailable */
+                    }
+                    if (label) {
+                        label.textContent = "copied!";
+                        btn.classList.add("did");
+                        setTimeout(() => {
+                            label.textContent = "copy";
+                            btn.classList.remove("did");
+                        }, 1600);
+                    }
+                });
+            }
+        </script>
+    </body>
+</html>
