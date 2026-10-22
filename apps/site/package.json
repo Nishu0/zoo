@@ -15,6 +15,7 @@
     "@astrojs/starlight": "0.37.0",
     "@fontsource-variable/archivo": "^5.2.5",
     "@fontsource/fragment-mono": "^5.2.5",
+    "@fontsource/silkscreen": "5.2.5",
     "astro": "^5.14.0"
   },
   "devDependencies": {
