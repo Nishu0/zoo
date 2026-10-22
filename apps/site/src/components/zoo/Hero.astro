@@ -1,0 +1,583 @@
+---
+import Park from "./Park.astro";
+import Sprite from "./Sprite.astro";
+
+const installCmd =
+    "curl -fsSL https://github.com/chann44/zoo/releases/latest/download/install.sh | sudo bash -s -- --admin-email you@example.com";
+---
+
+<section class="hero" id="top">
+    <div class="container intro">
+        <a class="pill" href="https://github.com/chann44/zoo/releases/latest" data-reveal>
+            <span class="new pixel">new</span>
+            macOS sandboxes now resume in seconds
+            <span aria-hidden="true">→</span>
+        </a>
+
+        <h1 data-reveal style="--d:.05s">
+            A zoo for your <span class="hl">AI&nbsp;agents</span>
+        </h1>
+
+        <p class="sub" data-reveal style="--d:.1s">
+            Self-hosted Linux, macOS and Windows sandboxes. Every agent gets its own computer in its own
+            microVM. You hold the keys to every gate.
+        </p>
+
+        <div class="actions" data-reveal style="--d:.15s">
+            <a class="btn-yellow" href="/docs/get-started/quickstart/">Get started <span aria-hidden="true">→</span></a>
+            <button class="btn-plain copy" type="button" data-copy={installCmd}>
+                <span class="mono dollar">$</span>
+                <span class="mono">curl … install.sh | sudo bash</span>
+                <span class="copy-label pixel">copy</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="container stage" data-reveal style="--d:.2s" data-stage>
+        <div class="term demo-term" data-hero-term>
+            <div class="win-bar">
+                <span class="lights"><i></i><i></i><i></i></span>
+                <span>~/agents — zsh</span>
+            </div>
+            <pre class="lines" data-lines aria-label="Terminal: creating a desktop sandbox with the zoo CLI"></pre>
+        </div>
+
+        <div class="win demo-win" data-hero-win>
+            <div class="win-bar">
+                <span class="lights"><i></i><i></i><i></i></span>
+                <span class="url">zoo.local/sandboxes</span>
+            </div>
+            <div class="dash">
+                <ul class="boxes mono" role="list">
+                    <li class="row on" data-row>
+                        <span class="dot" data-dot></span>research
+                        <em data-state>booting</em>
+                    </li>
+                    <li class="row"><span class="dot ok"></span>invoice<em>running</em></li>
+                    <li class="row"><span class="dot ok"></span>scraper<em>running</em></li>
+                    <li class="row"><span class="dot"></span>coder<em>stopped</em></li>
+                </ul>
+                <div class="screen" data-screen>
+                    <div class="boot pixel" data-boot>booting microVM…</div>
+                    <div class="desk" data-desk>
+                        <div class="topbar"><span>Applications</span><span class="mono">12:04</span></div>
+                        <div class="ff">
+                            <div class="ff-bar"><span></span><span class="ff-url mono" data-ffurl></span></div>
+                            <div class="ff-body">
+                                <i></i><i></i><i class="short"></i>
+                            </div>
+                        </div>
+                        <div class="icon"><Sprite name="penguin" px={2} /></div>
+                        <svg class="cursor" data-cursor viewBox="0 0 12 18" width="14" height="21" aria-hidden="true">
+                            <path d="M1 1v14l4-4 3 6 2-1-3-6h5z" fill="#fff" stroke="#1d1a16" stroke-width="1.4"></path>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+            <div class="win-foot mono">
+                <span class="live"><span class="dot ok blink"></span> agent driving</span>
+                <span class="ms" data-ms>— ms</span>
+            </div>
+        </div>
+    </div>
+
+    <Park />
+</section>
+
+<script>
+    const term = document.querySelector<HTMLElement>("[data-lines]")!;
+    const win = document.querySelector<HTMLElement>("[data-hero-win]")!;
+    const dot = win.querySelector<HTMLElement>("[data-dot]")!;
+    const state = win.querySelector<HTMLElement>("[data-state]")!;
+    const screen = win.querySelector<HTMLElement>("[data-screen]")!;
+    const cursor = win.querySelector<SVGElement>("[data-cursor]")!;
+    const ffurl = win.querySelector<HTMLElement>("[data-ffurl]")!;
+    const ms = win.querySelector<HTMLElement>("[data-ms]")!;
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const sleep = (t: number) => new Promise((r) => setTimeout(r, reduced ? 0 : t));
+
+    const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    let html = "";
+    const put = (s: string) => {
+        html += s;
+        term.innerHTML = html + '<span class="caret"></span>';
+    };
+    const type = async (s: string, speed = 38) => {
+        for (const ch of s) {
+            put(esc(ch));
+            await sleep(speed + Math.random() * 40);
+        }
+    };
+
+    const moveCursor = (x: number, y: number) => {
+        cursor.style.left = x + "%";
+        cursor.style.top = y + "%";
+    };
+
+    async function run() {
+        for (;;) {
+            html = "";
+            put("");
+            screen.classList.remove("up");
+            dot.className = "dot";
+            state.textContent = "booting";
+            ffurl.textContent = "";
+            ms.textContent = "— ms";
+            moveCursor(70, 70);
+            await sleep(700);
+            put('<span class="p">❯</span> ');
+            await type("zoo create --kind desktop --name research");
+            await sleep(350);
+            put("\n");
+            dot.className = "dot warn";
+            await sleep(500);
+            put('<span class="g">●</span> <b>sandbox</b> research <span class="d">· desktop · linux</span>\n');
+            await sleep(400);
+            put('  <span class="d">⎿ microVM up · first command in</span> <span class="y">125 ms</span>\n');
+            dot.className = "dot ok";
+            state.textContent = "running";
+            screen.classList.add("up");
+            await sleep(500);
+            put('<span class="g">●</span> live at <u>zoo.local/s/research</u>\n\n');
+            await sleep(500);
+            put('<span class="p">❯</span> ');
+            await type("zoo exec research 'firefox-esr zoo.dev'", 30);
+            put("\n");
+            moveCursor(30, 26);
+            await sleep(600);
+            for (const ch of "zoo.dev") {
+                ffurl.textContent += ch;
+                await sleep(70);
+            }
+            ms.textContent = "14 ms";
+            put('  <span class="d">⎿ exit 0 ·</span> <span class="y">14 ms</span>\n');
+            moveCursor(55, 60);
+            await sleep(900);
+            moveCursor(42, 48);
+            await sleep(3600);
+        }
+    }
+
+    // the two windows lean toward the pointer
+    const stage = document.querySelector<HTMLElement>("[data-stage]")!;
+    const tw = document.querySelector<HTMLElement>("[data-hero-term]")!;
+    if (!reduced && matchMedia("(pointer: fine)").matches) {
+        addEventListener("pointermove", (e) => {
+            const x = e.clientX / innerWidth - 0.5,
+                y = e.clientY / innerHeight - 0.5;
+            tw.style.translate = `${x * -14}px ${y * -10}px`;
+            win.style.translate = `${x * 18}px ${y * 12}px`;
+        });
+    }
+    void stage;
+
+    // only start when the hero is visible
+    let started = false;
+    new IntersectionObserver(([e]) => {
+        if (e.isIntersecting && !started) {
+            started = true;
+            run();
+        }
+    }).observe(term);
+</script>
+
+<style>
+    .hero {
+        padding-top: clamp(2.5rem, 6vw, 5rem);
+        position: relative;
+    }
+
+    .intro {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+
+    .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.3rem 0.85rem 0.3rem 0.35rem;
+        border-radius: 999px;
+        background: rgb(255 255 255 / 0.6);
+        border: 1px solid var(--line);
+        font-size: 0.82rem;
+        color: var(--ink-2);
+        text-decoration: none;
+        margin-bottom: 1.6rem;
+        transition: background 0.2s;
+    }
+
+    .pill:hover {
+        background: var(--paper);
+    }
+
+    .new {
+        background: var(--ink);
+        color: var(--yellow);
+        border-radius: 999px;
+        padding: 0.12rem 0.55rem;
+        font-size: 0.66rem;
+        text-transform: uppercase;
+    }
+
+    h1 {
+        font-size: clamp(2.6rem, 1.2rem + 6.2vw, 5.6rem);
+        font-weight: 540;
+        letter-spacing: -0.035em;
+        line-height: 0.98;
+        max-width: 13ch;
+    }
+
+    .hl {
+        position: relative;
+        white-space: nowrap;
+        background: linear-gradient(transparent 62%, var(--yellow) 62%, var(--yellow) 92%, transparent 92%);
+    }
+
+    .sub {
+        margin-top: 1.4rem;
+        max-width: 54ch;
+        font-size: clamp(1.05rem, 0.95rem + 0.5vw, 1.28rem);
+        color: var(--ink-2);
+        text-wrap: pretty;
+    }
+
+    .actions {
+        margin-top: 2rem;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.8rem;
+    }
+
+    .copy-btn,
+    .btn-plain.copy {
+        text-transform: none;
+        letter-spacing: 0;
+        font-weight: 400;
+        font-size: 0.85rem;
+        cursor: pointer;
+    }
+
+    .dollar {
+        color: var(--ink-3);
+    }
+
+    .copy-label {
+        font-size: 0.66rem;
+        text-transform: uppercase;
+        padding: 0.1rem 0.4rem;
+        background: var(--ink);
+        color: var(--paper);
+        border-radius: 4px;
+    }
+
+    :global(.did) .copy-label {
+        background: var(--ok);
+    }
+
+    /* ---------- demo stage ---------- */
+
+    .stage {
+        position: relative;
+        margin-top: clamp(2.5rem, 5vw, 4rem);
+        height: 390px;
+        z-index: 2;
+    }
+
+    .demo-term {
+        position: absolute;
+        left: var(--gutter);
+        top: 0;
+        width: min(560px, 62%);
+        z-index: 2;
+        transform: rotate(-1deg);
+    }
+
+    .lines {
+        min-height: 232px;
+        padding: 1rem 1.1rem 1.2rem;
+        font-size: 0.84rem;
+        line-height: 1.75;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    .lines :global(.p) {
+        color: #d98a5b;
+    }
+    .lines :global(.g) {
+        color: #7fd19b;
+    }
+    .lines :global(.y) {
+        color: var(--yellow);
+    }
+    .lines :global(.d) {
+        color: var(--term-dim);
+    }
+    .lines :global(u) {
+        color: #9cc6ff;
+        text-underline-offset: 3px;
+    }
+    .lines :global(.caret) {
+        display: inline-block;
+        width: 0.55em;
+        height: 1.05em;
+        vertical-align: -0.15em;
+        background: var(--term-text);
+        animation: caret 1s steps(1) infinite;
+    }
+
+    @keyframes caret {
+        50% {
+            opacity: 0;
+        }
+    }
+
+    .demo-term,
+    .demo-win {
+        transition: translate 0.6s var(--ease-out);
+    }
+
+    .demo-win {
+        position: absolute;
+        right: var(--gutter);
+        top: 60px;
+        width: min(560px, 56%);
+        transform: rotate(1.2deg);
+    }
+
+    .dash {
+        display: grid;
+        grid-template-columns: 132px 1fr;
+        height: 250px;
+    }
+
+    .boxes {
+        list-style: none;
+        margin: 0;
+        padding: 0.45rem 0;
+        border-right: 1px solid var(--line);
+        font-size: 0.72rem;
+    }
+
+    .row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.42rem 0.7rem;
+        color: var(--ink-2);
+    }
+
+    .row em {
+        margin-left: auto;
+        font-style: normal;
+        font-size: 0.6rem;
+        color: var(--ink-3);
+    }
+
+    .row.on {
+        background: #eaf3df;
+        box-shadow: inset 3px 0 0 var(--grass-2);
+        color: var(--ink);
+    }
+
+    .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #c9c2b6;
+        flex: none;
+    }
+
+    .dot.ok {
+        background: var(--ok);
+    }
+
+    .dot.warn {
+        background: #e6a822;
+        animation: caret 0.5s steps(1) infinite;
+    }
+
+    .blink {
+        animation: caret 1.6s steps(1) infinite;
+    }
+
+    .screen {
+        position: relative;
+        margin: 10px;
+        border-radius: 6px;
+        overflow: hidden;
+        background: #20242b;
+    }
+
+    .boot {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        color: #8a93a3;
+        font-size: 0.7rem;
+        transition: opacity 0.3s;
+    }
+
+    .desk {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(160deg, #6fa7c9, #a8d0a0);
+        opacity: 0;
+        transform: scale(1.04);
+        transition:
+            opacity 0.5s,
+            transform 0.6s var(--ease-out);
+    }
+
+    .screen:global(.up) .desk {
+        opacity: 1;
+        transform: none;
+    }
+
+    .screen:global(.up) .boot {
+        opacity: 0;
+    }
+
+    .topbar {
+        display: flex;
+        justify-content: space-between;
+        padding: 3px 8px;
+        background: rgb(20 24 30 / 0.75);
+        color: #dfe6ee;
+        font-size: 0.55rem;
+    }
+
+    .ff {
+        position: absolute;
+        left: 12%;
+        top: 22%;
+        right: 8%;
+        bottom: 10%;
+        background: #fff;
+        border-radius: 4px;
+        box-shadow: 0 8px 20px rgb(0 0 0 / 0.25);
+        overflow: hidden;
+    }
+
+    .ff-bar {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        padding: 5px 6px;
+        background: #ecedf0;
+    }
+
+    .ff-bar > span:first-child {
+        width: 22px;
+        height: 6px;
+        border-radius: 3px;
+        background: #e8762c;
+    }
+
+    .ff-url {
+        flex: 1;
+        height: 14px;
+        border-radius: 7px;
+        background: #fff;
+        font-size: 0.55rem;
+        line-height: 14px;
+        padding-inline: 6px;
+        color: var(--ink);
+    }
+
+    .ff-body {
+        padding: 10px;
+        display: grid;
+        gap: 6px;
+    }
+
+    .ff-body i {
+        height: 7px;
+        border-radius: 2px;
+        background: #e4e6ea;
+    }
+
+    .ff-body i.short {
+        width: 60%;
+    }
+
+    .icon {
+        position: absolute;
+        left: 4%;
+        top: 22%;
+    }
+
+    .cursor {
+        position: absolute;
+        left: 70%;
+        top: 70%;
+        transition:
+            left 0.9s var(--ease-out),
+            top 0.9s var(--ease-out);
+        filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.3));
+    }
+
+    .win-foot {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.5rem 0.85rem;
+        border-top: 1px solid var(--line);
+        font-size: 0.68rem;
+        color: var(--ink-3);
+    }
+
+    .live {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        color: var(--grass-2);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+
+    .ms {
+        color: var(--ink);
+    }
+
+    @media (max-width: 820px) {
+        .stage {
+            height: auto;
+            display: grid;
+            gap: 1rem;
+        }
+        .demo-term,
+        .demo-win {
+            position: relative;
+            left: auto;
+            right: auto;
+            top: auto;
+            width: 100%;
+            transform: none;
+        }
+        .demo-win {
+            margin-top: -1.5rem;
+            margin-left: 8%;
+            width: 92%;
+        }
+        .dash {
+            grid-template-columns: 1fr;
+            height: auto;
+        }
+        .boxes {
+            display: none;
+        }
+        .screen {
+            aspect-ratio: 16 / 9;
+        }
+        .lines {
+            min-height: 0;
+            height: 205px;
+            font-size: 0.76rem;
+        }
+    }
+</style>

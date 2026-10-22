@@ -1,0 +1,495 @@
+---
+// The hero panorama: five fenced enclosures, one per sandbox kind, animals wandering inside.
+import Sprite from "./Sprite.astro";
+import type { SpriteName } from "./sprites";
+
+type Pen = {
+    kind: string;
+    os: string;
+    animal: SpriteName;
+    px: number;
+    sw: string; // sprite width, used to clamp the wander range
+    floor: string;
+    dur: string;
+    left?: boolean; // sprite faces left by default
+    deco?: SpriteName;
+};
+
+const pens: Pen[] = [
+    { kind: "desktop", os: "linux", animal: "penguin", px: 5, sw: "50px", floor: "#eef5f9", dur: "11s" },
+    { kind: "browser", os: "linux", animal: "fox", px: 5, sw: "80px", floor: "#b7d99a", dur: "9s", deco: "bush" },
+    { kind: "code", os: "linux", animal: "snake", px: 5, sw: "90px", floor: "#9fcc83", dur: "14s", deco: "tree" },
+    { kind: "macos", os: "apple silicon", animal: "giraffe", px: 5, sw: "80px", floor: "#ecdb9f", dur: "16s" },
+    { kind: "windows", os: "hyper-v", animal: "elephant", px: 5, sw: "95px", floor: "#dccdaa", dur: "18s", left: true },
+];
+---
+
+<div class="park" aria-label="A pixel zoo: one enclosure per sandbox kind" role="img" data-park>
+    <div class="clouds" aria-hidden="true">
+        <span class="cloud c1"><Sprite name="cloud" px={5} /></span>
+        <span class="cloud c2"><Sprite name="cloud" px={3} /></span>
+        <span class="cloud c3"><Sprite name="cloud" px={4} /></span>
+        <span class="cloud c4"><Sprite name="cloud" px={3} /></span>
+    </div>
+
+    <svg class="hills" viewBox="0 0 1200 120" preserveAspectRatio="none" aria-hidden="true">
+        <path
+            fill="#b4d79b"
+            d="M0 70h60v-8h60v-10h80v-8h70v8h80v12h90v-14h60v-10h90v10h70v14h90v-6h80v-10h90v10h70v8h60v-6h100V120H0Z"
+        ></path>
+        <path
+            fill="#9ccb80"
+            d="M0 92h90v-8h110v-6h70v8h120v-10h80v10h90v6h130v-8h100v-6h90v10h100v-4h100v8h120V120H0Z"
+        ></path>
+    </svg>
+
+    <div class="pens" data-pens>
+        {
+            pens.map((p, i) => (
+                <div class="pen" style={`--floor:${p.floor}`}>
+                    <div class="floor" />
+                    <div class="fence back" aria-hidden="true" />
+                    {p.deco && (
+                        <span class={`deco deco-${p.deco}`} aria-hidden="true">
+                            <Sprite name={p.deco} px={4} />
+                        </span>
+                    )}
+                    <button
+                        class="walker"
+                        type="button"
+                        data-left={p.left ? "" : undefined}
+                        style={`--sw:${p.sw}; --dur:${p.dur}; --delay:${-i * 2.3}s`}
+                        aria-label={`Poke the ${p.animal} in the ${p.kind} sandbox`}
+                        data-walker
+                    >
+                        <span class="bubble mono" data-bubble />
+                        <span class="face">
+                            <span class="bob">
+                                <Sprite name={p.animal} px={p.px} />
+                            </span>
+                        </span>
+                        <span class="shadow" />
+                    </button>
+                    <div class="fence front" aria-hidden="true" />
+                    <div class="sign pixel" aria-hidden="true">
+                        <b>{p.kind}</b>
+                        <small>{p.os}</small>
+                    </div>
+                </div>
+            ))
+        }
+    </div>
+
+    <div class="path" aria-hidden="true">
+        <span class="keeper">
+            <span class="face">
+                <span class="bob"><Sprite name="keeper" px={3} /></span>
+            </span>
+        </span>
+        <span class="flamingos">
+            <Sprite name="flamingo" px={3} />
+            <Sprite name="flamingo" px={3} />
+        </span>
+    </div>
+</div>
+
+<script>
+    const calls = [
+        "click(640, 360)",
+        "type_text('hello')",
+        "screenshot() → png",
+        "exec('ls ~') · 14ms",
+        "open_app('firefox-esr')",
+        "scroll(down, 3)",
+        "key('ctrl+l')",
+        "read_file('notes.md')",
+        "mouse_move(512, 88)",
+        "exec('pytest -q') ✓",
+    ];
+    const walkers = [...document.querySelectorAll<HTMLButtonElement>("[data-walker]")];
+    const say = (w: HTMLElement) => {
+        const b = w.querySelector<HTMLElement>("[data-bubble]")!;
+        b.textContent = calls[Math.floor(Math.random() * calls.length)];
+        w.classList.remove("talk");
+        void w.offsetWidth;
+        w.classList.add("talk");
+        clearTimeout(Number(w.dataset.t));
+        w.dataset.t = String(setTimeout(() => w.classList.remove("talk"), 2200));
+    };
+    for (const w of walkers) {
+        w.addEventListener("click", () => {
+            w.classList.remove("hop");
+            void w.offsetWidth;
+            w.classList.add("hop");
+            say(w);
+        });
+    }
+    // the park chatters on its own while it is on screen
+    let timer: number | undefined;
+    const park = document.querySelector("[data-park]")!;
+    new IntersectionObserver(([e]) => {
+        clearInterval(timer);
+        if (e.isIntersecting && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+            timer = window.setInterval(() => say(walkers[Math.floor(Math.random() * walkers.length)]), 2600);
+        }
+    }).observe(park);
+</script>
+
+<style>
+    .park {
+        position: relative;
+        height: 380px;
+        margin-top: -3rem;
+        overflow: hidden;
+        isolation: isolate;
+    }
+
+    /* clouds drift across */
+    .clouds {
+        position: absolute;
+        inset: 0 0 auto;
+        height: 120px;
+        z-index: -1;
+    }
+
+    .cloud {
+        position: absolute;
+        animation: drift linear infinite;
+        opacity: 0.95;
+    }
+
+    .c1 {
+        top: 6px;
+        animation-duration: 90s;
+        animation-delay: -20s;
+    }
+    .c2 {
+        top: 46px;
+        animation-duration: 70s;
+        animation-delay: -50s;
+    }
+    .c3 {
+        top: 20px;
+        animation-duration: 110s;
+        animation-delay: -80s;
+    }
+    .c4 {
+        top: 60px;
+        animation-duration: 80s;
+        animation-delay: -5s;
+    }
+
+    @keyframes drift {
+        from {
+            transform: translateX(-120px);
+        }
+        to {
+            transform: translateX(calc(100vw + 40px));
+        }
+    }
+
+    .hills {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 190px;
+        width: 100%;
+        height: 120px;
+        z-index: -1;
+    }
+
+    /* ---------- enclosures ---------- */
+
+    .pens {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 54px;
+        height: 190px;
+        display: grid;
+        grid-template-columns: repeat(5, minmax(200px, 1fr));
+        gap: 14px;
+        padding-inline: max(var(--gutter), calc((100vw - 1400px) / 2));
+        background: #9ccb80;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    .pens::-webkit-scrollbar {
+        display: none;
+    }
+
+    .pen {
+        position: relative;
+        min-width: 0;
+    }
+
+    .floor {
+        position: absolute;
+        inset: 22px 0 6px;
+        background: var(--floor);
+        box-shadow:
+            inset 0 4px 0 rgb(0 0 0 / 0.06),
+            inset 0 -4px 0 rgb(255 255 255 / 0.25);
+    }
+
+    .fence {
+        position: absolute;
+        left: 0;
+        right: 0;
+        pointer-events: none;
+    }
+
+    /* pixel picket fence: posts + two rails */
+    .fence.back {
+        top: 6px;
+        height: 22px;
+        opacity: 0.55;
+        background:
+            linear-gradient(#8a5f3a, #8a5f3a) 0 6px / 100% 3px no-repeat,
+            linear-gradient(#8a5f3a, #8a5f3a) 0 14px / 100% 3px no-repeat,
+            repeating-linear-gradient(to right, #9a6b42 0 4px, transparent 4px 22px);
+    }
+
+    .fence.front {
+        bottom: 0;
+        height: 30px;
+        z-index: 3;
+        background:
+            linear-gradient(#7a5132, #7a5132) 0 8px / 100% 4px no-repeat,
+            linear-gradient(#7a5132, #7a5132) 0 20px / 100% 4px no-repeat,
+            repeating-linear-gradient(to right, #a8764a 0 6px, #7a5132 6px 8px, transparent 8px 26px);
+        -webkit-mask: linear-gradient(#000, #000);
+    }
+
+    .fence.front::before {
+        /* pointy post tops */
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: -4px;
+        height: 4px;
+        background: repeating-linear-gradient(to right, transparent 0 2px, #a8764a 2px 4px, transparent 4px 26px);
+    }
+
+    .deco {
+        position: absolute;
+        bottom: 16px;
+        right: 10%;
+        z-index: 1;
+    }
+
+    .deco-tree {
+        right: 6%;
+        bottom: 14px;
+    }
+
+    /* ---------- walkers ---------- */
+
+    .walker {
+        position: absolute;
+        bottom: 14px;
+        left: 8%;
+        z-index: 2;
+        padding: 0;
+        border: 0;
+        background: none;
+        cursor: pointer;
+        animation: wander var(--dur) linear infinite;
+        animation-delay: var(--delay);
+    }
+
+    .walker .face {
+        display: block;
+        animation: flip var(--dur) steps(1) infinite;
+        animation-delay: var(--delay);
+    }
+
+    .walker[data-left] .face {
+        animation-name: flip-rev;
+    }
+
+    .walker:hover,
+    .walker:hover .face {
+        animation-play-state: paused;
+    }
+
+    .walker .shadow {
+        position: absolute;
+        left: 10%;
+        right: 10%;
+        bottom: -3px;
+        height: 4px;
+        background: rgb(0 0 0 / 0.12);
+        z-index: -1;
+    }
+
+    .walker.hop .face .bob {
+        animation: hop 0.5s var(--ease-out);
+    }
+
+    @keyframes hop {
+        0%,
+        100% {
+            transform: translateY(0);
+        }
+        40% {
+            transform: translateY(-22px);
+        }
+    }
+
+    @keyframes wander {
+        0% {
+            left: 8%;
+        }
+        50% {
+            left: calc(92% - var(--sw));
+        }
+        100% {
+            left: 8%;
+        }
+    }
+
+    @keyframes flip {
+        0% {
+            transform: scaleX(1);
+        }
+        50% {
+            transform: scaleX(-1);
+        }
+    }
+
+    @keyframes flip-rev {
+        0% {
+            transform: scaleX(-1);
+        }
+        50% {
+            transform: scaleX(1);
+        }
+    }
+
+    .bubble {
+        position: absolute;
+        bottom: calc(100% + 10px);
+        left: 50%;
+        translate: -50% 0;
+        white-space: nowrap;
+        font-size: 0.7rem;
+        padding: 0.3rem 0.55rem;
+        background: var(--paper);
+        color: var(--ink);
+        border: 2px solid var(--ink);
+        box-shadow: 2px 2px 0 var(--ink);
+        opacity: 0;
+        transform: translateY(6px) scale(0.9);
+        transition:
+            opacity 0.2s,
+            transform 0.25s var(--ease-spring);
+        pointer-events: none;
+    }
+
+    .bubble::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        width: 8px;
+        height: 8px;
+        background: var(--paper);
+        border-right: 2px solid var(--ink);
+        border-bottom: 2px solid var(--ink);
+        transform: translate(-50%, -3px) rotate(45deg);
+    }
+
+    .walker.talk .bubble {
+        opacity: 1;
+        transform: none;
+    }
+
+    /* ---------- signs ---------- */
+
+    .sign {
+        position: absolute;
+        left: 10px;
+        bottom: 20px;
+        z-index: 4;
+        display: flex;
+        flex-direction: column;
+        line-height: 1;
+        padding: 0.35rem 0.5rem 0.3rem;
+        background: #f3e3bf;
+        border: 2px solid #6b4a2c;
+        box-shadow: 2px 2px 0 rgb(107 74 44 / 0.5);
+        color: #4a321c;
+        text-transform: uppercase;
+    }
+
+    .sign b {
+        font-size: 0.72rem;
+        font-weight: 400;
+    }
+
+    .sign small {
+        font-size: 0.52rem;
+        margin-top: 0.15rem;
+        opacity: 0.75;
+    }
+
+    /* ---------- path + keeper ---------- */
+
+    .path {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 54px;
+        background:
+            repeating-linear-gradient(to right, rgb(0 0 0 / 0.05) 0 6px, transparent 6px 30px) 0 22px / 100% 3px
+                no-repeat,
+            linear-gradient(#e1c58f, var(--dirt));
+        border-top: 4px solid #7cb85a;
+    }
+
+    .keeper {
+        position: absolute;
+        bottom: 10px;
+        left: 0;
+        animation: patrol 46s linear infinite;
+    }
+
+    .keeper .face {
+        display: block;
+        animation: flip 46s steps(1) infinite;
+    }
+
+    @keyframes patrol {
+        0% {
+            left: -60px;
+        }
+        50% {
+            left: calc(100% + 10px);
+        }
+        100% {
+            left: -60px;
+        }
+    }
+
+    .flamingos {
+        position: absolute;
+        right: 4%;
+        bottom: 14px;
+        display: flex;
+        gap: 8px;
+    }
+
+    .flamingos :global(.sprite:last-child) {
+        transform: scaleX(-1);
+    }
+
+    @media (max-width: 700px) {
+        .park {
+            height: 340px;
+        }
+    }
+</style>
