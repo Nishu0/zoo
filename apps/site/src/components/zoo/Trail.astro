@@ -1,0 +1,227 @@
+---
+const installCmd =
+    "curl -fsSL https://github.com/chann44/zoo/releases/latest/download/install.sh | sudo bash -s -- --admin-email you@example.com";
+const winCmd =
+    "powershell -ExecutionPolicy Bypass -c \"& ([scriptblock]::Create((irm https://github.com/chann44/zoo/releases/latest/download/install.ps1))) -AdminEmail 'you@example.com'\"";
+
+const steps = [
+    {
+        n: "1",
+        title: "It builds the park",
+        body: "The script checks for KVM, configures Docker with Kata VMs, generates fresh secrets and installs the pinned stack.",
+    },
+    {
+        n: "2",
+        title: "Open the gates",
+        body: "Open the dashboard URL the installer prints, sign in, create a sandbox and grab an API key from your profile.",
+    },
+    {
+        n: "3",
+        title: "Let the agents in",
+        body: "MCP, REST or the SDK. From there an agent can create, drive and tear down its own sandboxes.",
+    },
+];
+---
+
+<section class="zsection" id="deploy">
+    <div class="container">
+        <header class="zhead" data-reveal>
+            <span class="kicker">🎟 ticket booth</span>
+            <h2>One command builds the whole park</h2>
+            <p>
+                Debian, Ubuntu, macOS or Windows. Mac and Windows need Docker Desktop running. Add more hosts later under
+                Remote Servers.
+            </p>
+        </header>
+
+        <div class="booth" data-reveal data-booth>
+            <div class="booth-tabs" role="tablist" aria-label="Platform">
+                <button type="button" role="tab" aria-selected="true" data-os="unix">Linux / macOS</button>
+                <button type="button" role="tab" aria-selected="false" data-os="win">Windows</button>
+            </div>
+            <div class="term">
+                <div class="cmd" data-cmd="unix">
+                    <pre><code><span class="d">$</span> {installCmd}</code></pre>
+                    <button class="copy" type="button" data-copy={installCmd}><span class="copy-label">copy</span></button>
+                </div>
+                <div class="cmd" data-cmd="win" hidden>
+                    <pre><code><span class="d">PS&gt;</span> {winCmd}</code></pre>
+                    <button class="copy" type="button" data-copy={winCmd}><span class="copy-label">copy</span></button>
+                </div>
+            </div>
+        </div>
+
+        <ol class="trail" role="list">
+            {
+                steps.map((s, i) => (
+                    <li data-reveal style={`--d:${0.08 + i * 0.08}s`}>
+                        <span class="marker pixel">{s.n}</span>
+                        <h3>{s.title}</h3>
+                        <p>{s.body}</p>
+                    </li>
+                ))
+            }
+        </ol>
+
+        <p class="scale" data-reveal>
+            Outgrow one machine? Opt into <b>Kubernetes</b> for Linux sandboxes, and enroll <b>Mac</b> and
+            <b>Windows</b> hosts for native guests. It's all managed from one dashboard.
+        </p>
+    </div>
+</section>
+
+<script>
+    const booth = document.querySelector<HTMLElement>("[data-booth]")!;
+    const tabs = [...booth.querySelectorAll<HTMLButtonElement>("[data-os]")];
+    tabs.forEach((t) =>
+        t.addEventListener("click", () => {
+            tabs.forEach((x) => x.setAttribute("aria-selected", String(x === t)));
+            booth.querySelectorAll<HTMLElement>("[data-cmd]").forEach((c) => (c.hidden = c.dataset.cmd !== t.dataset.os));
+        }),
+    );
+</script>
+
+<style>
+    .booth {
+        max-width: 880px;
+        margin-inline: auto;
+    }
+
+    .booth-tabs {
+        display: flex;
+        gap: 0.4rem;
+        margin-bottom: -2px;
+        padding-left: 0.8rem;
+    }
+
+    .booth-tabs button {
+        font: inherit;
+        font-size: 0.85rem;
+        padding: 0.45rem 0.9rem;
+        border: 2px solid var(--ink);
+        border-bottom: 0;
+        border-radius: 8px 8px 0 0;
+        background: var(--paper-2);
+        color: var(--ink-2);
+        cursor: pointer;
+    }
+
+    .booth-tabs button[aria-selected="true"] {
+        background: var(--term);
+        color: var(--term-text);
+    }
+
+    .booth .term {
+        border: 2px solid var(--ink);
+        box-shadow: 6px 6px 0 var(--ink);
+    }
+
+    .cmd {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        padding: 1.1rem 1.2rem;
+    }
+
+    .cmd[hidden] {
+        display: none;
+    }
+
+    .cmd pre {
+        flex: 1;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font-size: 0.86rem;
+        line-height: 1.7;
+    }
+
+    .d {
+        color: var(--yellow);
+    }
+
+    .copy {
+        flex: none;
+        font-family: var(--font-pixel);
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        padding: 0.35rem 0.7rem;
+        background: var(--yellow);
+        color: var(--ink);
+        border: 0;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    .copy:global(.did) {
+        background: #7fd19b;
+    }
+
+    .trail {
+        list-style: none;
+        margin: clamp(3rem, 6vw, 4.5rem) 0 0;
+        padding: 0;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2rem;
+        position: relative;
+    }
+
+    /* dotted footpath linking the markers */
+    .trail::before {
+        content: "";
+        position: absolute;
+        top: 22px;
+        left: 8%;
+        right: 8%;
+        height: 6px;
+        background: repeating-linear-gradient(to right, var(--dirt) 0 14px, transparent 14px 24px);
+        z-index: -1;
+    }
+
+    .trail li {
+        text-align: center;
+    }
+
+    .marker {
+        display: inline-grid;
+        place-items: center;
+        width: 50px;
+        height: 50px;
+        background: var(--yellow);
+        border: 2px solid var(--ink);
+        box-shadow: 3px 3px 0 var(--ink);
+        font-size: 1.3rem;
+        margin-bottom: 1rem;
+    }
+
+    .trail h3 {
+        font-size: 1.25rem;
+        margin-bottom: 0.4rem;
+    }
+
+    .trail p {
+        color: var(--ink-2);
+        max-width: 34ch;
+        margin-inline: auto;
+    }
+
+    .scale {
+        margin: 3rem auto 0;
+        max-width: 640px;
+        text-align: center;
+        color: var(--ink-2);
+    }
+
+    .scale b {
+        color: var(--ink);
+    }
+
+    @media (max-width: 760px) {
+        .trail {
+            grid-template-columns: 1fr;
+        }
+        .trail::before {
+            display: none;
+        }
+    }
+</style>

@@ -1,0 +1,411 @@
+---
+import Sprite from "./Sprite.astro";
+
+// deterministic "random" so the sky is the same on every build
+let seed = 7;
+const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+const stars = Array.from({ length: 46 }, () => ({
+    x: rnd() * 100,
+    y: rnd() * 55,
+    d: rnd() * 4,
+    s: rnd() > 0.8 ? 3 : 2,
+}));
+const flies = Array.from({ length: 14 }, () => ({ x: rnd() * 100, y: 55 + rnd() * 35, d: rnd() * 6 }));
+
+const gh = "https://github.com/chann44/zoo";
+const cols = [
+    {
+        title: "Docs",
+        links: [
+            { label: "Quickstart", href: "/docs/get-started/quickstart/" },
+            { label: "Install", href: "/docs/get-started/install/" },
+            { label: "First sandbox", href: "/docs/get-started/first-sandbox/" },
+            { label: "Connect agents (MCP)", href: "/docs/get-started/mcp/" },
+            { label: "Policies", href: "/docs/guides/policies/" },
+        ],
+    },
+    {
+        title: "Reference",
+        links: [
+            { label: "REST API", href: "/docs/reference/api/" },
+            { label: "Tools", href: "/docs/reference/tools/" },
+            { label: "SDK", href: "/docs/reference/sdk/" },
+            { label: "CLI", href: "/docs/reference/cli/" },
+            { label: "Performance", href: "/docs/reference/performance/" },
+        ],
+    },
+    {
+        title: "Project",
+        links: [
+            { label: "GitHub", href: gh },
+            { label: "Releases", href: `${gh}/releases/latest` },
+            { label: "Issues", href: `${gh}/issues` },
+            { label: "Security policy", href: `${gh}/blob/main/SECURITY.md` },
+            { label: "Compare sandboxes", href: "/compare" },
+        ],
+    },
+];
+---
+
+<section class="night" aria-labelledby="night-h">
+    <div class="sky" aria-hidden="true">
+        {
+            stars.map((s) => (
+                <span
+                    class="star"
+                    style={`left:${s.x}%; top:${s.y}%; width:${s.s}px; height:${s.s}px; animation-delay:${s.d}s`}
+                />
+            ))
+        }
+        <span class="moon"><Sprite name="moon" px={6} /></span>
+        {flies.map((f) => <span class="fly" style={`left:${f.x}%; top:${f.y}%; animation-delay:-${f.d}s`} />)}
+    </div>
+
+    <div class="container cta">
+        <p class="pixel open-late" data-reveal>open 24/7 · self-hosted</p>
+        <h2 id="night-h" data-reveal style="--d:.05s">The park never closes</h2>
+        <p class="sub" data-reveal style="--d:.1s">
+            Your agents keep working through the night. You keep the keys. Install Zoo on your own hardware in one
+            command.
+        </p>
+        <div class="actions" data-reveal style="--d:.15s">
+            <a class="btn-yellow" href="/docs/get-started/quickstart/">Open the gates <span aria-hidden="true">→</span></a>
+            <a class="btn-ghost" href={gh} target="_blank" rel="noreferrer">★ Star on GitHub</a>
+        </div>
+    </div>
+
+    <div class="sleepers" aria-hidden="true">
+        <span class="sleeper s1"><Sprite name="penguin" px={4} /><i class="pixel">z</i><i class="pixel">z</i><i class="pixel">z</i></span>
+        <span class="sleeper s2"><Sprite name="fox" px={4} /><i class="pixel">z</i><i class="pixel">z</i></span>
+        <span class="sleeper s3"><Sprite name="elephant" px={4} /><i class="pixel">z</i><i class="pixel">z</i><i class="pixel">z</i></span>
+        <span class="sleeper s4"><Sprite name="keeper" px={3} /></span>
+        <div class="night-fence"></div>
+    </div>
+
+    <footer class="foot">
+        <div class="container foot-grid">
+            <div class="foot-brand">
+                <a href="#top" class="brand"><Sprite name="keeper" px={2} /> <span>zoo</span></a>
+                <p>Self-hosted sandboxes for AI agents. Open source.</p>
+            </div>
+            {
+                cols.map((c) => (
+                    <nav aria-label={c.title}>
+                        <p class="pixel col-h">{c.title}</p>
+                        <ul role="list">
+                            {c.links.map((l) => (
+                                <li>
+                                    <a href={l.href}>{l.label}</a>
+                                </li>
+                            ))}
+                        </ul>
+                    </nav>
+                ))
+            }
+        </div>
+        <div class="container legal mono">
+            <span>© {new Date().getFullYear()} zoo · please don't tap on the glass</span>
+            <a href="#top">back to the gate ↑</a>
+        </div>
+    </footer>
+</section>
+
+<style>
+    .night {
+        position: relative;
+        margin-top: clamp(3rem, 6vw, 5rem);
+        padding-top: clamp(7rem, 14vw, 11rem);
+        background: linear-gradient(
+            to bottom,
+            transparent 0,
+            #f2c68f 7%,
+            #c97f7a 14%,
+            #4b4a7a 26%,
+            var(--night-2) 36%,
+            var(--night) 60%
+        );
+        color: #eef0fa;
+        overflow: hidden;
+        isolation: isolate;
+    }
+
+    .sky {
+        position: absolute;
+        inset: 18% 0 0;
+        z-index: -1;
+        pointer-events: none;
+    }
+
+    .star {
+        position: absolute;
+        background: #fff3c4;
+        animation: twinkle 3.5s steps(2) infinite;
+    }
+
+    @keyframes twinkle {
+        50% {
+            opacity: 0.25;
+        }
+    }
+
+    .moon {
+        position: absolute;
+        right: 12%;
+        top: 4%;
+        filter: drop-shadow(0 0 18px rgb(255 240 190 / 0.5));
+    }
+
+    .fly {
+        position: absolute;
+        width: 4px;
+        height: 4px;
+        background: #e9ff8a;
+        box-shadow: 0 0 10px 3px rgb(233 255 138 / 0.55);
+        animation: fly 7s ease-in-out infinite;
+    }
+
+    @keyframes fly {
+        0%,
+        100% {
+            transform: translate(0, 0);
+            opacity: 0.2;
+        }
+        25% {
+            transform: translate(18px, -14px);
+            opacity: 1;
+        }
+        50% {
+            transform: translate(-6px, -26px);
+            opacity: 0.5;
+        }
+        75% {
+            transform: translate(-20px, -8px);
+            opacity: 1;
+        }
+    }
+
+    .cta {
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding-top: clamp(3rem, 8vw, 6rem);
+    }
+
+    .open-late {
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        color: var(--yellow);
+        border: 2px solid var(--yellow);
+        padding: 0.3rem 0.7rem;
+        margin-bottom: 1.4rem;
+    }
+
+    h2 {
+        font-size: clamp(2.6rem, 1.2rem + 5.6vw, 5.2rem);
+        letter-spacing: -0.035em;
+        line-height: 0.98;
+        color: #fff;
+    }
+
+    .sub {
+        margin-top: 1.2rem;
+        max-width: 50ch;
+        color: #c3c8e2;
+        font-size: 1.12rem;
+    }
+
+    .actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.8rem;
+        margin-top: 2rem;
+    }
+
+    .btn-ghost {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.8rem 1.2rem 0.75rem;
+        border-radius: 9px;
+        border: 1.5px solid rgb(255 255 255 / 0.35);
+        color: #fff;
+        font-size: 0.82rem;
+        font-weight: 650;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        text-decoration: none;
+        transition: background 0.2s, border-color 0.2s;
+    }
+
+    .btn-ghost:hover {
+        background: rgb(255 255 255 / 0.08);
+        border-color: #fff;
+    }
+
+    /* ---------- sleeping animals ---------- */
+
+    .sleepers {
+        position: relative;
+        height: 150px;
+        margin-top: clamp(3rem, 7vw, 5rem);
+    }
+
+    .sleeper {
+        position: absolute;
+        bottom: 26px;
+        filter: brightness(0.55) saturate(0.7);
+    }
+
+    .s1 {
+        left: 12%;
+    }
+    .s2 {
+        left: 34%;
+    }
+    .s3 {
+        right: 14%;
+    }
+    .s4 {
+        right: 40%;
+        filter: brightness(0.7);
+    }
+
+    .sleeper i {
+        position: absolute;
+        top: -6px;
+        right: -10px;
+        font-style: normal;
+        color: #c3c8e2;
+        font-size: 0.9rem;
+        opacity: 0;
+        animation: zzz 3s ease-out infinite;
+    }
+
+    .sleeper i:nth-of-type(2) {
+        animation-delay: 1s;
+    }
+    .sleeper i:nth-of-type(3) {
+        animation-delay: 2s;
+    }
+
+    @keyframes zzz {
+        0% {
+            opacity: 0;
+            transform: translate(0, 0) scale(0.7);
+        }
+        30% {
+            opacity: 1;
+        }
+        100% {
+            opacity: 0;
+            transform: translate(14px, -34px) scale(1.2);
+        }
+    }
+
+    .night-fence {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 40px;
+        background:
+            linear-gradient(#2a3150, #2a3150) 0 10px / 100% 4px no-repeat,
+            linear-gradient(#2a3150, #2a3150) 0 22px / 100% 4px no-repeat,
+            repeating-linear-gradient(to right, #343c5e 0 6px, transparent 6px 26px) 0 0 / 100% 32px no-repeat,
+            linear-gradient(#232a46, #232a46) 0 32px / 100% 8px no-repeat;
+    }
+
+    /* ---------- footer ---------- */
+
+    .foot {
+        background: #0d1328;
+        padding-top: 3rem;
+    }
+
+    .foot-grid {
+        display: grid;
+        grid-template-columns: 1.4fr repeat(3, 1fr);
+        gap: 2rem;
+    }
+
+    .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 1.3rem;
+        font-weight: 700;
+        text-decoration: none;
+        color: #fff;
+    }
+
+    .brand :global(.sprite) {
+        filter: invert(1) hue-rotate(180deg);
+    }
+
+    .foot-brand p {
+        margin-top: 0.7rem;
+        color: #8e95b8;
+        font-size: 0.92rem;
+        max-width: 30ch;
+    }
+
+    .col-h {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        color: var(--yellow);
+        margin-bottom: 0.8rem;
+    }
+
+    .foot ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 0.45rem;
+    }
+
+    .foot a {
+        color: #c3c8e2;
+        text-decoration: none;
+        font-size: 0.92rem;
+    }
+
+    .foot a:hover {
+        color: #fff;
+    }
+
+    .legal {
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-top: 3rem;
+        padding-block: 1.4rem 2rem;
+        border-top: 1px solid rgb(255 255 255 / 0.08);
+        font-size: 0.72rem;
+        color: #6f77a0;
+    }
+
+    .legal a {
+        font-size: 0.72rem;
+    }
+
+    @media (max-width: 820px) {
+        .moon {
+            top: -6%;
+            right: 6%;
+            scale: 0.6;
+        }
+        .foot-grid {
+            grid-template-columns: 1fr 1fr;
+        }
+        .foot-brand {
+            grid-column: 1 / -1;
+        }
+        .s2,
+        .s4 {
+            display: none;
+        }
+    }
+</style>

@@ -1,0 +1,126 @@
+---
+const faqs = [
+    {
+        q: "What is Zoo, exactly?",
+        a: "A self-hosted service that gives AI agents disposable computers: Linux, macOS and Windows desktops, browsers and code shells, each in its own microVM with its own kernel. Agents drive them over MCP, REST or an SDK; you watch and take over from the dashboard.",
+    },
+    {
+        q: "What do I need to run it?",
+        a: "A Debian or Ubuntu server with KVM (bare metal, or a cloud VM with nested virtualization), or macOS / Windows with Docker Desktop running. macOS sandboxes need Apple Silicon; Windows sandboxes need Hyper-V.",
+    },
+    {
+        q: "How do agents connect?",
+        a: "One MCP server at /mcp/ with an API key, plain REST endpoints, or the Python and TypeScript SDKs. Every tool is registered once and exposed identically over all of them, so switching is cheap.",
+    },
+    {
+        q: "Can I watch what agents are doing?",
+        a: "Yes. Live view streams a sandbox's screen in the browser with mouse and keyboard control, and tool calls land in the activity log.",
+    },
+    {
+        q: "Where does my data live?",
+        a: "On your servers. Sandboxes, dashboard, database and secrets all run on your hardware. Secrets are encrypted at rest, with optional AWS, Google Cloud or Vault KMS.",
+    },
+    {
+        q: "Does it work with Claude Code?",
+        a: "Code sandboxes ship with Claude Code installed. Supply your own credentials as an encrypted secret and run it through the sandbox's shell tools. Zoo does not supply a model or a planner.",
+    },
+    {
+        q: "Can it run on more than one server?",
+        a: "Yes. Kubernetes distributes Linux sandboxes across nodes, and Mac and Windows hosts join as remote servers for native guests.",
+    },
+];
+---
+
+<section class="zsection" id="faq">
+    <div class="container narrow">
+        <header class="zhead" data-reveal>
+            <span class="kicker">ⓘ visitor information</span>
+            <h2>Questions, answered plainly</h2>
+        </header>
+
+        <div class="faq" data-reveal>
+            {
+                faqs.map((f, i) => (
+                    <details open={i === 0}>
+                        <summary>
+                            <span>{f.q}</span>
+                            <span class="plus pixel" aria-hidden="true"></span>
+                        </summary>
+                        <p>{f.a}</p>
+                    </details>
+                ))
+            }
+        </div>
+    </div>
+</section>
+
+<style>
+    .narrow {
+        max-width: 820px;
+    }
+
+    .faq {
+        display: grid;
+        gap: 0.7rem;
+    }
+
+    details {
+        background: var(--paper);
+        border: 2px solid var(--ink);
+        border-radius: 12px;
+        transition: box-shadow 0.2s, transform 0.2s;
+    }
+
+    details[open] {
+        box-shadow: 4px 4px 0 var(--ink);
+        transform: translate(-2px, -2px);
+    }
+
+    summary {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem 1.2rem;
+        cursor: pointer;
+        list-style: none;
+        font-size: 1.08rem;
+        font-weight: 560;
+    }
+
+    summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .plus {
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        flex: none;
+        background: var(--yellow);
+        border: 2px solid var(--ink);
+        font-size: 1rem;
+        line-height: 1;
+        transition: background 0.2s, color 0.2s;
+    }
+
+    .plus::before {
+        content: "+";
+    }
+
+    details[open] .plus::before {
+        content: "−";
+    }
+
+    details[open] .plus {
+        background: var(--ink);
+        color: var(--yellow);
+    }
+
+    details p {
+        padding: 0 1.2rem 1.15rem;
+        color: var(--ink-2);
+        max-width: 66ch;
+    }
+</style>
