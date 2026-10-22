@@ -132,7 +132,7 @@ if (-not $AdminEmail -or $NoNode) {
 }
 
 # join this machine for Windows sandboxes, as Servers > Add server > Windows would (server/bootstrap.py)
-$output = docker @compose exec -T api uv run --no-sync python -m server.bootstrap --email ($AdminEmail.Split(',')[0].Trim()) --name $env:COMPUTERNAME
+$output = docker @compose exec -T api uv run --no-sync python -m apps.server.bootstrap --email ($AdminEmail.Split(',')[0].Trim()) --name $env:COMPUTERNAME
 if ($LASTEXITCODE -ne 0) { throw "couldn't get a join token from Zoo; add this machine from Servers > Add server > Windows" }
 $joined = @($output)[-1] | ConvertFrom-Json
 if ($joined.password) { Say "Admin account: $AdminEmail with password $($joined.password) (shown once; change it after signing in)" }

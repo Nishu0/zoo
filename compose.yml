@@ -10,6 +10,8 @@ x-zoo: &zoo
       condition: service_completed_successfully
     code-image:
       condition: service_completed_successfully
+    code-slim-image:
+      condition: service_completed_successfully
     egress:
       condition: service_started
     postgres:

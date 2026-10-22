@@ -978,7 +978,7 @@ install_desktop() {
     fi
     # join this Mac for macOS sandboxes, as Servers > Add server > Mac would (apps/server/bootstrap.py)
     local joined
-    joined=$(as_user "${compose[@]}" exec -T api uv run --no-sync python -m server.bootstrap \
+    joined=$(as_user "${compose[@]}" exec -T api uv run --no-sync python -m apps.server.bootstrap \
         --email "${ADMIN_EMAILS%%,*}" --name "$(scutil --get ComputerName 2>/dev/null || hostname -s)") \
         || die "couldn't get a join token from Zoo; add this Mac from Servers > Add server > Mac"
     # the JSON is its last line; anything logged before it is skipped
