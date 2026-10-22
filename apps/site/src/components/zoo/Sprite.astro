@@ -1,0 +1,47 @@
+---
+import { sprites, type SpriteName } from "./sprites";
+
+interface Props {
+    name: SpriteName;
+    /** size of one pixel, in px */
+    px?: number;
+    class?: string;
+    label?: string;
+}
+
+const { name, px = 4, class: cls, label } = Astro.props;
+const sprite = sprites[name];
+const width = Math.max(...sprite.rows.map((r) => r.length));
+const height = sprite.rows.length;
+
+// merge horizontal runs of the same colour into one rect — fewer nodes, no seams
+const rects: { x: number; y: number; w: number; fill: string }[] = [];
+sprite.rows.forEach((row, y) => {
+    let x = 0;
+    while (x < row.length) {
+        const ch = row[x];
+        const fill = (sprite.palette as Record<string, string>)[ch];
+        if (!fill) {
+            x++;
+            continue;
+        }
+        let w = 1;
+        while (row[x + w] === ch) w++;
+        rects.push({ x, y, w, fill });
+        x += w;
+    }
+});
+---
+
+<svg
+    class:list={["sprite", cls]}
+    viewBox={`0 0 ${width} ${height}`}
+    width={width * px}
+    height={height * px}
+    shape-rendering="crispEdges"
+    role={label ? "img" : undefined}
+    aria-label={label}
+    aria-hidden={label ? undefined : "true"}
+>
+    {rects.map((r) => <rect x={r.x} y={r.y} width={r.w} height="1" fill={r.fill} />)}
+</svg>

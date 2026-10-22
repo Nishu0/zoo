@@ -1,0 +1,326 @@
+---
+const tabs = [
+    {
+        id: "mcp",
+        label: "MCP",
+        file: "mcp.json",
+        blurb: "One MCP server exposes every tool, plus list_sandboxes, create_sandbox and get_sandbox. Paste it into Claude, Cursor or your own client.",
+        code: `<span class="c">// any MCP client: Claude, Cursor, your own</span>
+{
+  <span class="k">"mcpServers"</span>: {
+    <span class="k">"zoo"</span>: {
+      <span class="k">"type"</span>: <span class="s">"http"</span>,
+      <span class="k">"url"</span>: <span class="s">"http://localhost:8000/mcp/"</span>,
+      <span class="k">"headers"</span>: {
+        <span class="k">"Authorization"</span>: <span class="s">"Bearer zoo_..."</span>
+      }
+    }
+  }
+}`,
+    },
+    {
+        id: "rest",
+        label: "REST",
+        file: "zsh",
+        blurb: "Every tool is an HTTP endpoint. /screenshot returns PNG bytes, /exec runs a shell command, and /exec/batch runs up to 25 in one round trip.",
+        code: `<span class="c"># every tool is an HTTP endpoint</span>
+curl -X POST localhost:8000/v1/sandboxes/$ID/tools/type_text \\
+  -H <span class="s">"Authorization: Bearer $ZOO_API_KEY"</span> \\
+  -H <span class="s">"content-type: application/json"</span> \\
+  -d <span class="s">'{"text": "hello"}'</span>
+
+<span class="c"># 25 commands, one request</span>
+curl -X POST localhost:8000/v1/sandboxes/$ID/exec/batch ...`,
+    },
+    {
+        id: "py",
+        label: "Python",
+        file: "agent.py",
+        blurb: "pip install 'zoo-sdk[cli]'. Any tool is a method, and box.tool(name, **args) covers the rest.",
+        code: `<span class="k">from</span> zoo_sdk <span class="k">import</span> Zoo
+
+zoo = Zoo()  <span class="c"># reads ZOO_API_KEY and ZOO_URL</span>
+box = zoo.create(<span class="s">"research"</span>, kind=<span class="s">"desktop"</span>)
+
+box.open_app(command=<span class="s">"firefox-esr"</span>)
+box.click(x=<span class="n">640</span>, y=<span class="n">360</span>)
+box.type_text(text=<span class="s">"hello"</span>)
+<span class="k">print</span>(box.exec(<span class="s">"ls ~"</span>)[<span class="s">"stdout"</span>])
+<span class="k">open</span>(<span class="s">"screen.png"</span>, <span class="s">"wb"</span>).write(box.screenshot())`,
+    },
+    {
+        id: "ts",
+        label: "TypeScript",
+        file: "agent.ts",
+        blurb: "ESM for Node, Bun, Deno and browsers. Retries with backoff where it is safe, and typed errors with a hint and a docs link.",
+        code: `<span class="k">import</span> { Zoo } <span class="k">from</span> <span class="s">"@zoo/sdk"</span>
+
+<span class="k">const</span> zoo = <span class="k">new</span> Zoo() <span class="c">// ZOO_API_KEY, ZOO_URL</span>
+<span class="k">await using</span> box = <span class="k">await</span> zoo.sandbox({ kind: <span class="s">"desktop"</span> })
+<span class="c">// deleted when the scope ends</span>
+
+<span class="k">for await</span> (<span class="k">const</span> chunk <span class="k">of</span> box.execStream(<span class="s">"pip install requests"</span>))
+  <span class="k">if</span> (chunk.stream !== <span class="s">"exit"</span>) process.stdout.write(chunk.data)`,
+    },
+];
+
+const clients = ["Claude Code", "Cursor", "Codex", "OpenCode", "your own agent"];
+---
+
+<section class="zsection" id="wires">
+    <div class="container">
+        <header class="zhead" data-reveal>
+            <span class="kicker">⚡ feeding time</span>
+            <h2>Any agent can get in. Nothing gets out.</h2>
+            <p>
+                Every tool is registered once and exposed the same way over MCP, REST and the SDKs. Point your agent at
+                any of them and it can create, drive and tear down its own sandboxes.
+            </p>
+        </header>
+
+        <div class="wires" data-reveal data-wires>
+            <div class="picker" role="tablist" aria-label="Connect your agent">
+                {
+                    tabs.map((t, i) => (
+                        <button
+                            class="pick"
+                            role="tab"
+                            type="button"
+                            id={`tab-${t.id}`}
+                            aria-selected={i === 0 ? "true" : "false"}
+                            aria-controls={`panel-${t.id}`}
+                            data-tab={t.id}
+                        >
+                            <span class="pick-label">{t.label}</span>
+                            <span class="pick-blurb">{t.blurb}</span>
+                        </button>
+                    ))
+                }
+            </div>
+
+            <div class="term code-win">
+                <div class="win-bar">
+                    <span class="lights"><i></i><i></i><i></i></span>
+                    <span data-file>{tabs[0].file}</span>
+                </div>
+                {
+                    tabs.map((t, i) => (
+                        <div
+                            class="panel"
+                            role="tabpanel"
+                            id={`panel-${t.id}`}
+                            aria-labelledby={`tab-${t.id}`}
+                            data-panel={t.id}
+                            data-file-name={t.file}
+                            hidden={i !== 0}
+                        >
+                            <pre><code set:html={t.code} /></pre>
+                        </div>
+                    ))
+                }
+            </div>
+        </div>
+
+        <div class="clients" data-reveal>
+            <span class="pixel">works with</span>
+            {clients.map((c) => <span class="chip">{c}</span>)}
+        </div>
+
+        <p class="cc" data-reveal>
+            <b>Claude Code is preinstalled</b> in every code sandbox. Inject your Anthropic key as an encrypted secret,
+            clone a repo and run <code>box.exec("claude -p 'inspect this repository'")</code>. Zoo brings the machine
+            and the policy; you bring the model.
+        </p>
+    </div>
+</section>
+
+<script>
+    const root = document.querySelector<HTMLElement>("[data-wires]")!;
+    const tabs = [...root.querySelectorAll<HTMLButtonElement>("[data-tab]")];
+    const panels = [...root.querySelectorAll<HTMLElement>("[data-panel]")];
+    const file = root.querySelector<HTMLElement>("[data-file]")!;
+    const select = (id: string) => {
+        tabs.forEach((t) => t.setAttribute("aria-selected", String(t.dataset.tab === id)));
+        panels.forEach((p) => {
+            const on = p.dataset.panel === id;
+            p.hidden = !on;
+            if (on) {
+                file.textContent = p.dataset.fileName ?? "";
+                p.classList.remove("swap");
+                void p.offsetWidth;
+                p.classList.add("swap");
+            }
+        });
+    };
+    tabs.forEach((t, i) => {
+        t.addEventListener("click", () => select(t.dataset.tab!));
+        t.addEventListener("keydown", (e) => {
+            const d = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 0;
+            if (!d) return;
+            e.preventDefault();
+            const n = tabs[(i + d + tabs.length) % tabs.length];
+            n.focus();
+            select(n.dataset.tab!);
+        });
+    });
+</script>
+
+<style>
+    .wires {
+        display: grid;
+        grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.25fr);
+        gap: 1.5rem;
+        align-items: start;
+    }
+
+    .picker {
+        display: grid;
+        gap: 0.6rem;
+    }
+
+    .pick {
+        text-align: left;
+        display: grid;
+        gap: 0.25rem;
+        padding: 0.95rem 1.1rem;
+        border-radius: 12px;
+        border: 2px solid transparent;
+        background: rgb(255 255 255 / 0.45);
+        color: var(--ink);
+        font: inherit;
+        cursor: pointer;
+        transition:
+            background 0.2s,
+            border-color 0.2s,
+            transform 0.2s var(--ease-out);
+    }
+
+    .pick:hover {
+        background: rgb(255 255 255 / 0.75);
+    }
+
+    .pick[aria-selected="true"] {
+        background: var(--paper);
+        border-color: var(--ink);
+        box-shadow: 4px 4px 0 var(--ink);
+        transform: translate(-2px, -2px);
+    }
+
+    .pick-label {
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+
+    .pick-blurb {
+        font-size: 0.9rem;
+        color: var(--ink-2);
+        line-height: 1.45;
+        display: none;
+    }
+
+    .pick[aria-selected="true"] .pick-blurb {
+        display: block;
+    }
+
+    .code-win {
+        min-height: 360px;
+        position: sticky;
+        top: 6rem;
+    }
+
+    .panel pre {
+        padding: 1.2rem 1.3rem 1.5rem;
+        font-size: 0.84rem;
+        line-height: 1.75;
+        overflow-x: auto;
+    }
+
+    .panel:global(.swap) {
+        animation: swap 0.35s var(--ease-out);
+    }
+
+    @keyframes swap {
+        from {
+            opacity: 0;
+            transform: translateY(6px);
+        }
+    }
+
+    .panel :global(.k) {
+        color: #f0a875;
+    }
+    .panel :global(.s) {
+        color: #a6dba0;
+    }
+    .panel :global(.n) {
+        color: var(--yellow);
+    }
+    .panel :global(.c) {
+        color: var(--term-dim);
+        font-style: italic;
+    }
+
+    .clients {
+        margin-top: 2.5rem;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+        gap: 0.6rem;
+    }
+
+    .clients .pixel {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        color: var(--ink-3);
+        margin-right: 0.4rem;
+    }
+
+    .chip {
+        font-size: 0.9rem;
+        padding: 0.35rem 0.85rem;
+        border-radius: 999px;
+        background: var(--paper);
+        border: 1px solid var(--line-2);
+    }
+
+    .cc {
+        max-width: 720px;
+        margin: 1.6rem auto 0;
+        text-align: center;
+        color: var(--ink-2);
+        font-size: 0.98rem;
+    }
+
+    .cc b {
+        color: var(--ink);
+    }
+
+    .cc code {
+        font-size: 0.82em;
+        background: var(--paper);
+        padding: 0.05rem 0.3rem;
+        border-radius: 4px;
+    }
+
+    @media (max-width: 860px) {
+        .wires {
+            grid-template-columns: 1fr;
+        }
+        .picker {
+            grid-template-columns: repeat(4, auto);
+            overflow-x: auto;
+        }
+        .pick {
+            padding: 0.6rem 0.9rem;
+        }
+        .pick-blurb,
+        .pick[aria-selected="true"] .pick-blurb {
+            display: none;
+        }
+        .code-win {
+            position: static;
+            min-height: 0;
+        }
+    }
+</style>

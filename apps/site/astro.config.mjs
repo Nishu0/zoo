@@ -60,6 +60,7 @@ for (const group of sidebar) {
 }
 
 export default defineConfig({
+    devToolbar: { enabled: false },
     integrations: [
         starlight({
             title: "Zoo",

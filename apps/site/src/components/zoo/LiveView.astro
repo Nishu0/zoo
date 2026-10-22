@@ -1,0 +1,764 @@
+---
+import Sprite from "./Sprite.astro";
+---
+
+<section class="zsection" id="live">
+    <div class="container">
+        <header class="zhead" data-reveal>
+            <span class="kicker"><span class="rec"></span> live from the enclosure</span>
+            <h2>Watch every move. Grab the wheel anytime.</h2>
+            <p>
+                The dashboard streams any sandbox's screen in your browser. When the agent wanders off, your mouse and
+                keyboard drop straight into the machine. Try it below.
+            </p>
+        </header>
+
+        <div class="win live" data-reveal data-live>
+            <div class="win-bar">
+                <span class="lights"><i></i><i></i><i></i></span>
+                <span class="url">zoo.local/sandboxes/research/live</span>
+                <span class="badge mono" data-badge><span class="dot"></span> agent</span>
+            </div>
+
+            <div class="body">
+                <aside class="side mono">
+                    <p class="side-h">sandboxes</p>
+                    <ul role="list">
+                        <li class="on"><Sprite name="penguin" px={2} /> research</li>
+                        <li><Sprite name="elephant" px={1} /> invoice</li>
+                        <li><Sprite name="fox" px={1} /> scraper</li>
+                        <li class="off"><Sprite name="snake" px={1} /> coder</li>
+                    </ul>
+                </aside>
+
+                <div class="vp-wrap">
+                    <div class="vp" data-vp>
+                        <div class="os-top"><span>Applications · Places</span><span class="mono" data-clock>12:04</span></div>
+                        <div class="browser" data-browser>
+                            <div class="b-bar">
+                                <span class="b-tab"></span>
+                                <span class="b-url mono" data-url>about:blank</span>
+                            </div>
+                            <div class="b-page" data-page>
+                                <div class="blank pixel">new tab</div>
+                                <div class="repo" data-repo>
+                                    <div class="repo-head">
+                                        <span class="repo-name mono">chann44 / <b>zoo</b></span>
+                                        <span class="star mono" data-star>★ <b data-stars>Star</b></span>
+                                    </div>
+                                    <p class="repo-desc">Self-hosted sandboxes for AI agents.</p>
+                                    <div class="files mono">
+                                        <span>apps/</span><span>go/</span><span>sdk/</span><span>install.sh</span><span
+                                            >README.md</span
+                                        >
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flash" data-flash></div>
+                        <svg class="cur agent" data-agent viewBox="0 0 12 18" width="18" height="27" aria-hidden="true">
+                            <path d="M1 1v14l4-4 3 6 2-1-3-6h5z" fill="#fff" stroke="#1d1a16" stroke-width="1.3"></path>
+                        </svg>
+                        <span class="cur-label agent-label pixel" data-agent-label>agent</span>
+                        <svg class="cur you" data-you viewBox="0 0 12 18" width="18" height="27" aria-hidden="true">
+                            <path d="M1 1v14l4-4 3 6 2-1-3-6h5z" fill="#f7cb47" stroke="#1d1a16" stroke-width="1.3"></path>
+                        </svg>
+                        <span class="cur-label you-label pixel" data-you-label>you</span>
+                        <span class="coords mono" data-coords>x 0 · y 0</span>
+                    </div>
+                    <p class="vp-cap mono">gateway stream · 1280×720 · no client install</p>
+                </div>
+
+                <aside class="log">
+                    <p class="side-h mono">activity log</p>
+                    <ol class="calls mono" data-log role="log" aria-live="off"></ol>
+                </aside>
+            </div>
+
+            <div class="foot">
+                <button class="btn-yellow take" type="button" data-take>
+                    <span data-take-label>Take over</span>
+                </button>
+                <span class="hint">Then move and click inside the screen.</span>
+                <span class="count mono">audit log · <b data-count>1,284</b> calls</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+    const root = document.querySelector<HTMLElement>("[data-live]")!;
+    const vp = root.querySelector<HTMLElement>("[data-vp]")!;
+    const agent = root.querySelector<SVGElement>("[data-agent]")!;
+    const agentLabel = root.querySelector<HTMLElement>("[data-agent-label]")!;
+    const you = root.querySelector<SVGElement>("[data-you]")!;
+    const youLabel = root.querySelector<HTMLElement>("[data-you-label]")!;
+    const coords = root.querySelector<HTMLElement>("[data-coords]")!;
+    const url = root.querySelector<HTMLElement>("[data-url]")!;
+    const page = root.querySelector<HTMLElement>("[data-page]")!;
+    const stars = root.querySelector<HTMLElement>("[data-stars]")!;
+    const star = root.querySelector<HTMLElement>("[data-star]")!;
+    const flash = root.querySelector<HTMLElement>("[data-flash]")!;
+    const log = root.querySelector<HTMLOListElement>("[data-log]")!;
+    const count = root.querySelector<HTMLElement>("[data-count]")!;
+    const take = root.querySelector<HTMLButtonElement>("[data-take]")!;
+    const takeLabel = root.querySelector<HTMLElement>("[data-take-label]")!;
+    const badge = root.querySelector<HTMLElement>("[data-badge]")!;
+
+    let human = false;
+    let visible = false;
+    let calls = 1284;
+    let pos = { x: 0.62, y: 0.7 };
+
+    const W = 1280,
+        H = 720;
+    const px = (p: { x: number; y: number }) => `${Math.round(p.x * W)}, ${Math.round(p.y * H)}`;
+
+    function place(el: Element, label: HTMLElement, p: { x: number; y: number }) {
+        const r = vp.getBoundingClientRect();
+        const x = p.x * r.width,
+            y = p.y * r.height;
+        (el as HTMLElement).style.transform = `translate(${x}px, ${y}px)`;
+        label.style.transform = `translate(${x + 16}px, ${y + 22}px)`;
+    }
+
+    function addLog(who: "agent" | "you" | "sys", text: string, ms?: number) {
+        const li = document.createElement("li");
+        li.className = who;
+        const t = ms === undefined ? "" : `<em>${ms}ms</em>`;
+        li.innerHTML = `<span>${who === "sys" ? "—" : who === "you" ? "you" : "▸"}</span> ${text} ${t}`;
+        log.prepend(li);
+        while (log.children.length > 9) log.lastElementChild!.remove();
+        if (who !== "sys") {
+            calls++;
+            count.textContent = calls.toLocaleString("en-US");
+        }
+    }
+
+    const sleep = (t: number) => new Promise((r) => setTimeout(r, t));
+    // wait while paused (human in control, or off-screen)
+    const gate = async () => {
+        while (human || !visible) await sleep(150);
+    };
+    const ms = () => 9 + Math.floor(Math.random() * 12);
+
+    async function moveTo(x: number, y: number) {
+        await gate();
+        pos = { x, y };
+        agent.classList.add("moving");
+        place(agent, agentLabel, pos);
+        addLog("agent", `mouse_move(${px(pos)})`, ms());
+        await sleep(800);
+        agent.classList.remove("moving");
+    }
+
+    async function click() {
+        await gate();
+        ripple(pos, "agent");
+        addLog("agent", `left_click(${px(pos)})`, ms());
+        await sleep(350);
+    }
+
+    async function typeText(s: string, into: HTMLElement) {
+        await gate();
+        into.textContent = "";
+        for (const ch of s) {
+            await gate();
+            into.textContent += ch;
+            await sleep(55 + Math.random() * 50);
+        }
+        addLog("agent", `type_text("${s}")`, ms());
+    }
+
+    async function key(k: string) {
+        await gate();
+        addLog("agent", `key("${k}")`, ms());
+        await sleep(300);
+    }
+
+    async function screenshot() {
+        await gate();
+        flash.classList.remove("go");
+        void flash.offsetWidth;
+        flash.classList.add("go");
+        addLog("agent", "screenshot() → png", ms() + 20);
+        await sleep(600);
+    }
+
+    function ripple(p: { x: number; y: number }, who: string) {
+        const r = vp.getBoundingClientRect();
+        const s = document.createElement("span");
+        s.className = `ripple ${who}`;
+        s.style.left = p.x * r.width + "px";
+        s.style.top = p.y * r.height + "px";
+        vp.appendChild(s);
+        setTimeout(() => s.remove(), 600);
+    }
+
+    async function loop() {
+        for (;;) {
+            page.classList.remove("loaded");
+            url.textContent = "about:blank";
+            star.classList.remove("starred");
+            stars.textContent = "Star";
+            await screenshot();
+            await moveTo(0.42, 0.205);
+            await click();
+            await key("ctrl+l");
+            await typeText("github.com/chann44/zoo", url);
+            await key("Return");
+            page.classList.add("loaded");
+            await sleep(500);
+            await screenshot();
+            await moveTo(0.83, 0.33);
+            await click();
+            star.classList.add("starred");
+            stars.textContent = "Starred";
+            await sleep(500);
+            await moveTo(0.3, 0.62);
+            await screenshot();
+            await sleep(1800);
+        }
+    }
+
+    // ----- human takeover -----
+    function setHuman(on: boolean) {
+        human = on;
+        root.classList.toggle("human", on);
+        takeLabel.textContent = on ? "Hand back to agent" : "Take over";
+        badge.innerHTML = on ? '<span class="dot"></span> you' : '<span class="dot"></span> agent';
+        addLog("sys", on ? "human took control" : "control returned to agent");
+    }
+
+    take.addEventListener("click", () => setHuman(!human));
+
+    vp.addEventListener("pointermove", (e) => {
+        if (!human) return;
+        const r = vp.getBoundingClientRect();
+        const p = { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+        place(you, youLabel, p);
+        coords.textContent = `x ${Math.round(p.x * W)} · y ${Math.round(p.y * H)}`;
+    });
+
+    vp.addEventListener("pointerdown", (e) => {
+        if (!human) {
+            take.classList.remove("nudge");
+            void take.offsetWidth;
+            take.classList.add("nudge");
+            return;
+        }
+        const r = vp.getBoundingClientRect();
+        const p = { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+        ripple(p, "you");
+        addLog("you", `left_click(${px(p)})`);
+    });
+
+    addEventListener("resize", () => place(agent, agentLabel, pos));
+    place(agent, agentLabel, pos);
+    place(you, youLabel, { x: 0.5, y: 0.5 });
+
+    let started = false;
+    new IntersectionObserver(
+        ([e]) => {
+            visible = e.isIntersecting;
+            if (visible && !started) {
+                started = true;
+                addLog("sys", "stream attached · research");
+                loop();
+            }
+        },
+        { threshold: 0.25 },
+    ).observe(vp);
+</script>
+
+<style>
+    .rec {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--red);
+        animation: blink 1.2s steps(1) infinite;
+    }
+
+    @keyframes blink {
+        50% {
+            opacity: 0.2;
+        }
+    }
+
+    .live {
+        border: 2px solid var(--ink);
+        box-shadow: 8px 8px 0 var(--ink);
+        border-radius: 16px;
+    }
+
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.2rem 0.6rem;
+        border-radius: 999px;
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        background: #e3f3e7;
+        color: var(--ok);
+    }
+
+    .badge :global(.dot) {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+        animation: blink 1.4s steps(1) infinite;
+    }
+
+    .human .badge {
+        background: #fff3cc;
+        color: #a2760c;
+    }
+
+    .body {
+        display: grid;
+        grid-template-columns: 170px minmax(0, 1fr) 250px;
+        min-height: 420px;
+    }
+
+    .side,
+    .log {
+        padding: 0.9rem 0;
+        font-size: 0.76rem;
+    }
+
+    .side {
+        border-right: 1px solid var(--line);
+    }
+
+    .log {
+        border-left: 1px solid var(--line);
+        background: var(--paper-2);
+    }
+
+    .side-h {
+        padding: 0 1rem 0.6rem;
+        font-size: 0.64rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+    }
+
+    .side ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    .side li {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.5rem 1rem;
+        color: var(--ink-2);
+        min-height: 36px;
+    }
+
+    .side li.on {
+        background: #eaf3df;
+        box-shadow: inset 3px 0 0 var(--grass-2);
+        color: var(--ink);
+    }
+
+    .side li.off {
+        opacity: 0.5;
+    }
+
+    .vp-wrap {
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        min-width: 0;
+    }
+
+    .vp {
+        position: relative;
+        aspect-ratio: 16 / 9;
+        border-radius: 8px;
+        overflow: hidden;
+        background: linear-gradient(160deg, #5f97bb 0%, #8cc3a9 60%, #bfe0a6 100%);
+        border: 1px solid var(--ink);
+        cursor: pointer;
+        user-select: none;
+        touch-action: none;
+    }
+
+    .human .vp {
+        cursor: none;
+        outline: 3px solid var(--yellow);
+        outline-offset: 2px;
+    }
+
+    .os-top {
+        display: flex;
+        justify-content: space-between;
+        padding: 4px 10px;
+        background: rgb(16 20 26 / 0.8);
+        color: #dfe6ee;
+        font-size: 0.66rem;
+    }
+
+    .browser {
+        position: absolute;
+        left: 8%;
+        right: 8%;
+        top: 13%;
+        bottom: 8%;
+        background: #fff;
+        border-radius: 6px;
+        box-shadow: 0 14px 30px rgb(0 0 0 / 0.3);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .b-bar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 6px 8px;
+        background: #ecedf0;
+    }
+
+    .b-tab {
+        width: 34px;
+        height: 8px;
+        border-radius: 4px;
+        background: #e8762c;
+    }
+
+    .b-url {
+        flex: 1;
+        height: 20px;
+        line-height: 20px;
+        padding-inline: 10px;
+        border-radius: 10px;
+        background: #fff;
+        font-size: 0.7rem;
+        white-space: nowrap;
+        overflow: hidden;
+    }
+
+    .b-page {
+        position: relative;
+        flex: 1;
+    }
+
+    .blank {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        color: #b5b9c0;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+    }
+
+    .repo {
+        position: absolute;
+        inset: 0;
+        padding: 4% 5%;
+        background: #fff;
+        opacity: 0;
+        transition: opacity 0.3s;
+    }
+
+    .loaded .repo {
+        opacity: 1;
+    }
+
+    .repo-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .repo-name {
+        font-size: clamp(0.62rem, 0.5rem + 0.5vw, 0.86rem);
+        color: #2b6cb0;
+    }
+
+    .star {
+        font-size: 0.66rem;
+        border: 1px solid #d0d4da;
+        border-radius: 5px;
+        padding: 0.15rem 0.45rem;
+        background: #f6f8fa;
+        white-space: nowrap;
+        transition: background 0.2s;
+    }
+
+    .star:global(.starred) {
+        background: #fff3cc;
+        border-color: #e6b422;
+    }
+
+    .repo-desc {
+        margin-top: 0.4rem;
+        font-size: clamp(0.62rem, 0.5rem + 0.4vw, 0.8rem);
+        color: #4b5563;
+    }
+
+    .files {
+        margin-top: 0.8rem;
+        display: grid;
+        border: 1px solid #e3e6ea;
+        border-radius: 5px;
+        font-size: 0.62rem;
+    }
+
+    .files span {
+        padding: 0.28rem 0.5rem;
+        border-top: 1px solid #eef0f2;
+    }
+
+    .files span:first-child {
+        border-top: 0;
+    }
+
+    .flash {
+        position: absolute;
+        inset: 0;
+        background: #fff;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .flash:global(.go) {
+        animation: flash 0.45s ease-out;
+    }
+
+    @keyframes flash {
+        0% {
+            opacity: 0.7;
+        }
+        100% {
+            opacity: 0;
+        }
+    }
+
+    .cur,
+    .cur-label {
+        position: absolute;
+        left: 0;
+        top: 0;
+        pointer-events: none;
+        will-change: transform;
+    }
+
+    .cur {
+        filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.35));
+        z-index: 3;
+    }
+
+    .agent,
+    .agent-label {
+        transition: transform 0.75s var(--ease-out), opacity 0.3s;
+    }
+
+    .cur-label {
+        z-index: 3;
+        font-size: 0.56rem;
+        text-transform: uppercase;
+        padding: 0.12rem 0.35rem;
+        border: 1.5px solid var(--ink);
+        white-space: nowrap;
+    }
+
+    .agent-label {
+        background: var(--paper);
+    }
+
+    .you-label {
+        background: var(--yellow);
+    }
+
+    .you,
+    .you-label,
+    .coords {
+        opacity: 0;
+    }
+
+    .human .you,
+    .human .you-label,
+    .human .coords {
+        opacity: 1;
+    }
+
+    .human .agent,
+    .human .agent-label {
+        opacity: 0.35;
+    }
+
+    .coords {
+        position: absolute;
+        right: 8px;
+        bottom: 8px;
+        z-index: 3;
+        font-size: 0.64rem;
+        padding: 0.15rem 0.45rem;
+        background: var(--ink);
+        color: var(--yellow);
+        border-radius: 4px;
+    }
+
+    .vp :global(.ripple) {
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        margin: -5px 0 0 -5px;
+        border-radius: 50%;
+        border: 2px solid var(--paper);
+        pointer-events: none;
+        animation: ripple 0.6s var(--ease-out) forwards;
+        z-index: 2;
+    }
+
+    .vp :global(.ripple.you) {
+        border-color: var(--yellow);
+    }
+
+    @keyframes ripple {
+        to {
+            transform: scale(4.5);
+            opacity: 0;
+        }
+    }
+
+    .vp-cap {
+        font-size: 0.66rem;
+        color: var(--ink-3);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+
+    .calls {
+        list-style: none;
+        margin: 0;
+        padding: 0 0.7rem;
+        display: grid;
+        gap: 0.25rem;
+        font-size: 0.7rem;
+    }
+
+    .calls :global(li) {
+        display: flex;
+        gap: 0.4rem;
+        align-items: baseline;
+        padding: 0.32rem 0.4rem;
+        border-radius: 5px;
+        animation: in 0.35s var(--ease-out);
+        word-break: break-all;
+    }
+
+    .calls :global(li span) {
+        color: var(--ink-3);
+        flex: none;
+    }
+
+    .calls :global(li em) {
+        margin-left: auto;
+        font-style: normal;
+        color: var(--ink-3);
+        flex: none;
+    }
+
+    .calls :global(li.you) {
+        background: #fff3cc;
+    }
+
+    .calls :global(li.sys) {
+        color: var(--ink-3);
+        font-style: italic;
+    }
+
+    .calls :global(li:first-child:not(.sys)) {
+        background: #e3f3e7;
+    }
+
+    .calls :global(li.you:first-child) {
+        background: #ffe796;
+    }
+
+    @keyframes in {
+        from {
+            opacity: 0;
+            transform: translateY(-6px);
+        }
+    }
+
+    .foot {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.85rem 1rem;
+        border-top: 1px solid var(--line);
+        flex-wrap: wrap;
+    }
+
+    .take:global(.nudge) {
+        animation: nudge 0.45s;
+    }
+
+    @keyframes nudge {
+        25% {
+            transform: translateX(-5px) rotate(-2deg);
+        }
+        75% {
+            transform: translateX(5px) rotate(2deg);
+        }
+    }
+
+    .hint {
+        font-size: 0.88rem;
+        color: var(--ink-3);
+    }
+
+    .count {
+        margin-left: auto;
+        font-size: 0.72rem;
+        color: var(--ink-3);
+    }
+
+    .count b {
+        color: var(--ink);
+        font-weight: 400;
+    }
+
+    @media (max-width: 1080px) {
+        .body {
+            grid-template-columns: minmax(0, 1fr) 230px;
+        }
+        .side {
+            display: none;
+        }
+    }
+
+    @media (max-width: 760px) {
+        .body {
+            grid-template-columns: 1fr;
+        }
+        .log {
+            border-left: 0;
+            border-top: 1px solid var(--line);
+            max-height: 200px;
+            overflow: hidden;
+        }
+        .live {
+            box-shadow: 5px 5px 0 var(--ink);
+        }
+        .hint {
+            display: none;
+        }
+    }
+</style>

@@ -1,0 +1,337 @@
+/* ============================================================
+   ZOO — landing page
+   Pixel safari park: sky → meadow by day, a night park at the end.
+   Archivo (display + body) · Fragment Mono (machine facts) · Silkscreen (park signage)
+   ============================================================ */
+
+:root {
+    --sky: #cfe7f7;
+    --meadow: #dcecc4;
+    --p: 0; /* scroll progress 0 → 1, set by script */
+
+    --ink: #1f1c18;
+    --ink-2: #4b463f;
+    --ink-3: #7b746a;
+    --paper: #fffdf8;
+    --paper-2: #f6f2e8;
+    --line: rgb(31 28 24 / 0.12);
+    --line-2: rgb(31 28 24 / 0.22);
+
+    --yellow: #f7cb47;
+    --yellow-2: #e9b52a;
+    --yellow-edge: #b9861a;
+    --teal: #3f7f93;
+    --grass: #7cb85a;
+    --grass-2: #5f9d47;
+    --dirt: #d6b67e;
+    --red: #e0475b;
+    --ok: #3fae6a;
+
+    --term: #26231f;
+    --term-2: #312d28;
+    --term-text: #ece6da;
+    --term-dim: #9a9284;
+
+    --night: #121a33;
+    --night-2: #1d2a4d;
+
+    --font-sans: "Archivo Variable", "Archivo", system-ui, sans-serif;
+    --font-mono: "Fragment Mono", ui-monospace, monospace;
+    --font-pixel: "Silkscreen", "Fragment Mono", monospace;
+
+    --container: 1180px;
+    --gutter: clamp(16px, 4vw, 40px);
+    --section-pad: clamp(3.5rem, 7vw, 6rem);
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 5.5rem;
+    background: var(--sky);
+}
+
+body {
+    margin: 0;
+    background: color-mix(in oklab, var(--sky), var(--meadow) calc(var(--p) * 100%));
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+}
+
+::selection {
+    background: var(--yellow);
+    color: var(--ink);
+}
+
+a {
+    color: inherit;
+}
+
+:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 3px;
+}
+
+img,
+svg {
+    display: block;
+}
+
+h1,
+h2,
+h3 {
+    margin: 0;
+    font-weight: 560;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+    text-wrap: balance;
+}
+
+p {
+    margin: 0;
+}
+
+code,
+pre,
+.mono {
+    font-family: var(--font-mono);
+    font-variant-ligatures: none;
+}
+
+pre {
+    margin: 0;
+}
+
+.container {
+    max-width: var(--container);
+    margin-inline: auto;
+    padding-inline: var(--gutter);
+}
+
+.pixel {
+    font-family: var(--font-pixel);
+    letter-spacing: 0.04em;
+}
+
+/* ---------- section heads ---------- */
+
+.zsection {
+    padding-block: var(--section-pad);
+    position: relative;
+}
+
+.zhead {
+    text-align: center;
+    max-width: 760px;
+    margin: 0 auto clamp(2.5rem, 5vw, 4rem);
+}
+
+.zhead .kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-family: var(--font-pixel);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    padding: 0.3rem 0.7rem;
+    box-shadow: 3px 3px 0 var(--ink);
+    margin-bottom: 1.4rem;
+}
+
+.zhead h2 {
+    font-size: clamp(2rem, 1.2rem + 3.2vw, 3.5rem);
+}
+
+.zhead p {
+    margin-top: 1rem;
+    color: var(--ink-2);
+    font-size: clamp(1.02rem, 0.95rem + 0.35vw, 1.2rem);
+    text-wrap: pretty;
+}
+
+/* ---------- buttons ---------- */
+
+.btn-yellow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.8rem 1.35rem 0.75rem;
+    background: linear-gradient(var(--yellow), var(--yellow-2));
+    color: var(--ink);
+    border: 1.5px solid var(--yellow-edge);
+    border-radius: 9px;
+    box-shadow:
+        inset 0 1px 0 rgb(255 255 255 / 0.55),
+        0 3px 0 var(--yellow-edge),
+        0 6px 14px rgb(120 80 0 / 0.22);
+    font-family: var(--font-sans);
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+        transform 0.12s var(--ease-out),
+        box-shadow 0.12s var(--ease-out);
+}
+
+.btn-yellow:hover {
+    transform: translateY(-1px);
+    box-shadow:
+        inset 0 1px 0 rgb(255 255 255 / 0.55),
+        0 4px 0 var(--yellow-edge),
+        0 10px 18px rgb(120 80 0 / 0.25);
+}
+
+.btn-yellow:active {
+    transform: translateY(2px);
+    box-shadow:
+        inset 0 1px 0 rgb(255 255 255 / 0.4),
+        0 1px 0 var(--yellow-edge);
+}
+
+.btn-plain {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.8rem 1.2rem 0.75rem;
+    border-radius: 9px;
+    border: 1.5px solid var(--line-2);
+    background: rgb(255 255 255 / 0.55);
+    color: var(--ink);
+    font-size: 0.82rem;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-decoration: none;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-plain:hover {
+    background: var(--paper);
+    border-color: var(--ink);
+}
+
+/* ---------- windows (browser + terminal chrome) ---------- */
+
+.win {
+    background: var(--paper);
+    border: 1px solid var(--line-2);
+    border-radius: 12px;
+    box-shadow:
+        0 1px 0 rgb(255 255 255 / 0.7) inset,
+        0 24px 50px -18px rgb(40 50 40 / 0.35),
+        0 6px 14px -6px rgb(40 50 40 / 0.18);
+    overflow: hidden;
+}
+
+.win-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0.85rem;
+    border-bottom: 1px solid var(--line);
+    background: var(--paper-2);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--ink-3);
+}
+
+.lights {
+    display: inline-flex;
+    gap: 6px;
+    flex: none;
+}
+
+.lights i {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--line-2);
+}
+
+.url {
+    flex: 1;
+    min-width: 0;
+    padding: 0.25rem 0.7rem;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.term {
+    background: var(--term);
+    color: var(--term-text);
+    border-radius: 12px;
+    border: 1px solid #000;
+    box-shadow: 0 24px 50px -18px rgb(20 20 10 / 0.5);
+    overflow: hidden;
+}
+
+.term .win-bar {
+    background: var(--term);
+    border-bottom-color: rgb(255 255 255 / 0.08);
+    color: var(--term-dim);
+}
+
+.term .lights i {
+    background: rgb(255 255 255 / 0.18);
+}
+
+/* ---------- reveal ---------- */
+
+.js [data-reveal] {
+    opacity: 0;
+    transform: translateY(18px);
+    transition:
+        opacity 0.7s var(--ease-out),
+        transform 0.7s var(--ease-out);
+    transition-delay: var(--d, 0s);
+}
+
+.js [data-reveal].in {
+    opacity: 1;
+    transform: none;
+}
+
+/* ---------- sprite motion helpers ---------- */
+
+.bob {
+    animation: bob 0.5s steps(2) infinite;
+}
+
+@keyframes bob {
+    to {
+        transform: translateY(-2px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
+}

@@ -1,0 +1,152 @@
+---
+// Benchmark figures from the repo README; methodology lives in benchmarks/README.md.
+const tickets = [
+    { big: "~14", unit: "ms", label: "warm tool call, round trip", no: "0014" },
+    { big: "≈125", unit: "ms", label: "sandbox create → first command", no: "0125" },
+    { big: "25", unit: "cmds", label: "in one exec/batch request", no: "0025" },
+    { big: "379", unit: "MB", label: "slim code image for tool-call work", no: "0379" },
+];
+---
+
+<section class="tickets-wrap" aria-label="Performance">
+    <div class="container">
+        <ul class="tickets" role="list">
+            {
+                tickets.map((t, i) => (
+                    <li class="ticket" data-reveal style={`--d:${i * 0.07}s; --r:${[-2, 1.5, -1, 2][i]}deg`}>
+                        <div class="stub pixel">
+                            <span>admit one agent</span>
+                            <span class="no">№ {t.no}</span>
+                        </div>
+                        <div class="body">
+                            <p class="big">
+                                {t.big}
+                                <small>{t.unit}</small>
+                            </p>
+                            <p class="label">{t.label}</p>
+                        </div>
+                    </li>
+                ))
+            }
+        </ul>
+        <p class="note mono">
+            p50 on Docker, measured with the public sandbox benchmark suites ·
+            <a href="/docs/reference/performance/">methodology</a>
+        </p>
+    </div>
+</section>
+
+<style>
+    .tickets-wrap {
+        padding-block: clamp(3.5rem, 7vw, 5.5rem) 0;
+    }
+
+    .tickets {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1.4rem;
+    }
+
+    .ticket {
+        --notch: 10px;
+        position: relative;
+        display: grid;
+        grid-template-columns: 34px 1fr;
+        background: var(--paper);
+        rotate: var(--r);
+        filter: drop-shadow(0 10px 14px rgb(40 60 30 / 0.16));
+        transition: rotate 0.35s var(--ease-spring), translate 0.35s var(--ease-spring);
+        /* ticket notches */
+        -webkit-mask:
+            radial-gradient(circle at 34px 0, #0000 var(--notch), #000 calc(var(--notch) + 0.5px)) top / 100% 51% no-repeat,
+            radial-gradient(circle at 34px 100%, #0000 var(--notch), #000 calc(var(--notch) + 0.5px)) bottom / 100% 51%
+                no-repeat;
+        mask:
+            radial-gradient(circle at 34px 0, #0000 var(--notch), #000 calc(var(--notch) + 0.5px)) top / 100% 51% no-repeat,
+            radial-gradient(circle at 34px 100%, #0000 var(--notch), #000 calc(var(--notch) + 0.5px)) bottom / 100% 51%
+                no-repeat;
+    }
+
+    .ticket:hover {
+        rotate: 0deg;
+        translate: 0 -6px;
+    }
+
+    .stub {
+        writing-mode: vertical-rl;
+        rotate: 180deg;
+        display: flex;
+        justify-content: space-between;
+        padding: 0.8rem 0;
+        background: var(--yellow);
+        border-left: 2px dashed rgb(31 28 24 / 0.35);
+        font-size: 0.56rem;
+        text-transform: uppercase;
+        text-align: center;
+        line-height: 34px;
+        color: var(--ink);
+    }
+
+    .stub .no {
+        opacity: 0.6;
+    }
+
+    .body {
+        padding: 1.2rem 1.2rem 1.15rem 1.3rem;
+    }
+
+    .big {
+        font-size: clamp(2rem, 1.4rem + 1.6vw, 2.8rem);
+        font-weight: 600;
+        letter-spacing: -0.04em;
+        line-height: 1;
+    }
+
+    .big small {
+        font-family: var(--font-pixel);
+        font-size: 0.8rem;
+        letter-spacing: 0;
+        margin-left: 0.2rem;
+        color: var(--ink-3);
+        text-transform: uppercase;
+    }
+
+    .label {
+        margin-top: 0.55rem;
+        font-size: 0.88rem;
+        color: var(--ink-2);
+        line-height: 1.35;
+    }
+
+    .note {
+        margin-top: 1.8rem;
+        text-align: center;
+        font-size: 0.72rem;
+        color: var(--ink-3);
+    }
+
+    .note a {
+        color: var(--ink);
+    }
+
+    @media (max-width: 900px) {
+        .tickets {
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+
+    @media (max-width: 520px) {
+        .tickets {
+            gap: 0.9rem;
+        }
+        .body {
+            padding: 0.9rem 0.8rem;
+        }
+        .label {
+            font-size: 0.8rem;
+        }
+    }
+</style>
