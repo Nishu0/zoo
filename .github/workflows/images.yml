@@ -116,15 +116,16 @@ jobs:
       matrix:
         image: [api, web, sandbox-desktop, sandbox-browser, sandbox-code, sandbox-code-slim, egress, gateway]
     steps:
+      # download by exact artifact name: a pattern glob like "digests-${{ matrix.image }}-*" would also match
+      # digests-sandbox-code-slim-* for the sandbox-code job (and v4 treats pattern as one string: no newlines)
       - uses: actions/download-artifact@v4
         with:
-          # exact names, not "digests-${{ matrix.image }}-*": that glob would also match
-          # digests-sandbox-code-slim-* and pull the slim digests into this job
-          pattern: |
-            digests-${{ matrix.image }}-amd64
-            digests-${{ matrix.image }}-arm64
+          name: digests-${{ matrix.image }}-amd64
           path: ${{ runner.temp }}/digests
-          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: digests-${{ matrix.image }}-arm64
+          path: ${{ runner.temp }}/digests
       - uses: docker/setup-buildx-action@v3
         with:
           # base images through Google's Docker Hub mirror, so builds don't hit Docker Hub's pull rate limit
@@ -169,6 +170,9 @@ jobs:
           IMAGE: zoo-${{ matrix.image }}
           RELEASE: ${{ inputs.version }}
         run: |
+          # fail loudly rather than tag a partial or wrong-arch manifest list: exactly one digest per arch
+          count=$(ls -1 | wc -l | tr -d ' ')
+          [ "$count" = 2 ] || { echo "expected 2 digests (amd64+arm64), found $count:"; ls -1; exit 1; }
           dh="$DOCKERHUB"
           case "$IMAGE" in zoo-sandbox-*) dh="$SANDBOX_DH";; esac
           repos=("$GHCR/$IMAGE")
