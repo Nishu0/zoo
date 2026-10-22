@@ -1,0 +1,351 @@
+---
+import Sprite from "./Sprite.astro";
+import type { SpriteName } from "./sprites";
+
+type Kind = {
+    kind: string;
+    animal: SpriteName;
+    nick: string;
+    habitat: string;
+    ground: string;
+    display: string;
+    tools: string;
+    note: string;
+    runs: string;
+    flip?: boolean;
+};
+
+const kinds: Kind[] = [
+    {
+        kind: "desktop",
+        animal: "penguin",
+        nick: "The penguin house",
+        habitat: "linear-gradient(#dff0fb, #f4fafd)",
+        ground: "#ffffff",
+        display: "XFCE · 1280×720",
+        tools: "all tools",
+        note: "Firefox, terminal, file manager. Full computer use.",
+        runs: "Linux · Kata VM",
+    },
+    {
+        kind: "browser",
+        animal: "fox",
+        nick: "The fox den",
+        habitat: "linear-gradient(#cfe8bd, #e6f2da)",
+        ground: "#a9d38c",
+        display: "XFCE · 1280×720",
+        tools: "observe · mouse · keyboard",
+        note: "Firefox opens on start. No shell, browser only.",
+        runs: "Linux · Kata VM",
+    },
+    {
+        kind: "code",
+        animal: "snake",
+        nick: "The reptile house",
+        habitat: "linear-gradient(#bfe0a6, #dcefcb)",
+        ground: "#8cc46f",
+        display: "headless",
+        tools: "shell · files · fetch_url",
+        note: "Python 3.12, Node, git. Claude Code preinstalled.",
+        runs: "Linux · Kata VM",
+    },
+    {
+        kind: "macos",
+        animal: "giraffe",
+        nick: "The savanna",
+        habitat: "linear-gradient(#f6e7b4, #fbf3d9)",
+        ground: "#e6cf86",
+        display: "macOS · 1280×800",
+        tools: "all tools",
+        note: "Suspends on stop, resumes in seconds with memory intact.",
+        runs: "Apple Silicon host",
+    },
+    {
+        kind: "windows",
+        animal: "elephant",
+        nick: "The elephant yard",
+        habitat: "linear-gradient(#ece2cb, #f7f1e3)",
+        ground: "#d2bf97",
+        display: "Windows · 1280×800",
+        tools: "all tools",
+        note: "Native Windows guests on a Hyper-V server.",
+        runs: "Hyper-V host",
+        flip: true,
+    },
+];
+---
+
+<section class="zsection" id="enclosures">
+    <div class="container">
+        <header class="zhead" data-reveal>
+            <span class="kicker">⌖ park map</span>
+            <h2>Five enclosures. One API.</h2>
+            <p>
+                Pick the habitat that fits the job. Start one from the dashboard, an MCP call, or
+                <code>zoo.create()</code>, and every one speaks the same tools.
+            </p>
+        </header>
+
+        <div class="grid">
+            {
+                kinds.map((k, i) => (
+                    <article class="card" data-reveal style={`--d:${i * 0.06}s; --habitat:${k.habitat}; --ground:${k.ground}`}>
+                        <div class="habitat">
+                            <span class="tag pixel">{k.kind}</span>
+                            <span class={`critter ${k.flip ? "flip" : ""}`}>
+                                <span class="bob">
+                                    <Sprite name={k.animal} px={6} />
+                                </span>
+                            </span>
+                            <span class="ground" />
+                        </div>
+                        <div class="info">
+                            <p class="nick">{k.nick}</p>
+                            <dl>
+                                <div>
+                                    <dt>display</dt>
+                                    <dd class="mono">{k.display}</dd>
+                                </div>
+                                <div>
+                                    <dt>tools</dt>
+                                    <dd class="mono">{k.tools}</dd>
+                                </div>
+                                <div>
+                                    <dt>runs on</dt>
+                                    <dd class="mono">{k.runs}</dd>
+                                </div>
+                            </dl>
+                            <p class="note">{k.note}</p>
+                            <code class="call">
+                                zoo.create(kind=<span>"{k.kind}"</span>)
+                            </code>
+                        </div>
+                    </article>
+                ))
+            }
+
+            <article class="card extra" data-reveal style="--d:.3s">
+                <p class="pixel extra-kicker">gift shop</p>
+                <h3>Keep the good stuff between visits</h3>
+                <ul>
+                    <li>
+                        <b>Snapshots.</b> Capture persistent sandbox data through lifecycle jobs; macOS keeps saved-state
+                        slots.
+                    </li>
+                    <li>
+                        <b>App profiles.</b> Save logins, cookies and settings from Firefox, Chromium, Chrome or VS Code and
+                        load them before boot. Encrypted and versioned.
+                    </li>
+                    <li><b>Persistent user data</b> survives restarts on every kind.</li>
+                </ul>
+            </article>
+        </div>
+    </div>
+</section>
+
+<style>
+    .zhead code {
+        font-size: 0.9em;
+        background: var(--paper);
+        padding: 0.05rem 0.35rem;
+        border-radius: 4px;
+    }
+
+    .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1.25rem;
+    }
+
+    .card {
+        background: var(--paper);
+        border: 2px solid var(--ink);
+        border-radius: 14px;
+        box-shadow: 5px 5px 0 var(--ink);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        transition:
+            transform 0.25s var(--ease-out),
+            box-shadow 0.25s var(--ease-out);
+    }
+
+    .card:hover {
+        transform: translate(-3px, -3px);
+        box-shadow: 8px 8px 0 var(--ink);
+    }
+
+    .habitat {
+        position: relative;
+        height: 170px;
+        background: var(--habitat);
+        border-bottom: 2px solid var(--ink);
+        overflow: hidden;
+    }
+
+    .ground {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 34px;
+        background:
+            repeating-linear-gradient(to right, rgb(0 0 0 / 0.06) 0 8px, transparent 8px 16px) 0 0 / 100% 4px no-repeat,
+            var(--ground);
+    }
+
+    .tag {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        z-index: 2;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        padding: 0.25rem 0.5rem;
+        background: #f3e3bf;
+        border: 2px solid #6b4a2c;
+        color: #4a321c;
+    }
+
+    .critter {
+        position: absolute;
+        left: 50%;
+        bottom: 26px;
+        z-index: 1;
+        translate: -50% 0;
+        transition: translate 1.6s var(--ease-out);
+    }
+
+    .critter.flip :global(.sprite) {
+        transform: scaleX(1);
+    }
+
+    .critter .bob {
+        animation-play-state: paused;
+    }
+
+    /* on hover the animal trots across its habitat */
+    .card:hover .critter {
+        translate: calc(-50% + 60px) 0;
+    }
+
+    .card:hover .critter.flip {
+        translate: calc(-50% - 60px) 0;
+    }
+
+    .card:hover .critter .bob {
+        animation-play-state: running;
+        animation-duration: 0.25s;
+    }
+
+    .info {
+        padding: 1.1rem 1.2rem 1.25rem;
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+    }
+
+    .nick {
+        font-size: 1.15rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        margin-bottom: 0.7rem;
+    }
+
+    dl {
+        margin: 0;
+        display: grid;
+        gap: 0.25rem;
+    }
+
+    dl div {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        padding-bottom: 0.25rem;
+        border-bottom: 1px dashed var(--line);
+        font-size: 0.82rem;
+    }
+
+    dt {
+        color: var(--ink-3);
+    }
+
+    dd {
+        margin: 0;
+        font-size: 0.76rem;
+        text-align: right;
+    }
+
+    .note {
+        margin-top: 0.8rem;
+        color: var(--ink-2);
+        font-size: 0.92rem;
+        flex: 1;
+    }
+
+    .call {
+        margin-top: 1rem;
+        font-size: 0.76rem;
+        padding: 0.45rem 0.65rem;
+        background: var(--term);
+        color: var(--term-text);
+        border-radius: 6px;
+    }
+
+    .call span {
+        color: var(--yellow);
+    }
+
+    .extra {
+        background: var(--yellow);
+        padding: 1.4rem 1.4rem 1.5rem;
+    }
+
+    .extra-kicker {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+    }
+
+    .extra h3 {
+        margin-top: 0.6rem;
+        font-size: 1.45rem;
+        letter-spacing: -0.02em;
+    }
+
+    .extra ul {
+        margin: 1rem 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 0.8rem;
+        font-size: 0.93rem;
+    }
+
+    .extra li {
+        padding-left: 1.2rem;
+        position: relative;
+    }
+
+    .extra li::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0.5em;
+        width: 7px;
+        height: 7px;
+        background: var(--ink);
+    }
+
+    @media (max-width: 980px) {
+        .grid {
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+
+    @media (max-width: 620px) {
+        .grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
