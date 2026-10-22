@@ -1,0 +1,173 @@
+# Local development dependencies only: no api, worker or web services.
+# The API (main.py) and dashboard (apps/web) run from source on the host instead:
+#
+#   docker compose -f compose.local.yml up -d   # postgres + seaweedfs (+ zoo bucket) + gateway
+#   make up                                     # apply migrations with goose (before the first gateway start)
+#   uv run python main.py                       # API on http://localhost:8000
+#   cd apps/web && bun install && bun run dev   # dashboard on http://localhost:3000
+#
+# Everything joins the shared `zoo` network (same name as compose.yml): sandbox containers attach to
+# ZOO_NETWORK=zoo and dial the gateway as ws://gateway:8001/guest/connect, so the gateway must be
+# reachable by that name on that network even while the API itself runs on the host.
+#
+# Uses POSTGRES_PASSWORD and the AWS keys from .env, like compose.yml.
+
+services:
+  postgres:
+    image: postgres:17
+    # probe idle clients, so connections from a process that was replaced are dropped in about two
+    # minutes rather than piling up until Postgres refuses new clients
+    command: ["postgres", "-c", "tcp_keepalives_idle=60", "-c", "tcp_keepalives_interval=10", "-c", "tcp_keepalives_count=6"]
+    environment:
+      POSTGRES_USER: zoo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-zoo}
+      POSTGRES_DB: zoo
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - local-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zoo -d zoo"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - zoo
+
+  # S3-compatible object storage for dev (MinIO no longer publishes images); data under /data
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.47
+    command: server -dir=/data -ip=seaweedfs -ip.bind=0.0.0.0 -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
+    configs:
+      - source: seaweedfs-s3
+        target: /etc/seaweedfs/s3.json
+    # on loopback, for the API running outside compose
+    ports:
+      - "127.0.0.1:8333:8333"
+    volumes:
+      - local-seaweedfs-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:8333/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+    networks:
+      - zoo
+
+  # creates the zoo bucket on first start; reruns are no-ops
+  seaweedfs-init:
+    image: chrislusf/seaweedfs:4.47
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      echo s3.bucket.list | weed shell -master=seaweedfs:9333 | grep -qw zoo ||
+      echo 's3.bucket.create -name zoo' | weed shell -master=seaweedfs:9333
+      "
+    networks:
+      - zoo
+
+  # host-network egress policy daemon; the API refuses to boot sandboxes unless a container named
+  # zoo-egress is running (apps/server/docker.py egress_daemon). Runs in the Docker VM's netns.
+  egress:
+    image: ${ZOO_REGISTRY:-docker.io/chann44}/zoo-egress:${ZOO_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.egress
+    container_name: zoo-egress
+    command: ["-dir", "/run/zoo-egress"]
+    network_mode: host
+    user: "0:0"
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    volumes:
+      - zoo-egress:/run/zoo-egress
+    labels:
+      zoo.egress: "1"
+
+  # public entrypoint on 8000 (reachable from macOS VMs via their NAT gateway 192.168.64.1):
+  # /guest/connect -> the gateway on the zoo network; everything else -> the source API on host port 8003
+  caddy:
+    image: caddy:2
+    ports:
+      - "8000:8000"
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+    configs:
+      - source: local-caddy
+        target: /etc/caddy/Caddyfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - zoo
+    depends_on:
+      - gateway
+
+  # the API's lifespan requires the database-persisted node CA (node_authority), which the gateway
+  # writes on first start; the source API reaches it over loopback (ZOO_GATEWAY_PEERS=localhost)
+  gateway:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.gateway
+    environment:
+      DATABASE_URL: postgresql://zoo:${POSTGRES_PASSWORD:-zoo}@postgres:5432/zoo
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      ZOO_SECRETS_KEY: ${ZOO_SECRETS_KEY:-}
+      ZOO_API_URL: ${ZOO_API_URL:-http://localhost:8000}
+      ZOO_NODE_HOST: ${ZOO_NODE_HOST:-}
+      ZOO_NODE_PORT: "7443"
+      # must match the source API's ZOO_GATEWAY_PEERS: inside the container "localhost" also resolves
+      # to ::1, giving a two-member set whose rendezvous owner disagrees with the host API's single
+      # 127.0.0.1 -> FAILED_PRECONDITION "gateway ownership changed" for ~half of all sandbox IDs
+      ZOO_GATEWAY_PEERS: 127.0.0.1
+      ZOO_GATEWAY_IP: 127.0.0.1
+      ZOO_GATEWAY_GRPC_PORT: "7444"
+      ZOO_GATEWAY_HTTP_PORT: "8001"
+      ZOO_GATEWAY_PEER_HTTP_PORT: "8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${ZOO_NODE_PORT:-7443}:7443"
+      - "127.0.0.1:7444:7444"
+      - "127.0.0.1:8001:8001"
+      - "127.0.0.1:8002:8002"
+    networks:
+      - zoo
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/zoo-gateway", "-healthcheck", "http://127.0.0.1:8001/readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    stop_grace_period: 15s
+    restart: unless-stopped
+
+networks:
+  zoo:
+    name: zoo
+
+configs:
+  seaweedfs-s3:
+    content: |
+      {"identities": [{"name": "zoo", "credentials": [{"accessKey": "${AWS_ACCESS_KEY_ID:-zoo}", "secretKey": "${AWS_SECRET_ACCESS_KEY:-zoozoozoo}"}], "actions": ["Admin", "Read", "Write", "List", "Tagging"]}]}
+  local-caddy:
+    content: |
+      :8000 {
+          handle /guest/connect {
+              reverse_proxy gateway:8001
+          }
+          handle {
+              reverse_proxy host.docker.internal:8003
+          }
+      }
+
+volumes:
+  local-pg-data:
+  local-seaweedfs-data:
+  zoo-egress:
+    name: zoo-egress
