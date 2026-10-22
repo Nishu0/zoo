@@ -40,11 +40,17 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          # GitHub's GraphQL intermittently answers "Something went wrong" on the deep history queries
+          # (defaults are 400 releases / 500 commits); this repo's history needs far less
+          release-search-depth: 20
+          commit-search-depth: 100
 
   images:
     needs: release-please
-    # release-please is skipped on a republish dispatch; never run images with a version on a failed release-please
-    if: ${{ !cancelled() && (needs.release-please.result == 'success' || github.event_name == 'workflow_dispatch') }}
+    # release-please is skipped on a republish dispatch. When it fails (GitHub GraphQL flake), its outputs are
+    # empty and created != true, so this safely publishes edge only — release-tag publishing still requires
+    # a successful release-please run.
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || needs.release-please.result != 'skipped') }}
     permissions:
       contents: read
       packages: write
