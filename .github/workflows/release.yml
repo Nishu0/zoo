@@ -9,6 +9,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Republish an already-released version (X.Y.Z): images, signatures and release assets"
+        type: string
+        required: true
 
 concurrency:
   group: release-${{ github.ref }}
@@ -19,6 +24,8 @@ permissions:
 
 jobs:
   release-please:
+    # skipped when republishing: the release and its tag already exist
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -36,13 +43,15 @@ jobs:
 
   images:
     needs: release-please
+    # release-please is skipped on a republish dispatch; never run images with a version on a failed release-please
+    if: ${{ !cancelled() && (needs.release-please.result == 'success' || github.event_name == 'workflow_dispatch') }}
     permissions:
       contents: read
       packages: write
       id-token: write
     uses: ./.github/workflows/images.yml
     with:
-      version: ${{ needs.release-please.outputs.created == 'true' && needs.release-please.outputs.version || '' }}
+      version: ${{ inputs.version || (needs.release-please.outputs.created == 'true' && needs.release-please.outputs.version) || '' }}
       # Docker Hub namespace for the sandbox images (zoo-sandbox-*); empty keeps them beside the platform images
       sandboxRegistry: ${{ vars.SANDBOX_REGISTRY_NAMESPACE || '' }}
     secrets: inherit
@@ -51,7 +60,7 @@ jobs:
 
   zoovm:
     needs: release-please
-    if: needs.release-please.outputs.created == 'true'
+    if: ${{ !cancelled() && (needs.release-please.outputs.created == 'true' || github.event_name == 'workflow_dispatch') }}
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
@@ -109,12 +118,13 @@ jobs:
   assets:
     name: Release assets
     needs: [release-please, images, zoovm]
+    if: ${{ !cancelled() && needs.images.result == 'success' && needs.zoovm.result == 'success' && (needs.release-please.outputs.created == 'true' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     env:
-      TAG: ${{ needs.release-please.outputs.tag }}
-      VERSION: ${{ needs.release-please.outputs.version }}
+      TAG: ${{ inputs.version && format('v{0}', inputs.version) || needs.release-please.outputs.tag }}
+      VERSION: ${{ inputs.version || needs.release-please.outputs.version }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v5
