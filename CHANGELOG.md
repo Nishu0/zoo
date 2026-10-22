@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.10](https://github.com/chann44/zoo/compare/v0.1.9...v0.1.10) (2026-10-22)
+
+
+### Bug Fixes
+
+* **ci:** download digest artifacts by exact name and guard the publish step ([d3a4035](https://github.com/chann44/zoo/commit/d3a403596433694804d14ca6d5f789e6b028d828))
+* **ci:** republish path for an already-released version ([4d8dbd0](https://github.com/chann44/zoo/commit/4d8dbd0d10c1bd550181606e2197a469d5e56a44))
+* **ci:** smaller release-please queries and edge publishing that survives its failures ([161ef50](https://github.com/chann44/zoo/commit/161ef5082365a13e30c27a66dbe5184a733701a7))
+* complete installs again - code-slim image wiring and bootstrap path ([115f5d7](https://github.com/chann44/zoo/commit/115f5d74a9cc05349c4339bb125cc78e2e493681))
+* relase fixes ([a09ffc4](https://github.com/chann44/zoo/commit/a09ffc4e5d6897e4780e2248731cead69293fe91))
+
 ## [0.1.9](https://github.com/chann44/zoo/compare/v0.1.8...v0.1.9) (2026-10-22)
 
 
