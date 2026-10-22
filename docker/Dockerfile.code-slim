@@ -1,0 +1,23 @@
+# Tool-call-only sandboxes: python + the guest agent, no compilers, no node, no agent CLIs.
+# ~1.1 GB vs 1.88 GB for zoo-sandbox-code — the cold-node pull drops proportionally.
+# Coding-agent workloads (build-essential, node, claude-code) use zoo-sandbox-code.
+# Select with ZOO_CODE_IMAGE=<registry>/zoo-sandbox-code-slim:<tag> per deployment.
+FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS guest
+ARG TARGETOS TARGETARCH
+WORKDIR /src
+COPY go/guest/go.mod go/guest/go.sum ./
+RUN go mod download
+COPY go/guest/ ./
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /zoo-guest .
+
+FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl git iptables procps ca-certificates ripgrep jq \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -m -s /bin/bash zoo
+
+COPY --from=guest /zoo-guest /usr/local/bin/zoo-guest
+WORKDIR /home/zoo
+# the guest exits at once when the API didn't configure it, leaving tool calls on docker exec
+CMD ["sh", "-c", "zoo-guest -user zoo & exec sleep infinity"]

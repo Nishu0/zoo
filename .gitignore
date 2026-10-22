@@ -54,12 +54,16 @@ dist/
 backups/
 data/
 
-# zoo-guest builds
-guest/dist/
-guest/guest
-egress/egress
-gateway/gateway
-vm-control/vm-control
+# zoo-guest builds (modules live under go/ since the layout move)
+go/guest/dist/
+go/node/dist/
+go/guest/guest
+go/egress/egress
+go/node/node
+go/vm-control/vm-control
 
 # JS dependencies, anywhere (sdk/, examples/, web/)
 node_modules/
+
+# benchmark harness
+benchmarks/.bench-key

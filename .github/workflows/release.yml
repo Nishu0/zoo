@@ -76,6 +76,8 @@ jobs:
           printf '%s' "$P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
           security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k ci "$keychain" >/dev/null
+          # one path per word by construction
+          # shellcheck disable=SC2046
           security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
           identity=$(security find-identity -v -p codesigning "$keychain" | grep -o '"Developer ID Application: [^"]*"' | head -n1 | tr -d '"')
           [ -n "$identity" ] || { echo "::error::the .p12 holds no Developer ID Application identity"; exit 1; }
@@ -122,12 +124,12 @@ jobs:
           path: dist
       - uses: actions/setup-go@v5
         with:
-          go-version-file: guest/go.mod
-          cache-dependency-path: guest/go.sum
+          go-version-file: go/guest/go.mod
+          cache-dependency-path: go/guest/go.sum
       # install-node.ps1 -Iso builds it into the base Windows VM
       - name: Build zoo-guest for Windows
-        working-directory: guest
-        run: CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -H windowsgui" -o ../dist/zoo-guest-windows-amd64.exe .
+        working-directory: go/guest
+        run: CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -H windowsgui" -o ../../dist/zoo-guest-windows-amd64.exe .
       - name: Build release files
         run: |
           # compose.yml pinned to this release, pulling images instead of building them

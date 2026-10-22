@@ -100,3 +100,6 @@ node-dist:
 		os=$${t%/*}; arch=$${t#*/}; ext=$$( [ $$os = windows ] && echo .exe ); \
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags="-s -w -X main.version=$(VERSION)" -o dist/zoo-node-$$os-$$arch$$ext . || exit 1; \
 	done && echo $(VERSION) > dist/VERSION
+
+hygiene:
+	sh scripts/docker-hygiene.sh --prune

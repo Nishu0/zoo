@@ -9,10 +9,11 @@ initializes its async pool, writer and cache before gateway clients and host req
 
 ## Prerequisites
 
-Use a Linux host with readable/writable `/dev/kvm`, KSM enabled, Python 3.12+, uv, Go 1.26,
+Run a Linux host with readable/writable `/dev/kvm`, KSM enabled, Python 3.12+, uv, Go 1.26,
 goose, Bun and Docker Compose 2.24.4+ (the development overlay uses `!override`/`!reset`).
 Run `uv sync --locked` first. Run the checkout and Docker on the same host; a remote Docker
-daemon or the macOS host outside Lima is not a supported development target.
+daemon is not a supported development target. macOS workstations: see
+[`compose.local.yml`](../compose.local.yml) below.
 
 ```bash
 ls -l /dev/kvm
@@ -65,6 +66,35 @@ make devdown
 Delete running development sandboxes first if they still hold the `zoo` network. Docker
 development data and the CA survive restarts; do not delete the secrets file while retaining
 encrypted database data.
+
+## macOS host: `compose.local.yml`
+
+`make dev` targets Linux. On a macOS workstation use the standalone local stack
+instead — the infrastructure services without the API/worker containers, so the
+API and dashboard run from source:
+
+```bash
+docker compose -f compose.local.yml up -d   # postgres, seaweedfs, gateway, egress, caddy
+make up                                     # migrations (DATABASE_URL comes from .env)
+uv run python main.py                       # API on :8003
+cd apps/web && bun run dev                  # dashboard on :3000
+```
+
+Caddy fronts port 8000 as the public entry: `/guest/connect` routes to the
+gateway (8001), everything else to the API on 8003 — macOS VMs reach it through
+their NAT gateway `192.168.64.1`, so guest agents can phone home. Keep
+`ZOO_GATEWAY_PEERS=127.0.0.1` in both the compose file and `.env`: macOS
+resolves `localhost` to `::1` as well, which splits the gateway's ownership
+hash and surfaces as `503: gateway ownership changed`.
+
+Native macOS sandboxes work on this stack: the first boot clones and verifies a
+base VM (`~/.zoovm/preparation/zoo-macos-base/state` tracks the phase), and
+later stops suspend to a saved state (see `ZOO_MACOS_SUSPEND` in
+[PLAN-macos-speed.md](../PLAN-macos-speed.md)).
+
+Benchmarks against the published sandbox suites live in
+[benchmarks/](../benchmarks/README.md) — `uv run python benchmarks/bench.py
+--kind code` after minting a local key.
 
 ## Kubernetes: `make devkube`
 

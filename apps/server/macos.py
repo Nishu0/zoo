@@ -29,6 +29,8 @@ USER = os.environ.get("ZOO_MACOS_USER", "admin")
 HOME = f"/Users/{USER}"
 ENV_FILE = f"{HOME}/.zoo/env"
 MAX_VMS = 2
+# stop = pause + saved state (resumes in seconds); ZOO_MACOS_SUSPEND=0 restores plain shutdown/restart
+SUSPEND = os.environ.get("ZOO_MACOS_SUSPEND", "1") != "0"
 HOST_PATH = 'export PATH="/usr/local/bin:/opt/homebrew/bin:$HOME/.local/bin:$PATH"; '
 SAFE_RULE = re.compile(r"^[A-Za-z0-9.:/_-]+$")
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -145,10 +147,13 @@ def start(sandbox_id: str, server, env: dict[str, str], admin: bool = False) -> 
     in the job queue (Wait) while the Mac already runs Apple's limit of macOS VMs."""
     server_id, name = server.id, vm_name(sandbox_id)
     connect(server_id, server.docker_url)
+    rid = runtime_id(server_id, sandbox_id)
+    # a saved state from a previous stop resumes with memory, agent, and files intact; an invalid one
+    # (macOS upgrade, corrupt bundle) just reports failure here and the cold path below boots the disk
+    resumed = SUSPEND and run(server_id, f"zoovm saved-state {name}")[0] == 0
     cloned = run(server_id, f"zoovm get {name}")[0] == 0
     if not cloned:
         ensure_base(server_id)
-    rid = runtime_id(server_id, sandbox_id)
     with lock:
         mac = starting.setdefault(server_id, threading.Lock())
     with mac:
@@ -157,28 +162,49 @@ def start(sandbox_id: str, server, env: dict[str, str], admin: bool = False) -> 
             raise Wait(
                 f"Mac full: it already runs {MAX_VMS} macOS VMs, the most Apple allows; this one starts when one stops"
             )
-        if not cloned:
-            version = base_version(server_id)
-            started = time.monotonic()
-            check(
-                server_id,
-                f"zoovm clone {BASE_VM} {name} && zoovm set {name} --cpu {CPUS} --memory {MEMORY_MB} "
-                f"&& printf '%s\\n' {shlex.quote(version)} > {vm_dir(name)}/zoo-base",
-            )
-            logger.info(
-                "macOS VM cloned",
-                extra={
-                    "sandbox_id": sandbox_id,
-                    "base": version,
-                    "clone_seconds": round(time.monotonic() - started, 2),
-                },
-            )
-        # a retried boot adopts the VM an earlier attempt started
         if name not in running:
-            boot(server_id, name)
+            if resumed:
+                try:
+                    resume_vm(server_id, name)
+                except Exception as e:
+                    # a saved state that cannot be restored is dropped; the disk is as-of-pause, so
+                    # a cold boot loses only memory, never files
+                    logger.warning(
+                        "macOS resume failed; cold booting",
+                        extra={"sandbox_id": sandbox_id, "error": str(e)[:300]},
+                    )
+                    run(server_id, f"rm -rf {vm_dir(name)}/saved")
+                    resumed = False
+                    boot(server_id, name)
+            elif not cloned:
+                version = base_version(server_id)
+                started = time.monotonic()
+                check(
+                    server_id,
+                    f"zoovm clone {BASE_VM} {name} && zoovm set {name} --cpu {CPUS} --memory {MEMORY_MB} "
+                    f"&& printf '%s\\n' {shlex.quote(version)} > {vm_dir(name)}/zoo-base",
+                )
+                logger.info(
+                    "macOS VM cloned",
+                    extra={
+                        "sandbox_id": sandbox_id,
+                        "base": version,
+                        "clone_seconds": round(time.monotonic() - started, 2),
+                    },
+                )
+                # a retried boot adopts the VM an earlier attempt started
+                boot(server_id, name)
+            else:
+                # a retried boot adopts the VM an earlier attempt started
+                boot(server_id, name)
+    if resumed:
+        # the resumed memory already has sshd and the guest agent up; no boot wait
+        configure_guest(rid, env, admin)
+        hub.bind(rid, sandbox_id)
+        install_guest(rid, sandbox_id, resumed=True)
+        return rid
     wait_for_guest(rid)
-    set_admin(rid, admin)
-    write_env(rid, env, ssh=True)
+    configure_guest(rid, env, admin)
     hub.bind(rid, sandbox_id)
     install_guest(rid, sandbox_id)
     return rid
@@ -198,6 +224,15 @@ def boot(server_id: str, name: str) -> str:
     check(server_id, f"zoovm stop {name}", timeout=60)
     log = f"{vm_dir(name)}/run.log"
     check(server_id, f"nohup zoovm run {name} > {log} 2>&1 < /dev/null &")
+    return wait_for_vnc(server_id, name, log)
+
+
+def resume_vm(server_id: str, name: str) -> str:
+    """Restores the VM's saved memory state (zoovm save-state at stop): sshd and the guest agent come
+    back within seconds instead of a full macOS boot."""
+    check(server_id, f"zoovm stop {name}", timeout=60)  # a runner lingering from the save must not block the resume
+    log = f"{vm_dir(name)}/resume.log"
+    check(server_id, f"nohup zoovm resume-state {name} > {log} 2>&1 < /dev/null &")
     return wait_for_vnc(server_id, name, log)
 
 
@@ -275,7 +310,7 @@ def root_client(rid: str) -> paramiko.SSHClient:
     return client
 
 
-def set_admin(rid: str, admin: bool):
+def admin_script(admin: bool) -> str:
     """The guest user is an administrator with passwordless sudo only in an admin sandbox; otherwise an agent can't
     undo the VM's own pf rules or app policy."""
     # macOS's SSH SACL initially permits administrators through a nested group.
@@ -296,7 +331,21 @@ def set_admin(rid: str, admin: bool):
             f"rm -f /etc/sudoers.d/zoo\ndseditgroup -o edit -d {USER} -t user admin 2>/dev/null || true\n"
             f"! dseditgroup -o checkmember -m {USER} admin >/dev/null"
         )
-    guest_check(rid, ssh_access + script, root=True)
+    return ssh_access + script
+
+
+def set_admin(rid: str, admin: bool):
+    guest_check(rid, admin_script(admin), root=True)
+
+
+def configure_guest(rid: str, env: dict[str, str], admin: bool):
+    """set_admin + write_env in one SSH round trip; root writes the env file and hands it back to the user."""
+    lines = "".join(f"export {k}={shlex.quote(v)}\n" for k, v in env.items() if re.fullmatch(r"[A-Za-z_]\w*", k))
+    script = (
+        admin_script(admin)
+        + f"\numask 077 && cat > {ENV_FILE} && chown {shlex.quote(USER)} {shlex.quote(ENV_FILE)}\n"
+    )
+    guest_check(rid, script, stdin=lines.encode(), root=True)
 
 
 def wait_for_guest(rid: str, timeout: int = 300):
@@ -309,7 +358,7 @@ def wait_for_guest(rid: str, timeout: int = 300):
         except Exception as e:
             error = e
             guests.pop(rid, None)
-        time.sleep(2)
+        time.sleep(1)
     raise RuntimeError(f"could not reach the macOS guest over SSH: {error}")
 
 
@@ -385,7 +434,7 @@ def native_guest_endpoint(rid: str) -> tuple[str, int] | None:
     return (native_guest_host(rid, endpoint[0]), endpoint[1]) if endpoint else None
 
 
-def install_guest(rid: str, sandbox_id: str, timeout: float = 15):
+def install_guest(rid: str, sandbox_id: str, resumed: bool = False, timeout: float = 15):
     """Copies zoo-guest into the VM when it changed, writes its config, and (re)starts it as a LaunchAgent in the
     auto-logged-in user's session."""
     env = guest_env(sandbox_id, remote=True)
@@ -406,7 +455,8 @@ def install_guest(rid: str, sandbox_id: str, timeout: float = 15):
         binary = f.read()
     path = f"{HOME}/.zoo/bin/zoo-guest"
     installed = guest(rid, f"shasum -a 256 {path} 2>/dev/null", ssh=True)[1].split()[:1]
-    if installed != [hashlib.sha256(binary).hexdigest().encode()]:
+    changed = installed != [hashlib.sha256(binary).hexdigest().encode()]
+    if changed:
         guest_check(
             rid,
             f"mkdir -p {HOME}/.zoo/bin && cat > {path}.new && chmod 755 {path}.new && mv {path}.new {path}",
@@ -429,21 +479,34 @@ def install_guest(rid: str, sandbox_id: str, timeout: float = 15):
 <key>StandardErrorPath</key><string>{HOME}/.zoo/guest.log</string>
 </dict></plist>
 """
-    guest_check(
-        rid,
-        f"umask 077 && cat > {HOME}/.zoo/guest.env && mkdir -p {HOME}/Library/LaunchAgents "
-        f"&& cat > {GUEST_PLIST} <<'ZOO_PLIST'\n{plist}ZOO_PLIST\n",
-        stdin="".join(f"{k}={v}\n" for k, v in env.items()).encode(),
-        ssh=True,
-    )
-    # bootout and bootstrap again, not kickstart, so a changed plist takes effect; only root can from SSH
-    guest_check(
-        rid,
-        f"uid=$(id -u {USER}); launchctl bootout gui/$uid/{GUEST_LABEL} 2>/dev/null; "
-        f"for i in 1 2 3 4 5 6 7 8 9 10; do launchctl bootstrap gui/$uid {GUEST_PLIST} 2>/dev/null "
-        "&& break; sleep 0.5; done",
-        root=True,
-    )
+    if changed or not resumed:
+        # the plist only changes with a binary install; the template already carries the current one,
+        # so steady-state boots skip the rewrite and the bootout/bootstrap cycle entirely
+        guest_check(
+            rid,
+            f"umask 077 && cat > {HOME}/.zoo/guest.env && mkdir -p {HOME}/Library/LaunchAgents "
+            f"&& cat > {GUEST_PLIST} <<'ZOO_PLIST'\n{plist}ZOO_PLIST\n",
+            stdin="".join(f"{k}={v}\n" for k, v in env.items()).encode(),
+            ssh=True,
+        )
+        # bootout and bootstrap again, not kickstart, so a changed plist takes effect; only root can from SSH
+        guest_check(
+            rid,
+            f"uid=$(id -u {USER}); launchctl bootout gui/$uid/{GUEST_LABEL} 2>/dev/null; "
+            f"for i in 1 2 3 4 5 6 7 8 9 10; do launchctl bootstrap gui/$uid {GUEST_PLIST} 2>/dev/null "
+            "&& break; sleep 0.5; done",
+            root=True,
+        )
+    else:
+        # resumed with the same binary: the plist and LaunchAgent live in the resumed memory;
+        # refresh env and restart the agent into it
+        guest_check(
+            rid,
+            f"umask 077 && cat > {HOME}/.zoo/guest.env",
+            stdin="".join(f"{k}={v}\n" for k, v in env.items()).encode(),
+            ssh=True,
+        )
+        guest_check(rid, f"uid=$(id -u {USER}); launchctl kickstart -k gui/$uid/{GUEST_LABEL}", root=True)
     deadline = time.monotonic() + timeout
     while hub.for_sandbox(sandbox_id) is None and time.monotonic() < deadline:
         time.sleep(0.25)
@@ -455,13 +518,18 @@ def install_guest(rid: str, sandbox_id: str, timeout: float = 15):
 
 def stop(rid: str):
     server_id, name = parse(rid)
-    # the guest may already be down or unreachable; stopping the VM below covers both
-    with contextlib.suppress(Exception):
-        guest(rid, "shutdown -h now", timeout=10, root=True)
     for client in (guests.pop(rid, None), roots.pop(rid, None)):
         if client is not None:
             client.close()
-    run(server_id, f"zoovm stop {name} --timeout 45", timeout=60)
+    saved = False
+    if SUSPEND:
+        # pause + serialize memory so the next start resumes in seconds; disks are fsynced into saved/
+        saved = run(server_id, f"zoovm save-state {name}", timeout=120)[0] == 0
+    if not saved:
+        # the guest may already be down or unreachable; stopping the VM below covers both
+        with contextlib.suppress(Exception):
+            guest(rid, "shutdown -h now", timeout=10, root=True)
+        run(server_id, f"zoovm stop {name} --timeout 45", timeout=60)
     run(server_id, f'rm -f "{EGRESS_DIR}/{egress.file_name(name)}"')
 
 

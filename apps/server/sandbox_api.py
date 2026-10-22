@@ -69,7 +69,12 @@ from apps.server.runtime import (
     snapshot,
     write_secrets,
 )
-from apps.server.schema import ExecRequest, ExecResponse
+from apps.server.schema import (
+    BatchExecRequest,
+    BatchExecResponse,
+    ExecRequest,
+    ExecResponse,
+)
 from apps.server.security import (
     VNC_PASSWORD,
     _booted,
@@ -593,6 +598,28 @@ class SandboxApi:
         async def execute(sandbox_id: str, exec_req: ExecRequest, user: Member = Depends(current_user)) -> ExecResponse:
             result = await self.run_tool(user, sandbox_id, "execute_command", exec_req.model_dump(), "api")
             return ExecResponse(sandbox_id=sandbox_id, **result)
+
+        @self.app.post("/sandboxes/{sandbox_id}/exec/batch", response_model=BatchExecResponse)
+        async def execute_batch(
+            sandbox_id: str, batch: BatchExecRequest, user: Member = Depends(current_user)
+        ) -> BatchExecResponse:
+            """Runs commands in order over one HTTP round trip, sharing one permission check and one
+            TLS/auth handshake. With stop_on_error the first failing command ends the batch."""
+            began = time.monotonic()
+            results: list[ExecResponse] = []
+            stopped_early = False
+            for exec_req in batch.commands:
+                result = await self.run_tool(user, sandbox_id, "execute_command", exec_req.model_dump(), "api")
+                results.append(ExecResponse(sandbox_id=sandbox_id, **result))
+                if batch.stop_on_error and (result["exit_code"] != 0 or result.get("timed_out")):
+                    stopped_early = True
+                    break
+            return BatchExecResponse(
+                sandbox_id=sandbox_id,
+                results=results,
+                stopped_early=stopped_early,
+                total_ms=round((time.monotonic() - began) * 1000, 2),
+            )
 
         @self.app.post("/sandboxes/{sandbox_id}/exec/stream")
         async def execute_streamed(

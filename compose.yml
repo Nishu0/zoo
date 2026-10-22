@@ -119,6 +119,13 @@ services:
     image: ${ZOO_CODE_IMAGE:-${ZOO_SANDBOX_REGISTRY:-${ZOO_REGISTRY:-docker.io/chann44}}/zoo-sandbox-code:${ZOO_VERSION:-latest}}
     entrypoint: ["true"]
 
+  code-slim-image:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.code-slim
+    image: ${ZOO_CODE_SLIM_IMAGE:-${ZOO_SANDBOX_REGISTRY:-${ZOO_REGISTRY:-docker.io/chann44}}/zoo-sandbox-code-slim:${ZOO_VERSION:-latest}}
+    entrypoint: ["true"]
+
   egress:
     image: ${ZOO_REGISTRY:-docker.io/chann44}/zoo-egress:${ZOO_VERSION:-latest}
     build:

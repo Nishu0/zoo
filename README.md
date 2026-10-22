@@ -50,6 +50,25 @@ zoo ls
 
 SDKs: [Python](sdk/python/README.md) · [TypeScript](sdk/typescript/README.md) · [React](sdk/react/README.md)
 
+## Performance
+
+Built to agent-latency budgets, measured against the public sandbox benchmark
+suites ([methodology + numbers](benchmarks/README.md)):
+
+- Warm tool calls round-trip in single-digit milliseconds; sandbox create to
+  first command ≈ 250 ms on Docker.
+- macOS sandboxes suspend to a saved state on stop and **resume in seconds —
+  memory, files and the guest agent come back intact** (`ZOO_MACOS_SUSPEND=0`
+  restores plain restarts; `ZOO_MACOS_MEMORY_MB` trades speed for capacity).
+- `POST /v1/sandboxes/{id}/exec/batch` runs up to 25 commands in order over one
+  HTTP round trip, `stop_on_error` halts on the first failure.
+- Two code images: `zoo-sandbox-code` (full coding-agent stack) and
+  **`zoo-sandbox-code-slim`** (379 MB, tool-call-only workloads) — select per
+  deployment with `ZOO_CODE_IMAGE`.
+
+The design and audit trail live in [PLAN-macos-speed.md](PLAN-macos-speed.md).
+Keep Docker disk usage lean with `make hygiene`.
+
 ## Documentation
 
 [Quickstart](site/src/content/docs/docs/get-started/quickstart.md) ·

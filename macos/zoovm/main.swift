@@ -48,6 +48,12 @@ struct SlotLease: Codable, Equatable {
     var generation: String
 }
 
+enum StartMode {
+    case cold      // fresh VZ boot of the bundle's disk
+    case restore   // cross-slot: restore a cloned saved state (lease-checked, network-isolated until network-on)
+    case resume    // same-name: consume this bundle's own saved state (stop/start resume)
+}
+
 final class BundleLock {
     var descriptor: Int32 = -1
 
@@ -480,10 +486,11 @@ final class Runner: NSObject, VZVirtualMachineDelegate {
         vm.delegate = self
     }
 
-    func start(restoring: Bool) async throws {
+    func start(mode: StartMode) async throws {
         if pid(name) != nil { throw Failure("\(name) is already running") }
         try requireInstalled(name)
-        if restoring {
+        switch mode {
+        case .restore:
             guard #available(macOS 14.0, *) else { throw Failure("saved-state restore requires macOS 14 or newer") }
             let state = try validateSavedState(name, directory: bundle(name))
             let claim = try lease(name)
@@ -500,7 +507,18 @@ final class Runner: NSObject, VZVirtualMachineDelegate {
             for device in vm.networkDevices { device.attachment = nil }
             isolated = true
             try await vm.resume()
-        } else {
+        case .resume:
+            // same-name stop/start: consume this slot's own saved state; identity, lease-free
+            guard #available(macOS 14.0, *) else { throw Failure("saved-state resume requires macOS 14 or newer") }
+            let state = try validateSavedState(name, directory: file(name, "saved"))
+            try requireUnleased(name)
+            guard state.source == name else { throw Failure("saved state does not belong to \(name)") }
+            try vmConfig.validateSaveRestoreSupport()
+            try await vm.restoreMachineStateFrom(url: file(name, "saved/state.vzvmsave"))
+            guard vm.state == .paused else { throw Failure("resume did not leave the VM paused") }
+            // the bundle keeps its own identity: live NAT like a cold boot, no isolation wait
+            try await vm.resume()
+        case .cold:
             guard !FileManager.default.fileExists(atPath: file(name, "slot-lease.json").path) else {
                 throw Failure("saved-state instances must use restore, not a cold boot")
             }
@@ -803,13 +821,14 @@ do {
     case "set":
         needName()
         try set(name, rest)
-    case "run", "restore":
+    case "run", "restore", "resume-state":
         needName()
         Task { @MainActor in
             do {
                 let runner = try Runner(name: name)
                 activeRunner = runner
-                do { try await runner.start(restoring: command == "restore") }
+                let mode: StartMode = command == "run" ? .cold : command == "restore" ? .restore : .resume
+                do { try await runner.start(mode: mode) }
                 catch { runner.finish(1, "\(error)") }
             } catch { fail("\(error)") }
         }
@@ -852,7 +871,7 @@ do {
         needName()
         try delete(name)
     default:
-        print("usage: zoovm install|clone|clone-state|set|run|restore|save-state|saved-state|resume|status|network-on|release-slot|stop|ip|vnc|get|version|list|delete <name>")
+        print("usage: zoovm install|clone|clone-state|set|run|restore|resume-state|save-state|saved-state|resume|status|network-on|release-slot|stop|ip|vnc|get|version|list|delete <name>")
         exit(command == "help" ? 0 : 1)
     }
 } catch {
