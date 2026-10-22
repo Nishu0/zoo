@@ -55,8 +55,8 @@ SDKs: [Python](sdk/python/README.md) · [TypeScript](sdk/typescript/README.md) �
 Built to agent-latency budgets, measured against the public sandbox benchmark
 suites ([methodology + numbers](benchmarks/README.md)):
 
-- Warm tool calls round-trip in single-digit milliseconds; sandbox create to
-  first command ≈ 250 ms on Docker.
+- Warm tool calls round-trip in ~14 ms; sandbox create to first command
+  ≈ 125 ms on Docker.
 - macOS sandboxes suspend to a saved state on stop and **resume in seconds —
   memory, files and the guest agent come back intact** (`ZOO_MACOS_SUSPEND=0`
   restores plain restarts; `ZOO_MACOS_MEMORY_MB` trades speed for capacity).
