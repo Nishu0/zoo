@@ -1,30 +1,28 @@
 ---
-import Layout from "../layouts/Layout.astro";
-import Header from "../components/Header.astro";
-import Hero from "../components/Hero.astro";
-import Overview from "../components/Overview.astro";
-import LiveView from "../components/LiveView.astro";
-import Sandboxes from "../components/Sandboxes.astro";
-import Agents from "../components/Agents.astro";
-import Security from "../components/Security.astro";
-import Deploy from "../components/Deploy.astro";
-import Faq from "../components/Faq.astro";
-import Cta from "../components/Cta.astro";
-import Footer from "../components/Footer.astro";
+import ZooLayout from "../layouts/ZooLayout.astro";
+import Nav from "../components/zoo/Nav.astro";
+import Hero from "../components/zoo/Hero.astro";
+import Tickets from "../components/zoo/Tickets.astro";
+import Enclosures from "../components/zoo/Enclosures.astro";
+import LiveView from "../components/zoo/LiveView.astro";
+import Wires from "../components/zoo/Wires.astro";
+import Fence from "../components/zoo/Fence.astro";
+import Trail from "../components/zoo/Trail.astro";
+import Faq from "../components/zoo/Faq.astro";
+import Night from "../components/zoo/Night.astro";
 ---
 
-<Layout>
-    <Header />
+<ZooLayout>
+    <Nav />
     <main id="main">
         <Hero />
-        <Overview />
+        <Tickets />
+        <Enclosures />
         <LiveView />
-        <Sandboxes />
-        <Agents />
-        <Security />
-        <Deploy />
+        <Wires />
+        <Fence />
+        <Trail />
         <Faq />
-        <Cta />
+        <Night />
     </main>
-    <Footer />
-</Layout>
+</ZooLayout>
