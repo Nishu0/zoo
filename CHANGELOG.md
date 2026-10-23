@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.11](https://github.com/chann44/zoo/compare/v0.1.10...v0.1.11) (2026-10-22)
+
+
+### Features
+
+* **site:** add benchmark tickets and enclosure cards ([c541991](https://github.com/chann44/zoo/commit/c5419914e470fb4dde7c7a3dfa7a810f0ddc949e))
+* **site:** add connect tabs and network policy demo ([1b6e20e](https://github.com/chann44/zoo/commit/1b6e20edf94edac0104915e6ae81692fa6aa3b2d))
+* **site:** add install booth, faq and night footer ([a01c325](https://github.com/chann44/zoo/commit/a01c325abc28f1468675e80cede87102043c384b))
+* **site:** add interactive live view with human takeover ([fc153e2](https://github.com/chann44/zoo/commit/fc153e2225e42d2771b1fac4cada0bafdea9a34d))
+* **site:** add nav, hero demo and park panorama ([522611e](https://github.com/chann44/zoo/commit/522611e48cf44a6b38a8ffbd4dedc9558471aff7))
+* **site:** add pixel sprite renderer and hand-drawn animals ([2e89060](https://github.com/chann44/zoo/commit/2e89060e922ac97db3918f0f7ca8c483ecc38d63))
+* **site:** add zoo layout with sky-to-meadow scroll and base styles ([b90f5c3](https://github.com/chann44/zoo/commit/b90f5c3a5e64ce1e599e669124111286caf04cbf))
+* **site:** pixel zoo landing page ([0e7e9d4](https://github.com/chann44/zoo/commit/0e7e9d4b346dcefc7ca97edbeca94338775a6c5c))
+* **site:** switch landing page to pixel zoo ([e7bd612](https://github.com/chann44/zoo/commit/e7bd61247483692f85aadb6334f395a48c254dc9))
+
 ## [0.1.10](https://github.com/chann44/zoo/compare/v0.1.9...v0.1.10) (2026-10-22)
 
 
